@@ -21,6 +21,12 @@ export interface GovernanceRule {
   enforce: (action: string, context: Record<string, unknown>) => boolean;
 }
 
+// Re-export CDI and CIF
+export { CDI, ActionVerdict, ConsentSignal } from './cdi';
+export type { ActionContext, ActionResult } from './cdi';
+export { CIF } from './cif';
+export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressResult } from './cif';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

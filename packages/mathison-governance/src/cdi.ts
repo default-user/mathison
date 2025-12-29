@@ -159,7 +159,7 @@ export class CDI {
     if (!this.isConsentActive(actor)) {
       return {
         allowed: false,
-        reason: 'User requested stop (Tiriti Rule 2: Consent and stop always win)'
+        reason: 'CONSENT_STOP_ACTIVE: User requested stop (Tiriti Rule 2: Consent and stop always win)'
       };
     }
     return { allowed: true, reason: '' };

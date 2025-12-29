@@ -1,12 +1,12 @@
 /**
- * Mathison Server
- * Main entry point for the Mathison OI + graph/hypergraph memory system
+ * Mathison Server - Phase 3
+ * Governed service with structural enforcement of CIF + CDI pipeline
  */
 
-import { MemoryGraph } from 'mathison-memory';
-import { OIEngine } from 'mathison-oi';
+import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
-import http from 'http';
+import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -17,13 +17,14 @@ export interface MathisonServerConfig {
 }
 
 export class MathisonServer {
-  private memory: MemoryGraph;
-  private oi: OIEngine;
+  private app: FastifyInstance;
   private governance: GovernanceEngine;
   private cdi: CDI;
   private cif: CIF;
-  private httpServer?: http.Server;
+  private stores: Stores | null = null;
   private config: Required<MathisonServerConfig>;
+  private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
+  private bootError: string | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -34,8 +35,11 @@ export class MathisonServer {
       cifMaxResponseSize: config.cifMaxResponseSize ?? 1048576
     };
 
-    this.memory = new MemoryGraph();
-    this.oi = new OIEngine();
+    this.app = Fastify({
+      logger: true,
+      bodyLimit: this.config.cifMaxRequestSize
+    });
+
     this.governance = new GovernanceEngine();
     this.cdi = new CDI({ strictMode: this.config.cdiStrictMode });
     this.cif = new CIF({
@@ -45,281 +49,228 @@ export class MathisonServer {
   }
 
   async start(): Promise<void> {
-    console.log('🚀 Starting Mathison Server...');
+    console.log('🚀 Starting Mathison Server (Phase 3: Governed Service)...');
     console.log(`📍 Governance: Tiriti o te Kai v1.0`);
 
-    // Initialize governance layer first (fail-closed)
-    await this.governance.initialize();
-    await this.cdi.initialize();
-    await this.cif.initialize();
+    try {
+      // P3-A: Fail-closed boot validation
+      await this.initializeGovernance();
+      await this.initializeStorage();
 
-    // Then initialize application layer
-    await this.memory.initialize();
-    await this.oi.initialize();
+      // Register CORS
+      await this.app.register(cors, {
+        origin: '*'
+      });
 
-    // Start HTTP server
-    await this.startHttpServer();
+      // Register governance pipeline hooks
+      this.registerGovernancePipeline();
 
-    console.log('✅ Mathison Server started successfully');
-    console.log(`🌐 Listening on http://${this.config.host}:${this.config.port}`);
+      // Register routes
+      this.registerRoutes();
+
+      // Start server
+      await this.app.listen({
+        port: this.config.port,
+        host: this.config.host
+      });
+
+      this.bootStatus = 'ready';
+      console.log('✅ Mathison Server started successfully');
+      console.log(`🌐 Listening on http://${this.config.host}:${this.config.port}`);
+    } catch (error) {
+      this.bootStatus = 'failed';
+      this.bootError = error instanceof Error ? error.message : String(error);
+      console.error('❌ Server boot failed:', this.bootError);
+      throw error;
+    }
   }
 
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
-
-    // Stop HTTP server
-    if (this.httpServer) {
-      await new Promise<void>((resolve) => {
-        this.httpServer!.close(() => resolve());
-      });
-    }
-
-    // Shutdown in reverse order
-    await this.oi.shutdown();
-    await this.memory.shutdown();
+    await this.app.close();
     await this.cif.shutdown();
     await this.cdi.shutdown();
     await this.governance.shutdown();
-
     console.log('✅ Mathison Server stopped');
   }
 
-  private async startHttpServer(): Promise<void> {
-    this.httpServer = http.createServer(async (req, res) => {
-      await this.handleRequest(req, res);
-    });
-
-    return new Promise((resolve) => {
-      this.httpServer!.listen(this.config.port, this.config.host, () => {
-        resolve();
-      });
-    });
-  }
-
-  private async handleRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(200);
-      res.end();
-      return;
-    }
+  private async initializeGovernance(): Promise<void> {
+    console.log('⚖️  Initializing governance layer (fail-closed)...');
 
     try {
-      // Route handling
-      if (req.url === '/health' && req.method === 'GET') {
-        await this.handleHealth(req, res);
-      } else if (req.url === '/api/interpret' && req.method === 'POST') {
-        await this.handleInterpret(req, res);
-      } else if (req.url === '/api/memory/query' && req.method === 'POST') {
-        await this.handleMemoryQuery(req, res);
-      } else if (req.url === '/api/governance/status' && req.method === 'GET') {
-        await this.handleGovernanceStatus(req, res);
-      } else {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Not found' }));
-      }
+      await this.governance.initialize();
+      await this.cdi.initialize();
+      await this.cif.initialize();
+      console.log('✓ Governance layer initialized');
     } catch (error) {
-      console.error('Request handler error:', error);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Internal server error' }));
+      console.error('❌ Governance initialization failed');
+      throw new Error(`GOVERNANCE_INIT_FAILED: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  private async handleHealth(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'healthy',
-      treaty: {
-        version: this.governance.getTreatyVersion(),
-        authority: this.governance.getTreatyAuthority()
-      },
-      components: {
-        governance: 'active',
-        cdi: 'active',
-        cif: 'active',
-        memory: 'active',
-        oi: 'active'
-      }
-    }));
+  private async initializeStorage(): Promise<void> {
+    console.log('💾 Initializing storage layer (fail-closed)...');
+
+    try {
+      // Fail-closed: loadStoreConfigFromEnv throws if invalid/missing
+      const storeConfig = loadStoreConfigFromEnv();
+      console.log(`✓ Store config: backend=${storeConfig.backend}, path=${storeConfig.path}`);
+
+      this.stores = makeStoresFromEnv();
+      await this.stores.checkpointStore.init();
+      await this.stores.receiptStore.init();
+      console.log('✓ Storage layer initialized');
+    } catch (error) {
+      console.error('❌ Storage initialization failed');
+      throw error; // Re-throw to fail boot
+    }
   }
 
-  private async handleInterpret(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await this.readBody(req);
-    const clientId = req.socket.remoteAddress || 'unknown';
+  private registerGovernancePipeline(): void {
+    // P3-A: Mandatory governance pipeline for all requests
+    this.app.addHook('onRequest', async (request, reply) => {
+      const clientId = request.ip;
 
-    // CIF Ingress
-    const ingressResult = await this.cif.ingress({
-      clientId,
-      endpoint: '/api/interpret',
-      payload: body,
-      timestamp: Date.now()
-    });
-
-    if (!ingressResult.allowed) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Request blocked by CIF',
-        violations: ingressResult.violations
-      }));
-      return;
-    }
-
-    // CDI Action Check
-    const actionResult = await this.cdi.checkAction({
-      actor: clientId,
-      action: 'interpret',
-      payload: ingressResult.sanitizedPayload
-    });
-
-    if (actionResult.verdict !== 'allow') {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Action denied by CDI',
-        reason: actionResult.reason,
-        alternative: actionResult.suggestedAlternative
-      }));
-      return;
-    }
-
-    // Perform interpretation
-    const result = await this.oi.interpret({
-      input: ingressResult.sanitizedPayload,
-      metadata: { clientId }
-    });
-
-    // CDI Output Check
-    const outputCheck = await this.cdi.checkOutput({
-      content: JSON.stringify(result)
-    });
-
-    if (!outputCheck.allowed) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Output blocked by CDI',
-        violations: outputCheck.violations
-      }));
-      return;
-    }
-
-    // CIF Egress
-    const egressResult = await this.cif.egress({
-      clientId,
-      endpoint: '/api/interpret',
-      payload: result
-    });
-
-    if (!egressResult.allowed) {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Response blocked by CIF',
-        violations: egressResult.violations,
-        leaks: egressResult.leaksDetected
-      }));
-      return;
-    }
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(egressResult.sanitizedPayload));
-  }
-
-  private async handleMemoryQuery(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await this.readBody(req);
-    const clientId = req.socket.remoteAddress || 'unknown';
-
-    // CIF Ingress
-    const ingressResult = await this.cif.ingress({
-      clientId,
-      endpoint: '/api/memory/query',
-      payload: body,
-      timestamp: Date.now()
-    });
-
-    if (!ingressResult.allowed) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Request blocked by CIF',
-        violations: ingressResult.violations
-      }));
-      return;
-    }
-
-    // CDI Action Check
-    const actionResult = await this.cdi.checkAction({
-      actor: clientId,
-      action: 'query_memory',
-      payload: ingressResult.sanitizedPayload
-    });
-
-    if (actionResult.verdict !== 'allow') {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Action denied by CDI',
-        reason: actionResult.reason
-      }));
-      return;
-    }
-
-    // Query memory graph
-    const queryResult = this.memory.query(ingressResult.sanitizedPayload as any);
-
-    // CIF Egress
-    const egressResult = await this.cif.egress({
-      clientId,
-      endpoint: '/api/memory/query',
-      payload: queryResult
-    });
-
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(egressResult.sanitizedPayload));
-  }
-
-  private async handleGovernanceStatus(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      treaty: {
-        version: this.governance.getTreatyVersion(),
-        authority: this.governance.getTreatyAuthority(),
-        path: './docs/tiriti.md'
-      },
-      rules: this.governance.getRules().map(r => ({
-        id: r.id,
-        title: r.title,
-        description: r.description
-      })),
-      cdi: {
-        strictMode: this.config.cdiStrictMode
-      },
-      cif: {
-        maxRequestSize: this.config.cifMaxRequestSize,
-        maxResponseSize: this.config.cifMaxResponseSize
-      }
-    }));
-  }
-
-  private readBody(req: http.IncomingMessage): Promise<any> {
-    return new Promise((resolve, reject) => {
-      let body = '';
-      req.on('data', chunk => body += chunk.toString());
-      req.on('end', () => {
-        try {
-          resolve(body ? JSON.parse(body) : {});
-        } catch (error) {
-          reject(error);
-        }
+      // CIF Ingress
+      const ingressResult = await this.cif.ingress({
+        clientId,
+        endpoint: request.url,
+        payload: request.body ?? {},
+        headers: request.headers as Record<string, string>,
+        timestamp: Date.now()
       });
-      req.on('error', reject);
+
+      if (!ingressResult.allowed) {
+        reply.code(400).send({
+          error: 'CIF_INGRESS_BLOCKED',
+          violations: ingressResult.violations,
+          quarantined: ingressResult.quarantined
+        });
+        return reply;
+      }
+
+      // Attach sanitized payload for downstream handlers
+      (request as any).sanitizedBody = ingressResult.sanitizedPayload;
     });
+
+    // Pre-handler: CDI action check (routes can specify action via decorateRequest)
+    this.app.addHook('preHandler', async (request, reply) => {
+      const action = (request as any).action ?? 'unknown';
+      const clientId = request.ip;
+
+      const actionResult = await this.cdi.checkAction({
+        actor: clientId,
+        action,
+        payload: (request as any).sanitizedBody
+      });
+
+      if (actionResult.verdict !== 'allow') {
+        reply.code(403).send({
+          error: 'CDI_ACTION_DENIED',
+          reason: actionResult.reason,
+          alternative: actionResult.suggestedAlternative
+        });
+        return reply;
+      }
+    });
+
+    // Pre-serialization: CDI output check + CIF egress
+    this.app.addHook('onSend', async (request, reply, payload) => {
+      const clientId = request.ip;
+
+      // CDI output check
+      const outputCheck = await this.cdi.checkOutput({
+        content: typeof payload === 'string' ? payload : JSON.stringify(payload)
+      });
+
+      if (!outputCheck.allowed) {
+        reply.code(403);
+        return JSON.stringify({
+          error: 'CDI_OUTPUT_BLOCKED',
+          violations: outputCheck.violations
+        });
+      }
+
+      // CIF egress
+      const egressResult = await this.cif.egress({
+        clientId,
+        endpoint: request.url,
+        payload: typeof payload === 'string' ? JSON.parse(payload) : payload
+      });
+
+      if (!egressResult.allowed) {
+        reply.code(403);
+        return JSON.stringify({
+          error: 'CIF_EGRESS_BLOCKED',
+          violations: egressResult.violations,
+          leaks: egressResult.leaksDetected
+        });
+      }
+
+      return JSON.stringify(egressResult.sanitizedPayload);
+    });
+  }
+
+  private registerRoutes(): void {
+    // P3-A: GET /health - governance status check
+    this.app.get('/health', async (request, reply) => {
+      (request as any).action = 'health_check';
+
+      if (this.bootStatus !== 'ready') {
+        return reply.code(503).send({
+          status: 'unhealthy',
+          bootStatus: this.bootStatus,
+          error: this.bootError
+        });
+      }
+
+      return {
+        status: 'healthy',
+        bootStatus: this.bootStatus,
+        governance: {
+          treaty: {
+            version: this.governance.getTreatyVersion(),
+            authority: this.governance.getTreatyAuthority()
+          },
+          cdi: {
+            strictMode: this.config.cdiStrictMode,
+            initialized: true
+          },
+          cif: {
+            maxRequestSize: this.config.cifMaxRequestSize,
+            maxResponseSize: this.config.cifMaxResponseSize,
+            initialized: true
+          }
+        },
+        storage: {
+          initialized: this.stores !== null
+        }
+      };
+    });
+
+    // Catch-all for unknown routes (fail-closed)
+    this.app.setNotFoundHandler(async (request, reply) => {
+      return reply.code(404).send({
+        error: 'ROUTE_NOT_FOUND',
+        message: 'Unknown endpoint - denied by fail-closed policy',
+        url: request.url,
+        method: request.method
+      });
+    });
+  }
+
+  getApp(): FastifyInstance {
+    return this.app;
   }
 }
 
 // CLI entry point
 if (require.main === module) {
   const server = new MathisonServer();
-  server.start().catch(console.error);
+  server.start().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
 
   process.on('SIGINT', async () => {
     await server.stop();

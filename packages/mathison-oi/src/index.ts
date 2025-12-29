@@ -1,5 +1,5 @@
 /**
- * Mathison OI - Open Interpretation Engine
+ * Mathison OI - Ongoing Intelligence Engine
  */
 
 export interface InterpretationContext {
@@ -25,7 +25,7 @@ export class OIEngine {
   }
 
   async interpret(context: InterpretationContext): Promise<InterpretationResult> {
-    // TODO: Implement Open Interpretation logic
+    // TODO: Implement Ongoing Intelligence logic
     // TODO: Add multi-modal interpretation support
     // TODO: Integrate with memory graph for context
     return {

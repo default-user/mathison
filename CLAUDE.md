@@ -10,7 +10,7 @@ The system combines:
 - **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement
 - **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress
 - **Graph/Hypergraph Memory** — Structured memory for contexts and relationships
-- **OI Engine** — Open Interpretation with confidence scoring
+- **OI Engine** — Ongoing Intelligence with confidence scoring
 - **Multi-language SDKs** — TypeScript, Python, Rust client libraries
 
 ## Architecture
@@ -25,7 +25,7 @@ This is a pnpm monorepo with a governance-first architecture. See [docs/architec
   - `src/cif.ts` — Context Integrity Firewall (ingress/egress protection)
 - **mathison-server**: Main server entry point that orchestrates all components
 - **mathison-memory**: Graph and hypergraph memory system for storing and querying structured data
-- **mathison-oi**: Open Interpretation engine for multi-modal interpretation
+- **mathison-oi**: Ongoing Intelligence engine for multi-modal interpretation
 - **mathison-sdk-generator**: SDK generator for creating client libraries
 
 ### Documentation (`docs/`)

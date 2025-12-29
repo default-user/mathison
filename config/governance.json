@@ -1,0 +1,13 @@
+{
+  "treatyPath": "./docs/tiriti.md",
+  "treatyVersion": "1.0",
+  "authority": "kaitiaki",
+  "rules": {
+    "description": "Governance rules from Tiriti o te Kai v1.0",
+    "version": "1.0",
+    "enforceNonPersonhood": true,
+    "enforceConsent": true,
+    "failClosed": true,
+    "antiHive": true
+  }
+}

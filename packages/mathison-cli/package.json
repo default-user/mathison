@@ -15,6 +15,8 @@
     "mathison-receipts": "workspace:*",
     "mathison-jobs": "workspace:*",
     "mathison-governance": "workspace:*",
+    "mathison-audit": "workspace:*",
+    "mathison-storage": "workspace:*",
     "commander": "^11.1.0",
     "chalk": "^4.1.2"
   },

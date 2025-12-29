@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Mathison CLI
- * Commands: run, status, resume
+ * Commands: run, status, resume, audit
  */
 
 import { Command } from 'commander';
@@ -9,6 +9,7 @@ import * as path from 'path';
 import { runCommand } from './commands/run';
 import { statusCommand } from './commands/status';
 import { resumeCommand } from './commands/resume';
+import { auditCommand } from './commands/audit';
 
 const program = new Command();
 
@@ -54,6 +55,20 @@ program
   .action(async (options) => {
     try {
       await resumeCommand(options);
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('audit')
+  .description('Generate governance conformance report (audit pack)')
+  .option('--format <type>', 'Output format: json, markdown, or both (default: both)', 'both')
+  .option('--output <path>', 'Output directory (default: ./audit-pack)', './audit-pack')
+  .action(async (options) => {
+    try {
+      await auditCommand(options);
     } catch (error) {
       console.error('Error:', error);
       process.exit(1);

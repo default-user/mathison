@@ -301,6 +301,23 @@ export class SQLiteReceiptStore implements ReceiptStore {
       CREATE INDEX IF NOT EXISTS idx_receipts_timestamp ON receipts(timestamp);
       CREATE INDEX IF NOT EXISTS idx_receipts_verdict ON receipts(verdict);
     `);
+
+    // P2-B.5: Append-only enforcement - prevent UPDATE/DELETE on receipts
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS prevent_receipt_update
+      BEFORE UPDATE ON receipts
+      BEGIN
+        SELECT RAISE(ABORT, 'Receipts are append-only: UPDATE not allowed');
+      END;
+    `);
+
+    this.db.exec(`
+      CREATE TRIGGER IF NOT EXISTS prevent_receipt_delete
+      BEFORE DELETE ON receipts
+      BEGIN
+        SELECT RAISE(ABORT, 'Receipts are append-only: DELETE not allowed');
+      END;
+    `);
   }
 
   async shutdown(): Promise<void> {

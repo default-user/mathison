@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Mathison CLI
- * Commands: run, status, resume, audit
+ * Commands: run, status, resume, audit, doctor
  */
 
 import { Command } from 'commander';
@@ -10,6 +10,7 @@ import { runCommand } from './commands/run';
 import { statusCommand } from './commands/status';
 import { resumeCommand } from './commands/resume';
 import { auditCommand } from './commands/audit';
+import { doctorCommand } from './commands/doctor';
 
 const program = new Command();
 
@@ -69,6 +70,18 @@ program
   .action(async (options) => {
     try {
       await auditCommand(options);
+    } catch (error) {
+      console.error('Error:', error);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('doctor')
+  .description('Check storage backend health and readiness')
+  .action(async () => {
+    try {
+      await doctorCommand();
     } catch (error) {
       console.error('Error:', error);
       process.exit(1);

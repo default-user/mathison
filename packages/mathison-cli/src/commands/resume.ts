@@ -5,7 +5,7 @@
 
 import CheckpointEngine, { JobStatus } from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
-import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
+import { loadStorageConfig, createCheckpointStore, createReceiptStore, logStorageConfig } from 'mathison-storage';
 import { TiritiAuditJob, TiritiAuditInputs } from 'mathison-jobs';
 
 export interface ResumeOptions {
@@ -15,9 +15,14 @@ export interface ResumeOptions {
 export async function resumeCommand(options: ResumeOptions): Promise<void> {
   console.log(`🔄 Mathison - Resuming job ${options.jobId}...\n`);
 
-  // P2-B.3: Create storage backend (FileStore for now, configurable later)
-  const checkpointStore = new FileCheckpointStore();
-  const receiptStore = new FileReceiptStore();
+  // P2-B: Load storage configuration (fail-closed if invalid/missing)
+  const storageConfig = loadStorageConfig();
+  logStorageConfig(storageConfig);
+  console.log('');
+
+  // P2-B: Create storage backend from config
+  const checkpointStore = createCheckpointStore(storageConfig);
+  const receiptStore = createReceiptStore(storageConfig);
 
   const checkpointEngine = new CheckpointEngine(checkpointStore);
   const eventLog = new EventLog(receiptStore);
@@ -57,6 +62,7 @@ export async function resumeCommand(options: ResumeOptions): Promise<void> {
   }
 
   console.log('\n📊 Resume Summary:');
-  console.log(`  Checkpoint: .mathison/checkpoints/${options.jobId}.json`);
-  console.log(`  Event Log: .mathison/eventlog.jsonl`);
+  console.log(`  Storage Backend: ${storageConfig.backend}`);
+  console.log(`  Storage Path: ${storageConfig.path}`);
+  console.log(`  Job ID: ${options.jobId}`);
 }

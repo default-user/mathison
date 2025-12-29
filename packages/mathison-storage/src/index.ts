@@ -14,3 +14,4 @@
 export * from './interfaces';
 export * from './file-store';
 export * from './sqlite-store';
+export * from './config';

@@ -7,7 +7,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import CheckpointEngine from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
-import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
+import { loadStorageConfig, createCheckpointStore, createReceiptStore, logStorageConfig } from 'mathison-storage';
 import { TiritiAuditJob } from 'mathison-jobs';
 import { CDI } from 'mathison-governance/dist/cdi';
 
@@ -21,6 +21,11 @@ export interface RunOptions {
 
 export async function runCommand(options: RunOptions): Promise<void> {
   console.log('🚀 Mathison - Starting job...\n');
+
+  // P2-B: Load storage configuration (fail-closed if invalid/missing)
+  const storageConfig = loadStorageConfig();
+  logStorageConfig(storageConfig);
+  console.log('');
 
   // Fail-closed: Check governance availability BEFORE starting job
   const cdi = new CDI();
@@ -46,9 +51,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
   console.log(`Output Dir: ${options.outdir}`);
   console.log('');
 
-  // P2-B.3: Create storage backend (FileStore for now, configurable later)
-  const checkpointStore = new FileCheckpointStore();
-  const receiptStore = new FileReceiptStore();
+  // P2-B: Create storage backend from config
+  const checkpointStore = createCheckpointStore(storageConfig);
+  const receiptStore = createReceiptStore(storageConfig);
 
   // Initialize engines
   const checkpointEngine = new CheckpointEngine(checkpointStore);
@@ -64,8 +69,9 @@ export async function runCommand(options: RunOptions): Promise<void> {
   });
 
   console.log('\n📊 Job Summary:');
-  console.log(`  Checkpoint: .mathison/checkpoints/${jobId}.json`);
-  console.log(`  Event Log: .mathison/eventlog.jsonl`);
+  console.log(`  Storage Backend: ${storageConfig.backend}`);
+  console.log(`  Storage Path: ${storageConfig.path}`);
+  console.log(`  Job ID: ${jobId}`);
   console.log(`  Outputs: ${options.outdir}/`);
 }
 

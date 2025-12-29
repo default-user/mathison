@@ -5,16 +5,21 @@
 
 import CheckpointEngine, { JobCheckpoint, JobStatus } from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
-import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
+import { loadStorageConfig, createCheckpointStore, createReceiptStore, logStorageConfig } from 'mathison-storage';
 
 export interface StatusOptions {
   jobId?: string;
 }
 
 export async function statusCommand(options: StatusOptions): Promise<void> {
-  // P2-B.3: Create storage backend (FileStore for now, configurable later)
-  const checkpointStore = new FileCheckpointStore();
-  const receiptStore = new FileReceiptStore();
+  // P2-B: Load storage configuration (fail-closed if invalid/missing)
+  const storageConfig = loadStorageConfig();
+  logStorageConfig(storageConfig);
+  console.log('');
+
+  // P2-B: Create storage backend from config
+  const checkpointStore = createCheckpointStore(storageConfig);
+  const receiptStore = createReceiptStore(storageConfig);
 
   const checkpointEngine = new CheckpointEngine(checkpointStore);
   const eventLog = new EventLog(receiptStore);

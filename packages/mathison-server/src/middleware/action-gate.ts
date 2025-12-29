@@ -142,8 +142,8 @@ export function governedHandler<T = any>(
 
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const actionContext = {
-      ...request.body,
-      ...request.params,
+      ...(request.body as Record<string, unknown> || {}),
+      ...(request.params as Record<string, unknown> || {}),
       url: request.url
     };
 

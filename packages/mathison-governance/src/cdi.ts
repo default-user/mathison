@@ -3,6 +3,9 @@
  * Kernel-level governance enforcement from Tiriti o te Kai
  */
 
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
 export enum ActionVerdict {
   ALLOW = 'allow',
   TRANSFORM = 'transform',
@@ -34,6 +37,9 @@ export interface ConsentSignal {
 export class CDI {
   private consentMap: Map<string, ConsentSignal> = new Map();
   private strictMode: boolean = true;
+  private treatyLoaded: boolean = false;
+  private treatyVersion: string | null = null;
+  private treatyContent: string | null = null;
 
   constructor(config: { strictMode?: boolean } = {}) {
     this.strictMode = config.strictMode ?? true;
@@ -41,6 +47,52 @@ export class CDI {
 
   async initialize(): Promise<void> {
     console.log('🛡️  Initializing CDI (Conscience Decision Interface)...');
+
+    // CRITICAL: Load treaty (fail-closed if missing)
+    try {
+      // Load governance config
+      const configPath = path.join(process.cwd(), 'config', 'governance.json');
+      let configData: string;
+      try {
+        configData = await fs.readFile(configPath, 'utf-8');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to read config file: ${msg}`);
+      }
+
+      let config: any;
+      try {
+        config = JSON.parse(configData);
+      } catch (err) {
+        throw new Error(`Failed to parse config JSON: ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      // Load treaty file
+      const treatyPath = config.treatyPath || './docs/tiriti.md';
+      const fullPath = path.join(process.cwd(), treatyPath);
+
+      try {
+        this.treatyContent = await fs.readFile(fullPath, 'utf-8');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to read treaty file at ${fullPath}: ${msg}`);
+      }
+
+      // Extract version (required)
+      const versionMatch = this.treatyContent.match(/version: "([^"]+)"/);
+      if (!versionMatch) {
+        throw new Error('Treaty missing version field');
+      }
+
+      this.treatyVersion = versionMatch[1];
+      this.treatyLoaded = true;
+
+      console.log(`   ✓ Treaty loaded: Tiriti o te Kai v${this.treatyVersion}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`   ✗ CRITICAL: Treaty loading failed: ${message}`);
+      throw new Error(`TREATY_UNAVAILABLE: ${message}`);
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -48,6 +100,14 @@ export class CDI {
   }
 
   async checkAction(context: ActionContext): Promise<ActionResult> {
+    // FAIL-CLOSED: Treaty must be loaded
+    if (!this.treatyLoaded) {
+      return {
+        verdict: ActionVerdict.DENY,
+        reason: 'TREATY_UNAVAILABLE: Treaty not loaded, denying all actions'
+      };
+    }
+
     // Rule 2: Consent and stop always win
     const consentCheck = this.checkConsent(context.actor);
     if (!consentCheck.allowed) {

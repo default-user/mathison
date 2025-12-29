@@ -1,7 +1,10 @@
-# Prerequisites
-*.d
+# Dependencies
+node_modules/
+pnpm-lock.yaml
 
-# Object files
+# Build outputs
+dist/
+build/
 *.o
 *.ko
 *.obj
@@ -50,3 +53,36 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+*.egg
+
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak

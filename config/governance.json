@@ -1,0 +1,8 @@
+{
+  "treatyUrl": "SUBSTACK_TREATY_URL",
+  "authority": "substack",
+  "rules": {
+    "description": "Governance rules loaded from treaty",
+    "version": "0.1.0"
+  }
+}

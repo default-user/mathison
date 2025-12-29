@@ -48,3 +48,13 @@ export interface GovernanceResult {
   transformedPayload?: unknown;
   suggestedAlternative?: string;
 }
+
+/**
+ * Standard error shape for all governance denials
+ * Used consistently across all HTTP error responses
+ */
+export interface GovernanceError {
+  reason_code: GovernanceReasonCode;
+  message: string;
+  details?: unknown;
+}

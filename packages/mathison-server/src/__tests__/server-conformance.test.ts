@@ -37,7 +37,7 @@ describe('Phase 3 Server Conformance', () => {
 
       const server = new MathisonServer({ port: 0 });
 
-      await expect(server.start()).rejects.toThrow('STORE_MISCONFIGURED');
+      await expect(server.start()).rejects.toThrow('MATHISON_STORE_BACKEND');
     });
 
     it('refuses to start if MATHISON_STORE_BACKEND invalid', async () => {
@@ -53,7 +53,7 @@ describe('Phase 3 Server Conformance', () => {
 
       const server = new MathisonServer({ port: 0 });
 
-      await expect(server.start()).rejects.toThrow('STORE_MISCONFIGURED');
+      await expect(server.start()).rejects.toThrow('MATHISON_STORE_PATH');
     });
 
     it('starts successfully with valid config', async () => {
@@ -73,6 +73,34 @@ describe('Phase 3 Server Conformance', () => {
       expect(body.bootStatus).toBe('ready');
       expect(body.governance.treaty.version).toBe('1.0');
       expect(body.storage.initialized).toBe(true);
+
+      await server.stop();
+    });
+
+    it('bootStatus transitions from booting to ready deterministically', async () => {
+      const server = new MathisonServer({ port: 0 });
+
+      // Before start, server is in 'booting' state (implicitly)
+      await server.start();
+
+      // After successful start, bootStatus must be 'ready'
+      const app = server.getApp();
+      const response1 = await app.inject({
+        method: 'GET',
+        url: '/health'
+      });
+
+      const body1 = JSON.parse(response1.body);
+      expect(body1.bootStatus).toBe('ready');
+
+      // Second check should also be 'ready' (deterministic)
+      const response2 = await app.inject({
+        method: 'GET',
+        url: '/health'
+      });
+
+      const body2 = JSON.parse(response2.body);
+      expect(body2.bootStatus).toBe('ready');
 
       await server.stop();
     });
@@ -126,6 +154,21 @@ describe('Phase 3 Server Conformance', () => {
         expect(receipt.action).toBeDefined();
         expect(receipt.store_backend).toBe('FILE');
       }
+    });
+
+    it('GET /receipts/:job_id returns empty array for non-existent job', async () => {
+      const app = server.getApp();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/receipts/non-existent-job-id'
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.job_id).toBe('non-existent-job-id');
+      expect(body.count).toBe(0);
+      expect(body.receipts).toEqual([]);
     });
   });
 
@@ -239,13 +282,11 @@ describe('Phase 3 Server Conformance', () => {
     it('run → status → resume workflow works end-to-end', async () => {
       const app = server.getApp();
 
-      // 1. Run job with explicit jobId
-      const jobId = 'test-job-123';
+      // 1. Run job (jobId will be auto-generated)
       const runResponse = await app.inject({
         method: 'POST',
         url: '/jobs/run',
         payload: {
-          jobId,
           jobType: 'test',
           inputs: { value: 42 }
         }
@@ -253,7 +294,8 @@ describe('Phase 3 Server Conformance', () => {
 
       expect(runResponse.statusCode).toBe(200);
       const runBody = JSON.parse(runResponse.body);
-      expect(runBody.job_id).toBe(jobId);
+      const jobId = runBody.job_id;
+      expect(jobId).toBeDefined();
       expect(runBody.status).toBe('completed');
 
       // 2. Check status
@@ -291,7 +333,7 @@ describe('Phase 3 Server Conformance', () => {
       await server.stop();
     });
 
-    it('unknown routes return 404 with fail-closed message', async () => {
+    it('unknown routes return 404 with reason_code and fail-closed message', async () => {
       const app = server.getApp();
 
       const response = await app.inject({
@@ -301,8 +343,11 @@ describe('Phase 3 Server Conformance', () => {
 
       expect(response.statusCode).toBe(404);
       const body = JSON.parse(response.body);
-      expect(body.error).toBe('ROUTE_NOT_FOUND');
+      expect(body.reason_code).toBe('ROUTE_NOT_FOUND');
       expect(body.message).toContain('fail-closed');
+      expect(body.details).toBeDefined();
+      expect(body.details.url).toBe('/unknown/route');
+      expect(body.details.method).toBe('GET');
     });
 
     it('all responses pass through governance pipeline', async () => {

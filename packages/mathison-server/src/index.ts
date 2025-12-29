@@ -346,10 +346,12 @@ export class MathisonServer {
     // Catch-all for unknown routes (fail-closed)
     this.app.setNotFoundHandler(async (request, reply) => {
       return reply.code(404).send({
-        error: 'ROUTE_NOT_FOUND',
+        reason_code: 'ROUTE_NOT_FOUND',
         message: 'Unknown endpoint - denied by fail-closed policy',
-        url: request.url,
-        method: request.method
+        details: {
+          url: request.url,
+          method: request.method
+        }
       });
     });
   }
@@ -373,4 +375,13 @@ if (require.main === module) {
   });
 }
 
+// Public API exports
 export default MathisonServer;
+export { ActionGate } from './action-gate';
+export { JobExecutor, JobRequest, JobResult } from './job-executor';
+export {
+  GovernanceReasonCode,
+  GovernanceDecision,
+  GovernanceResult,
+  GovernanceError
+} from './action-gate/reason-codes';

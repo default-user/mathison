@@ -7,6 +7,8 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
+import { ActionGate } from './action-gate';
+import { JobExecutor } from './job-executor';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -22,6 +24,8 @@ export class MathisonServer {
   private cdi: CDI;
   private cif: CIF;
   private stores: Stores | null = null;
+  private actionGate: ActionGate | null = null;
+  private jobExecutor: JobExecutor | null = null;
   private config: Required<MathisonServerConfig>;
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
   private bootError: string | null = null;
@@ -120,6 +124,11 @@ export class MathisonServer {
       await this.stores.checkpointStore.init();
       await this.stores.receiptStore.init();
       console.log('✓ Storage layer initialized');
+
+      // Initialize ActionGate and JobExecutor
+      this.actionGate = new ActionGate(this.cdi, this.cif, this.stores);
+      this.jobExecutor = new JobExecutor(this.actionGate);
+      console.log('✓ ActionGate and JobExecutor initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -245,6 +254,92 @@ export class MathisonServer {
         storage: {
           initialized: this.stores !== null
         }
+      };
+    });
+
+    // P3-C: POST /jobs/run - execute job
+    this.app.post('/jobs/run', async (request, reply) => {
+      (request as any).action = 'job_run';
+      const actor = request.ip;
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.jobExecutor) {
+        return reply.code(503).send({
+          error: 'Job executor not initialized'
+        });
+      }
+
+      const result = await this.jobExecutor.runJob(actor, {
+        jobType: body.jobType ?? 'default',
+        inputs: body.inputs,
+        policyId: body.policyId,
+        jobId: body.jobId
+      });
+
+      return result;
+    });
+
+    // P3-C: GET /jobs/:job_id/status - get job status
+    this.app.get('/jobs/:job_id/status', async (request, reply) => {
+      (request as any).action = 'job_status';
+      const { job_id } = request.params as { job_id: string };
+
+      if (!this.jobExecutor) {
+        return reply.code(503).send({
+          error: 'Job executor not initialized'
+        });
+      }
+
+      const status = await this.jobExecutor.getStatus(job_id);
+
+      if (!status) {
+        return reply.code(404).send({
+          error: 'Job not found',
+          job_id
+        });
+      }
+
+      return status;
+    });
+
+    // P3-C: POST /jobs/:job_id/resume - resume job
+    this.app.post('/jobs/:job_id/resume', async (request, reply) => {
+      (request as any).action = 'job_resume';
+      const actor = request.ip;
+      const { job_id } = request.params as { job_id: string };
+
+      if (!this.jobExecutor) {
+        return reply.code(503).send({
+          error: 'Job executor not initialized'
+        });
+      }
+
+      const result = await this.jobExecutor.resumeJob(actor, job_id);
+
+      return result;
+    });
+
+    // P3-C: GET /receipts/:job_id - get job receipts (optional)
+    this.app.get('/receipts/:job_id', async (request, reply) => {
+      (request as any).action = 'receipts_read';
+      const { job_id } = request.params as { job_id: string };
+      const { limit } = request.query as { limit?: string };
+
+      if (!this.actionGate) {
+        return reply.code(503).send({
+          error: 'ActionGate not initialized'
+        });
+      }
+
+      const receipts = await this.actionGate.readReceipts(
+        job_id,
+        limit ? parseInt(limit, 10) : undefined
+      );
+
+      return {
+        job_id,
+        count: receipts.length,
+        receipts
       };
     });
 

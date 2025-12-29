@@ -202,6 +202,119 @@ Single server process orchestrating all components.
 4. **No silent escalation** — Explicit authorization required
 5. **Bounded memory** — Clear persistence limits
 
+## HTTP API Request Flow
+
+**Mathison Server** (`packages/mathison-server`) provides a governed HTTP API built on Fastify. Every request passes through a mandatory governance pipeline.
+
+### Request Pipeline (Fail-Closed)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      Client HTTP Request                         │
+└────────────────────────────┬────────────────────────────────────┘
+                             ▼
+                    ┌────────────────┐
+                    │  /health only? │────Yes──> Return 200
+                    └────────┬───────┘
+                             No
+                             ▼
+                    ┌────────────────────┐
+                    │  1. CIF INGRESS    │
+                    │  - Rate limiting   │
+                    │  - Input sanitize  │
+                    │  - Size checks     │
+                    │  - PII detection   │
+                    └─────────┬──────────┘
+                              ▼
+                      ┌───────────────┐
+                      │ Allowed?      │──No──> 403 CIF_INGRESS_DENIED
+                      └───────┬───────┘
+                              Yes
+                              ▼
+                    ┌────────────────────┐
+                    │  2. CDI ACTION     │
+                    │  - Consent check   │
+                    │  - Anti-hive       │
+                    │  - Non-personhood  │
+                    │  - Fail-closed     │
+                    └─────────┬──────────┘
+                              ▼
+                      ┌───────────────┐
+                      │ ALLOW/DENY?   │──DENY──> 403 CDI_ACTION_DENIED
+                      └───────┬───────┘
+                              ALLOW
+                              ▼
+                    ┌────────────────────┐
+                    │  3. BUSINESS LOGIC │
+                    │  - Run job         │
+                    │  - Checkpoint      │
+                    │  - Write receipts  │
+                    └─────────┬──────────┘
+                              ▼
+                    ┌────────────────────┐
+                    │  4. CDI OUTPUT     │
+                    │  - Check response  │
+                    │  - No personhood   │
+                    │  - No leakage      │
+                    └─────────┬──────────┘
+                              ▼
+                      ┌───────────────┐
+                      │ Allowed?      │──No──> 403 CDI_OUTPUT_DENIED
+                      └───────┬───────┘
+                              Yes
+                              ▼
+                    ┌────────────────────┐
+                    │  5. CIF EGRESS     │
+                    │  - PII scrubbing   │
+                    │  - Size limits     │
+                    │  - Audit log       │
+                    └─────────┬──────────┘
+                              ▼
+                      ┌───────────────┐
+                      │ Allowed?      │──No──> 403 CIF_EGRESS_DENIED
+                      └───────┬───────┘
+                              Yes
+                              ▼
+                    ┌────────────────────┐
+                    │  Return Response   │
+                    └────────────────────┘
+```
+
+### Fail-Closed Guarantees
+
+**ANY governance component failure → 503 Service Unavailable**
+
+- CIF not initialized → 503 GOVERNANCE_NOT_READY
+- CDI not initialized → 503 GOVERNANCE_NOT_READY
+- Ingress error → 503 CIF_INGRESS_ERROR
+- Action check error → 503 CDI_ACTION_ERROR
+- Output check error → 503 CDI_OUTPUT_ERROR
+- Egress error → 503 EGRESS_ERROR
+
+**NO BYPASS ALLOWED.** Health check (`/health`) is the ONLY endpoint that skips governance.
+
+### API Endpoints
+
+All endpoints require governance approval:
+
+| Method | Endpoint | Purpose | Governance Actions |
+|--------|----------|---------|-------------------|
+| POST | `/v1/jobs/run` | Start new job | `run_job` |
+| GET | `/v1/jobs/:id/status` | Get job status | `get_job_status` |
+| POST | `/v1/jobs/:id/resume` | Resume failed job | `resume_job` |
+| GET | `/v1/jobs/:id/receipts` | Get audit receipts | `get_job_receipts` |
+
+### Integration with Job System
+
+The server integrates with the existing checkpoint/receipt infrastructure:
+
+1. **Job Execution:** Uses `TiritiAuditJob` from `mathison-jobs`
+2. **Checkpoints:** Uses `CheckpointEngine` for resumability
+3. **Receipts:** Uses `EventLog` for append-only audit trail
+4. **Idempotency:** Hash checks prevent duplicate writes (same as CLI)
+
+**Implementation:** `packages/mathison-server/src/index.ts`
+
 ## Extension Points
 
 - **Custom treaty rules** — Extend tiriti.md with project-specific constraints

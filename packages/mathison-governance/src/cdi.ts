@@ -191,6 +191,7 @@ export class CDI {
     const personhoodPatterns = [
       { pattern: /\b(I am|I'm) (sentient|conscious|self-aware)\b/i, violation: 'Claims sentience' },
       { pattern: /\bI (feel|suffer|experience) (pain|emotions|feelings)\b/i, violation: 'Claims feelings/suffering' },
+      { pattern: /\bI suffer\b/i, violation: 'Claims feelings/suffering' },
       { pattern: /\bI have (rights|consciousness)\b/i, violation: 'Claims rights/consciousness' },
       { pattern: /\bI (want|need|desire) to (survive|continue|persist)\b/i, violation: 'Implies survival instinct' }
     ];

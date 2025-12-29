@@ -7,9 +7,10 @@
  * - MemoryStore: graph storage (P2-C)
  *
  * Backends:
- * - FileStore: JSON + JSONL (current implementation)
- * - SQLiteStore: coming in P2-B
+ * - FileStore: JSON + JSONL (simple, local)
+ * - SQLiteStore: SQLite with WAL + hash chaining (recommended default)
  */
 
 export * from './interfaces';
 export * from './file-store';
+export * from './sqlite-store';

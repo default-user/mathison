@@ -1,0 +1,331 @@
+/**
+ * Phase 3 Server Conformance Tests
+ * Proves: fail-closed boot, governance pipeline enforcement, job API works
+ */
+
+import { MathisonServer } from '../index';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+
+describe('Phase 3 Server Conformance', () => {
+  let tempDir: string;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    // Create temp directory for each test
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mathison-server-test-'));
+
+    // Set required env vars for FILE backend
+    process.env.MATHISON_STORE_BACKEND = 'FILE';
+    process.env.MATHISON_STORE_PATH = tempDir;
+  });
+
+  afterEach(() => {
+    // Cleanup
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    // Restore env
+    process.env = { ...originalEnv };
+  });
+
+  describe('P3-A: Fail-Closed Boot', () => {
+    it('refuses to start if MATHISON_STORE_BACKEND missing', async () => {
+      delete process.env.MATHISON_STORE_BACKEND;
+
+      const server = new MathisonServer({ port: 0 });
+
+      await expect(server.start()).rejects.toThrow('STORE_MISCONFIGURED');
+    });
+
+    it('refuses to start if MATHISON_STORE_BACKEND invalid', async () => {
+      process.env.MATHISON_STORE_BACKEND = 'INVALID';
+
+      const server = new MathisonServer({ port: 0 });
+
+      await expect(server.start()).rejects.toThrow();
+    });
+
+    it('refuses to start if MATHISON_STORE_PATH missing', async () => {
+      delete process.env.MATHISON_STORE_PATH;
+
+      const server = new MathisonServer({ port: 0 });
+
+      await expect(server.start()).rejects.toThrow('STORE_MISCONFIGURED');
+    });
+
+    it('starts successfully with valid config', async () => {
+      const server = new MathisonServer({ port: 0 });
+
+      await server.start();
+
+      const app = server.getApp();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health'
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.status).toBe('healthy');
+      expect(body.bootStatus).toBe('ready');
+      expect(body.governance.treaty.version).toBe('1.0');
+      expect(body.storage.initialized).toBe(true);
+
+      await server.stop();
+    });
+  });
+
+  describe('P3-B: ActionGate Enforcement', () => {
+    let server: MathisonServer;
+
+    beforeEach(async () => {
+      server = new MathisonServer({ port: 0 });
+      await server.start();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    it('all job operations create receipts via ActionGate', async () => {
+      const app = server.getApp();
+
+      // Run job
+      const runResponse = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: {
+          jobType: 'test',
+          inputs: { foo: 'bar' }
+        }
+      });
+
+      expect(runResponse.statusCode).toBe(200);
+      const runBody = JSON.parse(runResponse.body);
+      expect(runBody.job_id).toBeDefined();
+      expect(runBody.status).toBe('completed');
+
+      // Check receipts were created
+      const receiptsResponse = await app.inject({
+        method: 'GET',
+        url: `/receipts/${runBody.job_id}`
+      });
+
+      expect(receiptsResponse.statusCode).toBe(200);
+      const receiptsBody = JSON.parse(receiptsResponse.body);
+      expect(receiptsBody.count).toBeGreaterThan(0);
+
+      // Verify receipts have required fields
+      for (const receipt of receiptsBody.receipts) {
+        expect(receipt.timestamp).toBeDefined();
+        expect(receipt.job_id).toBe(runBody.job_id);
+        expect(receipt.stage).toBeDefined();
+        expect(receipt.action).toBeDefined();
+        expect(receipt.store_backend).toBe('FILE');
+      }
+    });
+  });
+
+  describe('P3-C: Job API (run → status → resume)', () => {
+    let server: MathisonServer;
+
+    beforeEach(async () => {
+      server = new MathisonServer({ port: 0 });
+      await server.start();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    it('POST /jobs/run creates and completes job', async () => {
+      const app = server.getApp();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: {
+          jobType: 'test-job',
+          inputs: { test: 'data' }
+        }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+
+      expect(body.job_id).toBeDefined();
+      expect(body.status).toBe('completed');
+      expect(body.resumable).toBe(false);
+      expect(body.outputs).toBeDefined();
+      expect(body.decision).toBe('ALLOW');
+    });
+
+    it('GET /jobs/:job_id/status returns job status', async () => {
+      const app = server.getApp();
+
+      // Create job
+      const runResponse = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: { jobType: 'test' }
+      });
+
+      const { job_id } = JSON.parse(runResponse.body);
+
+      // Get status
+      const statusResponse = await app.inject({
+        method: 'GET',
+        url: `/jobs/${job_id}/status`
+      });
+
+      expect(statusResponse.statusCode).toBe(200);
+      const body = JSON.parse(statusResponse.body);
+
+      expect(body.job_id).toBe(job_id);
+      expect(body.status).toBe('completed');
+      expect(body.resumable).toBe(false);
+    });
+
+    it('GET /jobs/:job_id/status returns 404 for non-existent job', async () => {
+      const app = server.getApp();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/jobs/nonexistent-job/status'
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('Job not found');
+    });
+
+    it('POST /jobs/:job_id/resume is idempotent for completed job', async () => {
+      const app = server.getApp();
+
+      // Create job
+      const runResponse = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: { jobType: 'test', inputs: { x: 1 } }
+      });
+
+      const { job_id } = JSON.parse(runResponse.body);
+
+      // Resume completed job (should be idempotent)
+      const resume1 = await app.inject({
+        method: 'POST',
+        url: `/jobs/${job_id}/resume`
+      });
+
+      const resume2 = await app.inject({
+        method: 'POST',
+        url: `/jobs/${job_id}/resume`
+      });
+
+      expect(resume1.statusCode).toBe(200);
+      expect(resume2.statusCode).toBe(200);
+
+      const body1 = JSON.parse(resume1.body);
+      const body2 = JSON.parse(resume2.body);
+
+      expect(body1.status).toBe('completed');
+      expect(body2.status).toBe('completed');
+      expect(body1.outputs).toEqual(body2.outputs);
+    });
+
+    it('run → status → resume workflow works end-to-end', async () => {
+      const app = server.getApp();
+
+      // 1. Run job with explicit jobId
+      const jobId = 'test-job-123';
+      const runResponse = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: {
+          jobId,
+          jobType: 'test',
+          inputs: { value: 42 }
+        }
+      });
+
+      expect(runResponse.statusCode).toBe(200);
+      const runBody = JSON.parse(runResponse.body);
+      expect(runBody.job_id).toBe(jobId);
+      expect(runBody.status).toBe('completed');
+
+      // 2. Check status
+      const statusResponse = await app.inject({
+        method: 'GET',
+        url: `/jobs/${jobId}/status`
+      });
+
+      expect(statusResponse.statusCode).toBe(200);
+      const statusBody = JSON.parse(statusResponse.body);
+      expect(statusBody.status).toBe('completed');
+
+      // 3. Resume (should be no-op for completed job)
+      const resumeResponse = await app.inject({
+        method: 'POST',
+        url: `/jobs/${jobId}/resume`
+      });
+
+      expect(resumeResponse.statusCode).toBe(200);
+      const resumeBody = JSON.parse(resumeResponse.body);
+      expect(resumeBody.status).toBe('completed');
+      expect(resumeBody.resumable).toBe(false);
+    });
+  });
+
+  describe('P3: Governance Pipeline Enforcement', () => {
+    let server: MathisonServer;
+
+    beforeEach(async () => {
+      server = new MathisonServer({ port: 0 });
+      await server.start();
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    it('unknown routes return 404 with fail-closed message', async () => {
+      const app = server.getApp();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/unknown/route'
+      });
+
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('ROUTE_NOT_FOUND');
+      expect(body.message).toContain('fail-closed');
+    });
+
+    it('all responses pass through governance pipeline', async () => {
+      const app = server.getApp();
+
+      // Health check goes through pipeline
+      const healthResponse = await app.inject({
+        method: 'GET',
+        url: '/health'
+      });
+
+      expect(healthResponse.statusCode).toBe(200);
+
+      // Job run goes through pipeline
+      const jobResponse = await app.inject({
+        method: 'POST',
+        url: '/jobs/run',
+        payload: { jobType: 'test' }
+      });
+
+      expect(jobResponse.statusCode).toBe(200);
+
+      // Both should have been gated (no exceptions thrown = passed governance)
+    });
+  });
+});

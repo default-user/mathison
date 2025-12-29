@@ -7,6 +7,7 @@ import * as crypto from 'crypto';
 import CheckpointEngine from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
 import { TiritiAuditJob } from 'mathison-jobs';
+import { CDI } from 'mathison-governance/dist/cdi';
 
 export interface RunOptions {
   job: string;
@@ -18,6 +19,16 @@ export interface RunOptions {
 
 export async function runCommand(options: RunOptions): Promise<void> {
   console.log('🚀 Mathison - Starting job...\n');
+
+  // Fail-closed: Check governance availability BEFORE starting job
+  const cdi = new CDI();
+  try {
+    await cdi.initialize();
+  } catch (error) {
+    // Governance unavailable - fail closed
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`TREATY_UNAVAILABLE: Cannot start job without governance. ${message}`);
+  }
 
   // Validate job type
   if (options.job !== 'tiriti-audit') {

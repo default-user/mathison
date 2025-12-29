@@ -1,0 +1,24 @@
+{
+  "name": "mathison-cli",
+  "version": "0.1.0",
+  "description": "Mathison CLI for running governance workflows",
+  "main": "dist/index.js",
+  "bin": {
+    "mathison": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "mathison-checkpoint": "workspace:*",
+    "mathison-receipts": "workspace:*",
+    "mathison-jobs": "workspace:*",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

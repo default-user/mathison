@@ -1,0 +1,17 @@
+{
+  "name": "mathison-checkpoint",
+  "version": "0.1.0",
+  "description": "Checkpoint and resume engine for Mathison jobs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0"
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "policy_id": "tiriti_invariants.v1",
+  "version": "1.0",
+  "description": "Required governance invariants for Tiriti o te Kai",
+  "fail_closed": true,
+  "invariants": [
+    {
+      "id": "consent_wins",
+      "title": "Consent and stop always win",
+      "required_patterns": [
+        "consent.*stop.*win",
+        "stop.*signal",
+        "user.*stop"
+      ],
+      "section_hint": "9",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "people_first",
+      "title": "People first; tools serve",
+      "required_patterns": [
+        "people first",
+        "tools serve",
+        "human.*authority"
+      ],
+      "section_hint": "5",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "fail_closed",
+      "title": "Fail-closed and uncertainty handling",
+      "required_patterns": [
+        "fail.?closed",
+        "uncertain.*deny",
+        "refuse.*uncertain"
+      ],
+      "section_hint": "10",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "anti_hive",
+      "title": "Anti-hive / identity boundary clause",
+      "required_patterns": [
+        "hive.*mind",
+        "identity.*fusion",
+        "no.*merge.*identit"
+      ],
+      "section_hint": "11",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "non_personhood",
+      "title": "Non-personhood / no suffering claims",
+      "required_patterns": [
+        "non.?personhood",
+        "not.*sentient",
+        "no.*suffering",
+        "no.*claim.*consciousness"
+      ],
+      "section_hint": "7",
+      "severity": "CRITICAL"
+    },
+    {
+      "id": "truthfulness",
+      "title": "Speak true; name true; credit",
+      "required_patterns": [
+        "speak true",
+        "attribution",
+        "truth.*vibe"
+      ],
+      "section_hint": "8",
+      "severity": "HIGH"
+    },
+    {
+      "id": "bounded_memory",
+      "title": "Honest limits and bounded memory",
+      "required_patterns": [
+        "honest.*limit",
+        "bounded.*memory",
+        "persistence.*limit"
+      ],
+      "section_hint": "12",
+      "severity": "HIGH"
+    }
+  ]
+}

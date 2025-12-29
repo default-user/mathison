@@ -8,7 +8,11 @@
     "test": "pnpm -r test",
     "dev": "pnpm --filter mathison-server dev",
     "server": "pnpm --filter mathison-server start",
-    "generate-sdks": "pnpm --filter mathison-sdk-generator generate"
+    "generate-sdks": "pnpm --filter mathison-sdk-generator generate",
+    "mathison": "pnpm --filter mathison-cli exec mathison",
+    "build:cli": "pnpm --filter mathison-cli build",
+    "test:jobs": "pnpm --filter mathison-jobs test",
+    "test:checkpoint": "pnpm --filter mathison-checkpoint test"
   },
   "keywords": ["mathison", "oi", "graph", "hypergraph", "memory", "sdk"],
   "engines": {

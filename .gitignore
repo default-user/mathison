@@ -86,3 +86,7 @@ Thumbs.db
 
 # Backup files
 *.bak
+
+# Mathison runtime
+.mathison/
+*.checkpoint.json

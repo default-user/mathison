@@ -28,6 +28,7 @@ export interface MathisonServerConfig {
   host?: string;
   checkpointDir?: string;
   eventLogPath?: string;
+  requestTimeout?: number; // milliseconds, default: 30000 (30s)
 }
 
 export class MathisonServer {
@@ -44,14 +45,17 @@ export class MathisonServer {
       port: config.port || 3000,
       host: config.host || '127.0.0.1',
       checkpointDir: config.checkpointDir || '.mathison/checkpoints',
-      eventLogPath: config.eventLogPath || '.mathison/eventlog.jsonl'
+      eventLogPath: config.eventLogPath || '.mathison/eventlog.jsonl',
+      requestTimeout: config.requestTimeout || 30000 // 30s default
     };
 
-    // Initialize Fastify
+    // Initialize Fastify with timeout
     this.fastify = Fastify({
       logger: {
         level: 'info'
-      }
+      },
+      requestTimeout: this.config.requestTimeout,
+      connectionTimeout: this.config.requestTimeout
     });
 
     // Initialize governance components

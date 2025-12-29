@@ -14,6 +14,7 @@ export interface TiritiAuditInputs {
   inputPath: string;
   outputDir: string;
   policyPath?: string;
+  stageTimeout?: number; // milliseconds, default: 300000 (5min)
 }
 
 export interface StageResult {
@@ -27,12 +28,56 @@ export class TiritiAuditJob {
   private eventLog: EventLog;
   private validator: GovernanceValidator;
   private jobId: string;
+  private stageTimeout: number;
 
   constructor(jobId: string, checkpointEngine: CheckpointEngine, eventLog: EventLog) {
     this.jobId = jobId;
     this.checkpointEngine = checkpointEngine;
     this.eventLog = eventLog;
     this.validator = new GovernanceValidator();
+    this.stageTimeout = 300000; // 5min default
+  }
+
+  /**
+   * Execute a stage with timeout protection
+   * On timeout: checkpoint current state → RESUMABLE_FAILURE
+   */
+  private async executeWithTimeout<T>(
+    stageName: string,
+    stageFunc: () => Promise<T>,
+    timeout: number
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(async () => {
+        const error = `Stage ${stageName} timed out after ${timeout}ms`;
+        console.error(`⏱️  ${error}`);
+
+        try {
+          // Checkpoint current state before failing
+          await this.checkpointEngine.markResumableFailure(this.jobId, error);
+          await this.eventLog.append({
+            job_id: this.jobId,
+            stage: stageName,
+            action: 'STAGE_TIMEOUT',
+            notes: error
+          });
+        } catch (checkpointError) {
+          console.error('Failed to checkpoint on timeout:', checkpointError);
+        }
+
+        reject(new Error(error));
+      }, timeout);
+
+      stageFunc()
+        .then((result) => {
+          clearTimeout(timeoutId);
+          resolve(result);
+        })
+        .catch((err) => {
+          clearTimeout(timeoutId);
+          reject(err);
+        });
+    });
   }
 
   /**
@@ -41,6 +86,9 @@ export class TiritiAuditJob {
   async run(inputs: TiritiAuditInputs): Promise<void> {
     await this.checkpointEngine.initialize();
     await this.eventLog.initialize();
+
+    // Configure stage timeout from inputs
+    this.stageTimeout = inputs.stageTimeout || this.stageTimeout;
 
     // Load or create checkpoint
     let checkpoint = await this.checkpointEngine.loadCheckpoint(this.jobId);
@@ -79,28 +127,29 @@ export class TiritiAuditJob {
 
         let result: StageResult;
 
-        switch (stage) {
-          case 'LOAD':
-            result = await this.stageLoad(inputs);
-            break;
-          case 'NORMALIZE':
-            result = await this.stageNormalize(checkpoint);
-            break;
-          case 'GOVERNANCE_CHECK':
-            result = await this.stageGovernanceCheck(checkpoint, inputs);
-            break;
-          case 'RENDER':
-            result = await this.stageRender(checkpoint, inputs);
-            break;
-          case 'VERIFY':
-            result = await this.stageVerify(checkpoint, inputs);
-            break;
-          case 'DONE':
-            result = await this.stageDone();
-            break;
-          default:
-            throw new Error(`Unknown stage: ${stage}`);
-        }
+        // Execute stage with timeout protection
+        result = await this.executeWithTimeout(
+          stage,
+          async () => {
+            switch (stage) {
+              case 'LOAD':
+                return await this.stageLoad(inputs);
+              case 'NORMALIZE':
+                return await this.stageNormalize(checkpoint);
+              case 'GOVERNANCE_CHECK':
+                return await this.stageGovernanceCheck(checkpoint, inputs);
+              case 'RENDER':
+                return await this.stageRender(checkpoint, inputs);
+              case 'VERIFY':
+                return await this.stageVerify(checkpoint, inputs);
+              case 'DONE':
+                return await this.stageDone();
+              default:
+                throw new Error(`Unknown stage: ${stage}`);
+            }
+          },
+          this.stageTimeout
+        );
 
         if (!result.success) {
           throw new Error(result.error || `Stage ${stage} failed`);

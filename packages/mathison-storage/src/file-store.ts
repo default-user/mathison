@@ -13,7 +13,8 @@ import { CheckpointStore, ReceiptStore, JobCheckpoint, Receipt } from './interfa
 
 export interface FileStoreConfig {
   checkpointDir?: string;
-  eventLogPath?: string;
+  eventLogPath?: string; // Base path without extension (e.g., '.mathison/eventlog')
+  maxLogSizeBytes?: number; // Max size before rotation (default: 10MB)
 }
 
 /**
@@ -155,22 +156,59 @@ export class FileCheckpointStore implements CheckpointStore {
 }
 
 /**
- * FileReceiptStore - JSONL-based receipt storage
+ * FileReceiptStore - JSONL-based receipt storage with rotation
+ * P2-B.2: Size-based rotation (eventlog-0001.jsonl, eventlog-0002.jsonl, etc.)
  */
 export class FileReceiptStore implements ReceiptStore {
-  private eventLogPath: string;
+  private eventLogBasePath: string; // Base path without segment number
+  private maxLogSizeBytes: number;
+  private currentSegment: number = 1;
 
   constructor(config: FileStoreConfig = {}) {
-    this.eventLogPath = config.eventLogPath || '.mathison/eventlog.jsonl';
+    // Remove .jsonl extension if present, we'll add it with segment number
+    const basePath = config.eventLogPath || '.mathison/eventlog';
+    this.eventLogBasePath = basePath.replace(/\.jsonl$/, '');
+    this.maxLogSizeBytes = config.maxLogSizeBytes || 10 * 1024 * 1024; // 10MB default
+  }
+
+  private getSegmentPath(segment: number): string {
+    return `${this.eventLogBasePath}-${String(segment).padStart(4, '0')}.jsonl`;
+  }
+
+  private async findCurrentSegment(): Promise<number> {
+    const logDir = path.dirname(this.eventLogBasePath);
+    const baseName = path.basename(this.eventLogBasePath);
+
+    try {
+      const files = await fs.readdir(logDir);
+      const segments = files
+        .filter(f => f.startsWith(baseName) && f.endsWith('.jsonl'))
+        .map(f => {
+          const match = f.match(/-(\d+)\.jsonl$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(n => n > 0);
+
+      return segments.length > 0 ? Math.max(...segments) : 1;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        return 1;
+      }
+      throw error;
+    }
   }
 
   async initialize(): Promise<void> {
-    const logDir = path.dirname(this.eventLogPath);
+    const logDir = path.dirname(this.eventLogBasePath);
     await fs.mkdir(logDir, { recursive: true });
 
-    // Create log file if it doesn't exist
-    if (!fsSync.existsSync(this.eventLogPath)) {
-      await fs.writeFile(this.eventLogPath, '');
+    // Find the current segment
+    this.currentSegment = await this.findCurrentSegment();
+
+    // Create initial log file if it doesn't exist
+    const currentPath = this.getSegmentPath(this.currentSegment);
+    if (!fsSync.existsSync(currentPath)) {
+      await fs.writeFile(currentPath, '');
     }
   }
 
@@ -178,9 +216,30 @@ export class FileReceiptStore implements ReceiptStore {
     // No-op for file store
   }
 
+  private async shouldRotate(): Promise<boolean> {
+    const currentPath = this.getSegmentPath(this.currentSegment);
+    try {
+      const stats = await fs.stat(currentPath);
+      return stats.size >= this.maxLogSizeBytes;
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        return false;
+      }
+      throw error;
+    }
+  }
+
   async append(receipt: Receipt): Promise<void> {
+    // Check if we need to rotate
+    if (await this.shouldRotate()) {
+      this.currentSegment++;
+      const newPath = this.getSegmentPath(this.currentSegment);
+      await fs.writeFile(newPath, '');
+    }
+
     const line = JSON.stringify(receipt) + '\n';
-    await fs.appendFile(this.eventLogPath, line);
+    const currentPath = this.getSegmentPath(this.currentSegment);
+    await fs.appendFile(currentPath, line);
   }
 
   async queryByJobId(jobId: string): Promise<Receipt[]> {
@@ -193,11 +252,22 @@ export class FileReceiptStore implements ReceiptStore {
     return allReceipts.filter(r => r.verdict === verdict);
   }
 
-  async listAll(): Promise<Receipt[]> {
+  private async getAllSegments(): Promise<number[]> {
+    const logDir = path.dirname(this.eventLogBasePath);
+    const baseName = path.basename(this.eventLogBasePath);
+
     try {
-      const content = await fs.readFile(this.eventLogPath, 'utf-8');
-      const lines = content.trim().split('\n').filter(line => line.length > 0);
-      return lines.map(line => JSON.parse(line) as Receipt);
+      const files = await fs.readdir(logDir);
+      const segments = files
+        .filter(f => f.startsWith(baseName) && f.endsWith('.jsonl'))
+        .map(f => {
+          const match = f.match(/-(\d+)\.jsonl$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter(n => n > 0)
+        .sort((a, b) => a - b);
+
+      return segments;
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         return [];
@@ -206,8 +276,37 @@ export class FileReceiptStore implements ReceiptStore {
     }
   }
 
+  async listAll(): Promise<Receipt[]> {
+    const segments = await this.getAllSegments();
+    const allReceipts: Receipt[] = [];
+
+    for (const segment of segments) {
+      const segmentPath = this.getSegmentPath(segment);
+      try {
+        const content = await fs.readFile(segmentPath, 'utf-8');
+        const lines = content.trim().split('\n').filter(line => line.length > 0);
+        const receipts = lines.map(line => JSON.parse(line) as Receipt);
+        allReceipts.push(...receipts);
+      } catch (error: any) {
+        if (error.code === 'ENOENT') {
+          continue; // Skip missing segments
+        }
+        throw error;
+      }
+    }
+
+    return allReceipts;
+  }
+
   async queryByTimeRange(startTime: number, endTime: number): Promise<Receipt[]> {
     const allReceipts = await this.listAll();
     return allReceipts.filter(r => r.timestamp >= startTime && r.timestamp <= endTime);
+  }
+
+  async latest(jobId: string): Promise<Receipt | null> {
+    const receipts = await this.queryByJobId(jobId);
+    if (receipts.length === 0) return null;
+    // Return last receipt (most recent by append order)
+    return receipts[receipts.length - 1];
   }
 }

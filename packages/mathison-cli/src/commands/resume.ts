@@ -1,9 +1,11 @@
 /**
  * Resume command - Resume a failed/incomplete job
+ * P2-B.3: Uses StorageAdapter interfaces
  */
 
 import CheckpointEngine, { JobStatus } from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
+import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
 import { TiritiAuditJob, TiritiAuditInputs } from 'mathison-jobs';
 
 export interface ResumeOptions {
@@ -13,8 +15,12 @@ export interface ResumeOptions {
 export async function resumeCommand(options: ResumeOptions): Promise<void> {
   console.log(`🔄 Mathison - Resuming job ${options.jobId}...\n`);
 
-  const checkpointEngine = new CheckpointEngine();
-  const eventLog = new EventLog();
+  // P2-B.3: Create storage backend (FileStore for now, configurable later)
+  const checkpointStore = new FileCheckpointStore();
+  const receiptStore = new FileReceiptStore();
+
+  const checkpointEngine = new CheckpointEngine(checkpointStore);
+  const eventLog = new EventLog(receiptStore);
 
   await checkpointEngine.initialize();
   await eventLog.initialize();

@@ -274,6 +274,7 @@ export class SQLiteReceiptStore implements ReceiptStore {
     this.db.pragma(`busy_timeout = ${this.busyTimeout}`);
 
     // Create receipts table with hash chaining for tamper-evidence
+    // P2-B.4: Include integrity fields (treaty_hash, policy_id, inputs_hash, outputs_hash)
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS receipts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -284,6 +285,11 @@ export class SQLiteReceiptStore implements ReceiptStore {
         notes TEXT,
         verdict TEXT,
         reason TEXT,
+        treaty_hash TEXT,
+        treaty_version TEXT,
+        policy_id TEXT,
+        inputs_hash TEXT,
+        outputs_hash TEXT,
         prev_hash TEXT,
         content_hash TEXT NOT NULL
       )
@@ -315,6 +321,7 @@ export class SQLiteReceiptStore implements ReceiptStore {
     const prev_hash = prevRow ? prevRow.content_hash : null;
 
     // Compute content hash for this receipt
+    // P2-B.4: Include integrity fields in hash computation
     const content = JSON.stringify({
       job_id: receipt.job_id,
       stage: receipt.stage,
@@ -323,14 +330,19 @@ export class SQLiteReceiptStore implements ReceiptStore {
       notes: receipt.notes,
       verdict: receipt.verdict,
       reason: receipt.reason,
+      treaty_hash: receipt.treaty_hash,
+      treaty_version: receipt.treaty_version,
+      policy_id: receipt.policy_id,
+      inputs_hash: receipt.inputs_hash,
+      outputs_hash: receipt.outputs_hash,
       prev_hash
     });
     const content_hash = crypto.createHash('sha256').update(content, 'utf-8').digest('hex');
 
     // Insert receipt
     const stmt = this.db.prepare(`
-      INSERT INTO receipts (job_id, stage, action, timestamp, notes, verdict, reason, prev_hash, content_hash)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO receipts (job_id, stage, action, timestamp, notes, verdict, reason, treaty_hash, treaty_version, policy_id, inputs_hash, outputs_hash, prev_hash, content_hash)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -341,6 +353,11 @@ export class SQLiteReceiptStore implements ReceiptStore {
       receipt.notes || null,
       receipt.verdict || null,
       receipt.reason || null,
+      receipt.treaty_hash || null,
+      receipt.treaty_version || null,
+      receipt.policy_id || null,
+      receipt.inputs_hash || null,
+      receipt.outputs_hash || null,
       prev_hash,
       content_hash
     );
@@ -362,7 +379,12 @@ export class SQLiteReceiptStore implements ReceiptStore {
       timestamp: row.timestamp,
       notes: row.notes,
       verdict: row.verdict,
-      reason: row.reason
+      reason: row.reason,
+      treaty_hash: row.treaty_hash,
+      treaty_version: row.treaty_version,
+      policy_id: row.policy_id,
+      inputs_hash: row.inputs_hash,
+      outputs_hash: row.outputs_hash
     }));
   }
 
@@ -382,7 +404,12 @@ export class SQLiteReceiptStore implements ReceiptStore {
       timestamp: row.timestamp,
       notes: row.notes,
       verdict: row.verdict,
-      reason: row.reason
+      reason: row.reason,
+      treaty_hash: row.treaty_hash,
+      treaty_version: row.treaty_version,
+      policy_id: row.policy_id,
+      inputs_hash: row.inputs_hash,
+      outputs_hash: row.outputs_hash
     }));
   }
 
@@ -402,7 +429,12 @@ export class SQLiteReceiptStore implements ReceiptStore {
       timestamp: row.timestamp,
       notes: row.notes,
       verdict: row.verdict,
-      reason: row.reason
+      reason: row.reason,
+      treaty_hash: row.treaty_hash,
+      treaty_version: row.treaty_version,
+      policy_id: row.policy_id,
+      inputs_hash: row.inputs_hash,
+      outputs_hash: row.outputs_hash
     }));
   }
 
@@ -422,8 +454,39 @@ export class SQLiteReceiptStore implements ReceiptStore {
       timestamp: row.timestamp,
       notes: row.notes,
       verdict: row.verdict,
-      reason: row.reason
+      reason: row.reason,
+      treaty_hash: row.treaty_hash,
+      treaty_version: row.treaty_version,
+      policy_id: row.policy_id,
+      inputs_hash: row.inputs_hash,
+      outputs_hash: row.outputs_hash
     }));
+  }
+
+  async latest(jobId: string): Promise<Receipt | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM receipts WHERE job_id = ? ORDER BY id DESC LIMIT 1
+    `);
+
+    const row = stmt.get(jobId) as any;
+    if (!row) return null;
+
+    return {
+      job_id: row.job_id,
+      stage: row.stage,
+      action: row.action,
+      timestamp: row.timestamp,
+      notes: row.notes,
+      verdict: row.verdict,
+      reason: row.reason,
+      treaty_hash: row.treaty_hash,
+      treaty_version: row.treaty_version,
+      policy_id: row.policy_id,
+      inputs_hash: row.inputs_hash,
+      outputs_hash: row.outputs_hash
+    };
   }
 
   /**
@@ -442,7 +505,7 @@ export class SQLiteReceiptStore implements ReceiptStore {
     let prevHash: string | null = null;
 
     for (const row of rows) {
-      // Recompute content hash
+      // Recompute content hash (must match append() logic)
       const content = JSON.stringify({
         job_id: row.job_id,
         stage: row.stage,
@@ -451,6 +514,11 @@ export class SQLiteReceiptStore implements ReceiptStore {
         notes: row.notes,
         verdict: row.verdict,
         reason: row.reason,
+        treaty_hash: row.treaty_hash,
+        treaty_version: row.treaty_version,
+        policy_id: row.policy_id,
+        inputs_hash: row.inputs_hash,
+        outputs_hash: row.outputs_hash,
         prev_hash: row.prev_hash
       });
       const expectedHash = crypto.createHash('sha256').update(content, 'utf-8').digest('hex');

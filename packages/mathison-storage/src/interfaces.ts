@@ -28,6 +28,12 @@ export interface Receipt {
   notes?: string;
   verdict?: 'allow' | 'deny';
   reason?: string;
+  // P2-B.4: Integrity fields
+  treaty_hash?: string;      // Treaty version hash used in decision
+  treaty_version?: string;   // Treaty version (e.g., "1.0")
+  policy_id?: string;        // Policy identifier
+  inputs_hash?: string;      // Hash of inputs to this decision
+  outputs_hash?: string;     // Hash of outputs from this decision
 }
 
 export interface MemoryNode {
@@ -152,6 +158,41 @@ export interface ReceiptStore {
    * Get receipts in a time range
    */
   queryByTimeRange(startTime: number, endTime: number): Promise<Receipt[]>;
+
+  /**
+   * Get latest receipt for a job (P2-B.1 requirement)
+   */
+  latest(jobId: string): Promise<Receipt | null>;
+}
+
+/**
+ * PolicyStore - Treaty/policy version tracking (P2-B.1 optional)
+ */
+export interface PolicyStore {
+  /**
+   * Initialize the store
+   */
+  initialize(): Promise<void>;
+
+  /**
+   * Shutdown the store
+   */
+  shutdown(): Promise<void>;
+
+  /**
+   * Store a policy version
+   */
+  storePolicy(policyId: string, version: string, content: string): Promise<void>;
+
+  /**
+   * Load a policy by ID and version
+   */
+  loadPolicy(policyId: string, version: string): Promise<{ content: string; content_hash: string } | null>;
+
+  /**
+   * List all policies
+   */
+  listPolicies(): Promise<Array<{ policy_id: string; version: string; content_hash: string }>>;
 }
 
 /**

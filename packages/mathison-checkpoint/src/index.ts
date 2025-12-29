@@ -1,11 +1,10 @@
 /**
  * Checkpoint and Resume Engine
  * Fail-closed: if uncertain about state, mark as RESUMABLE_FAILURE
+ * P2-B.3: Uses CheckpointStore interface (no direct filesystem access)
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import { CheckpointStore, JobCheckpoint as StorageCheckpoint } from 'mathison-storage';
 
 export enum JobStatus {
   PENDING = 'PENDING',
@@ -29,33 +28,74 @@ export interface JobCheckpoint {
 }
 
 export class CheckpointEngine {
-  private checkpointDir: string;
+  private store: CheckpointStore;
 
-  constructor(checkpointDir: string = '.mathison/checkpoints') {
-    this.checkpointDir = checkpointDir;
+  constructor(store: CheckpointStore) {
+    this.store = store;
   }
 
   async initialize(): Promise<void> {
-    await fs.mkdir(this.checkpointDir, { recursive: true });
+    await this.store.initialize();
+  }
+
+  /**
+   * Map storage status to local JobStatus enum
+   */
+  private mapStatusFromStorage(status: string): JobStatus {
+    switch (status) {
+      case 'RUNNING':
+        return JobStatus.IN_PROGRESS;
+      case 'DONE':
+        return JobStatus.COMPLETED;
+      case 'FAILED':
+        return JobStatus.FAILED;
+      case 'RESUMABLE_FAILURE':
+        return JobStatus.RESUMABLE_FAILURE;
+      default:
+        return JobStatus.PENDING;
+    }
+  }
+
+  /**
+   * Map local JobStatus enum to storage status
+   */
+  private mapStatusToStorage(status: JobStatus): 'RUNNING' | 'DONE' | 'FAILED' | 'RESUMABLE_FAILURE' {
+    switch (status) {
+      case JobStatus.IN_PROGRESS:
+      case JobStatus.PENDING:
+        return 'RUNNING';
+      case JobStatus.COMPLETED:
+        return 'DONE';
+      case JobStatus.FAILED:
+        return 'FAILED';
+      case JobStatus.RESUMABLE_FAILURE:
+        return 'RESUMABLE_FAILURE';
+    }
+  }
+
+  /**
+   * Convert storage checkpoint to local format
+   */
+  private fromStorage(storageCheckpoint: StorageCheckpoint): JobCheckpoint {
+    return {
+      ...storageCheckpoint,
+      status: this.mapStatusFromStorage(storageCheckpoint.status),
+      completed_stages: []  // Storage layer doesn't track completed_stages, derive from stage_outputs
+    };
   }
 
   /**
    * Create a new checkpoint for a job
    */
   async createCheckpoint(jobId: string, jobType: string, inputs: Record<string, unknown>): Promise<JobCheckpoint> {
+    const storageCheckpoint = await this.store.createCheckpoint(jobId, jobType, inputs);
+
     const checkpoint: JobCheckpoint = {
-      job_id: jobId,
-      job_type: jobType,
+      ...storageCheckpoint,
       status: JobStatus.PENDING,
-      current_stage: 'INIT',
-      completed_stages: [],
-      inputs,
-      stage_outputs: {},
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      completed_stages: []
     };
 
-    await this.saveCheckpoint(checkpoint);
     return checkpoint;
   }
 
@@ -63,17 +103,10 @@ export class CheckpointEngine {
    * Load checkpoint for a job
    */
   async loadCheckpoint(jobId: string): Promise<JobCheckpoint | null> {
-    const checkpointPath = path.join(this.checkpointDir, `${jobId}.json`);
+    const storageCheckpoint = await this.store.loadCheckpoint(jobId);
+    if (!storageCheckpoint) return null;
 
-    try {
-      const data = await fs.readFile(checkpointPath, 'utf-8');
-      return JSON.parse(data) as JobCheckpoint;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return null;
-      }
-      throw error;
-    }
+    return this.fromStorage(storageCheckpoint);
   }
 
   /**
@@ -85,119 +118,53 @@ export class CheckpointEngine {
     outputs: Record<string, unknown>,
     completed: boolean = true
   ): Promise<void> {
-    const checkpoint = await this.loadCheckpoint(jobId);
-    if (!checkpoint) {
-      throw new Error(`Checkpoint not found for job: ${jobId}`);
-    }
-
-    checkpoint.current_stage = stage;
-    checkpoint.stage_outputs[stage] = outputs;
-
-    if (completed && !checkpoint.completed_stages.includes(stage)) {
-      checkpoint.completed_stages.push(stage);
-    }
-
-    checkpoint.status = JobStatus.IN_PROGRESS;
-    checkpoint.updated_at = new Date().toISOString();
-
-    await this.saveCheckpoint(checkpoint);
+    await this.store.updateStage(jobId, stage, {
+      success: completed,
+      outputs
+    });
   }
 
   /**
    * Mark job as completed
    */
   async markCompleted(jobId: string): Promise<void> {
-    const checkpoint = await this.loadCheckpoint(jobId);
-    if (!checkpoint) {
-      throw new Error(`Checkpoint not found for job: ${jobId}`);
-    }
-
-    checkpoint.status = JobStatus.COMPLETED;
-    checkpoint.updated_at = new Date().toISOString();
-
-    await this.saveCheckpoint(checkpoint);
+    await this.store.markComplete(jobId);
   }
 
   /**
    * Mark job as failed (non-resumable)
    */
   async markFailed(jobId: string, error: string): Promise<void> {
-    const checkpoint = await this.loadCheckpoint(jobId);
-    if (!checkpoint) {
-      throw new Error(`Checkpoint not found for job: ${jobId}`);
-    }
-
-    checkpoint.status = JobStatus.FAILED;
-    checkpoint.error = error;
-    checkpoint.updated_at = new Date().toISOString();
-
-    await this.saveCheckpoint(checkpoint);
+    await this.store.markFailed(jobId, error);
   }
 
   /**
    * Mark job as resumable failure (can be resumed)
    */
   async markResumableFailure(jobId: string, error: string): Promise<void> {
-    const checkpoint = await this.loadCheckpoint(jobId);
-    if (!checkpoint) {
-      throw new Error(`Checkpoint not found for job: ${jobId}`);
-    }
-
-    checkpoint.status = JobStatus.RESUMABLE_FAILURE;
-    checkpoint.error = error;
-    checkpoint.updated_at = new Date().toISOString();
-
-    await this.saveCheckpoint(checkpoint);
+    await this.store.markResumableFailure(jobId, error);
   }
 
   /**
    * List all checkpoints
    */
   async listCheckpoints(): Promise<JobCheckpoint[]> {
-    const files = await fs.readdir(this.checkpointDir);
-    const checkpoints: JobCheckpoint[] = [];
-
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const jobId = file.replace('.json', '');
-        const checkpoint = await this.loadCheckpoint(jobId);
-        if (checkpoint) {
-          checkpoints.push(checkpoint);
-        }
-      }
-    }
-
-    return checkpoints.sort((a, b) =>
-      new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-    );
+    const storageCheckpoints = await this.store.listCheckpoints();
+    return storageCheckpoints.map(sc => this.fromStorage(sc));
   }
 
   /**
    * Check if a file's content matches expected hash (for idempotency)
    */
   async checkFileHash(filePath: string, expectedHash: string): Promise<boolean> {
-    try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      const hash = this.hashContent(content);
-      return hash === expectedHash;
-    } catch (error) {
-      return false;
-    }
+    return this.store.checkFileHash(filePath, expectedHash);
   }
 
   /**
    * Hash content for verification
    */
   hashContent(content: string): string {
-    return crypto.createHash('sha256').update(content).digest('hex');
-  }
-
-  /**
-   * Save checkpoint to disk
-   */
-  private async saveCheckpoint(checkpoint: JobCheckpoint): Promise<void> {
-    const checkpointPath = path.join(this.checkpointDir, `${checkpoint.job_id}.json`);
-    await fs.writeFile(checkpointPath, JSON.stringify(checkpoint, null, 2), 'utf-8');
+    return this.store.hashContent(content);
   }
 }
 

@@ -1,11 +1,10 @@
 /**
  * Event Log (Receipts) System
  * Append-only log of all job actions with governance decisions
+ * P2-B.3: Uses ReceiptStore interface (no direct filesystem access)
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
+import { ReceiptStore, Receipt as StorageReceipt } from 'mathison-storage';
 
 export interface Receipt {
   timestamp: string;
@@ -21,77 +20,97 @@ export interface Receipt {
 }
 
 export class EventLog {
-  private logPath: string;
+  private store: ReceiptStore;
 
-  constructor(logPath: string = '.mathison/eventlog.jsonl') {
-    this.logPath = logPath;
+  constructor(store: ReceiptStore) {
+    this.store = store;
   }
 
   async initialize(): Promise<void> {
-    const logDir = path.dirname(this.logPath);
-    await fs.mkdir(logDir, { recursive: true });
+    await this.store.initialize();
+  }
 
-    // Create file if it doesn't exist
-    try {
-      await fs.access(this.logPath);
-    } catch {
-      await fs.writeFile(this.logPath, '', 'utf-8');
+  /**
+   * Convert storage receipt to local format
+   */
+  private fromStorage(storageReceipt: StorageReceipt): Receipt {
+    return {
+      timestamp: new Date(storageReceipt.timestamp).toISOString(),
+      job_id: storageReceipt.job_id,
+      stage: storageReceipt.stage,
+      action: storageReceipt.action,
+      inputs_hash: storageReceipt.inputs_hash,
+      outputs_hash: storageReceipt.outputs_hash,
+      decision: storageReceipt.verdict ? storageReceipt.verdict.toUpperCase() as 'ALLOW' | 'DENY' : undefined,
+      policy_id: storageReceipt.policy_id,
+      notes: storageReceipt.notes
+    };
+  }
+
+  /**
+   * Convert local receipt to storage format
+   */
+  private toStorage(receipt: Omit<Receipt, 'timestamp'>): StorageReceipt {
+    let verdict: 'allow' | 'deny' | undefined;
+    if (receipt.decision === 'ALLOW') {
+      verdict = 'allow';
+    } else if (receipt.decision === 'DENY') {
+      verdict = 'deny';
     }
+
+    return {
+      job_id: receipt.job_id as string,
+      stage: receipt.stage as string,
+      action: receipt.action as string,
+      timestamp: Date.now(),
+      inputs_hash: receipt.inputs_hash as string | undefined,
+      outputs_hash: receipt.outputs_hash as string | undefined,
+      verdict,
+      policy_id: receipt.policy_id as string | undefined,
+      notes: receipt.notes as string | undefined,
+      reason: receipt.notes as string | undefined  // Map notes to reason for compatibility
+    };
   }
 
   /**
    * Append a receipt to the event log
    */
   async append(receipt: Omit<Receipt, 'timestamp'>): Promise<void> {
-    const fullReceipt = {
-      timestamp: new Date().toISOString(),
-      ...receipt
-    } as Receipt;
-
-    const line = JSON.stringify(fullReceipt) + '\n';
-
-    // Append-only: use 'a' flag
-    await fs.appendFile(this.logPath, line, 'utf-8');
+    const storageReceipt = this.toStorage(receipt);
+    await this.store.append(storageReceipt);
   }
 
   /**
    * Read all receipts from the log
    */
   async readAll(): Promise<Receipt[]> {
-    try {
-      const content = await fs.readFile(this.logPath, 'utf-8');
-      const lines = content.split('\n').filter(line => line.trim());
-
-      return lines.map(line => JSON.parse(line) as Receipt);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      throw error;
-    }
+    const storageReceipts = await this.store.listAll();
+    return storageReceipts.map((sr: StorageReceipt) => this.fromStorage(sr));
   }
 
   /**
    * Read receipts for a specific job
    */
   async readByJob(jobId: string): Promise<Receipt[]> {
-    const all = await this.readAll();
-    return all.filter(r => r.job_id === jobId);
+    const storageReceipts = await this.store.queryByJobId(jobId);
+    return storageReceipts.map((sr: StorageReceipt) => this.fromStorage(sr));
   }
 
   /**
    * Get the latest receipt for a job
    */
   async getLatest(jobId: string): Promise<Receipt | null> {
-    const receipts = await this.readByJob(jobId);
-    return receipts.length > 0 ? receipts[receipts.length - 1] : null;
+    const storageReceipt = await this.store.latest(jobId);
+    return storageReceipt ? this.fromStorage(storageReceipt) : null;
   }
 
   /**
-   * Hash content for receipts
+   * Hash content for receipts (delegate to store)
    */
   hashContent(content: string): string {
-    return crypto.createHash('sha256').update(content).digest('hex');
+    // Simple SHA-256 hash, same logic as stores
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(content, 'utf-8').digest('hex');
   }
 
   /**

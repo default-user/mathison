@@ -1,11 +1,13 @@
 /**
  * Run command - Start a new job
+ * P2-B.3: Uses StorageAdapter interfaces
  */
 
 import * as path from 'path';
 import * as crypto from 'crypto';
 import CheckpointEngine from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
+import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
 import { TiritiAuditJob } from 'mathison-jobs';
 import { CDI } from 'mathison-governance/dist/cdi';
 
@@ -44,9 +46,13 @@ export async function runCommand(options: RunOptions): Promise<void> {
   console.log(`Output Dir: ${options.outdir}`);
   console.log('');
 
+  // P2-B.3: Create storage backend (FileStore for now, configurable later)
+  const checkpointStore = new FileCheckpointStore();
+  const receiptStore = new FileReceiptStore();
+
   // Initialize engines
-  const checkpointEngine = new CheckpointEngine();
-  const eventLog = new EventLog();
+  const checkpointEngine = new CheckpointEngine(checkpointStore);
+  const eventLog = new EventLog(receiptStore);
 
   // Run the job
   const job = new TiritiAuditJob(jobId, checkpointEngine, eventLog);

@@ -1,17 +1,23 @@
 /**
  * Status command - Show job status
+ * P2-B.3: Uses StorageAdapter interfaces
  */
 
 import CheckpointEngine, { JobCheckpoint, JobStatus } from 'mathison-checkpoint';
 import EventLog from 'mathison-receipts';
+import { FileCheckpointStore, FileReceiptStore } from 'mathison-storage';
 
 export interface StatusOptions {
   jobId?: string;
 }
 
 export async function statusCommand(options: StatusOptions): Promise<void> {
-  const checkpointEngine = new CheckpointEngine();
-  const eventLog = new EventLog();
+  // P2-B.3: Create storage backend (FileStore for now, configurable later)
+  const checkpointStore = new FileCheckpointStore();
+  const receiptStore = new FileReceiptStore();
+
+  const checkpointEngine = new CheckpointEngine(checkpointStore);
+  const eventLog = new EventLog(receiptStore);
 
   await checkpointEngine.initialize();
   await eventLog.initialize();

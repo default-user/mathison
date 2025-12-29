@@ -61,8 +61,14 @@ export class MathisonServer {
     // Initialize governance components
     this.cdi = new CDI();
     this.cif = new CIF();
-    this.checkpointEngine = new CheckpointEngine(this.config.checkpointDir!);
-    this.eventLog = new EventLog(this.config.eventLogPath!);
+
+    // P2-B.3: Create storage backends (FileStore for now, configurable later)
+    const { FileCheckpointStore, FileReceiptStore } = require('mathison-storage');
+    const checkpointStore = new FileCheckpointStore({ checkpointDir: this.config.checkpointDir });
+    const receiptStore = new FileReceiptStore({ eventLogPath: this.config.eventLogPath });
+
+    this.checkpointEngine = new CheckpointEngine(checkpointStore);
+    this.eventLog = new EventLog(receiptStore);
   }
 
   async start(): Promise<void> {

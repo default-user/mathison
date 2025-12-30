@@ -613,7 +613,7 @@ class NetworkAdapter implements Adapter {
     switch (action) {
       case 'http.get': {
         // Simple allowlist (production would be more sophisticated)
-        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|localhost)/)) {
+        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|models\.github\.ai|localhost)/)) {
           throw new Error('URL not in allowlist');
         }
 
@@ -623,7 +623,7 @@ class NetworkAdapter implements Adapter {
       }
 
       case 'http.post': {
-        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|localhost)/)) {
+        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|models\.github\.ai|localhost)/)) {
           throw new Error('URL not in allowlist');
         }
 
@@ -648,42 +648,95 @@ class LLMAdapter implements Adapter {
   async execute(action: string, args: Record<string, any>): Promise<any> {
     switch (action) {
       case 'llm.complete': {
-        // Use environment variable for API key
-        const apiKey = IS_NODE ? process.env.ANTHROPIC_API_KEY : (window as any).__ANTHROPIC_API_KEY__;
+        // Try GitHub Models first (free tier), then Anthropic
+        const githubToken = IS_NODE ? process.env.GITHUB_TOKEN : (window as any).__GITHUB_TOKEN__;
+        const anthropicKey = IS_NODE ? process.env.ANTHROPIC_API_KEY : (window as any).__ANTHROPIC_API_KEY__;
 
-        if (!apiKey) {
-          return { error: 'No API key configured', fallback: this.localFallback(args.prompt) };
+        // Try GitHub Models API first
+        if (githubToken) {
+          try {
+            return await this.githubModelsComplete(githubToken, args);
+          } catch (error: any) {
+            console.warn('GitHub Models failed, trying Anthropic:', error.message);
+          }
         }
 
-        try {
-          const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: args.model || 'claude-3-haiku-20240307',
-              max_tokens: args.max_tokens || 1024,
-              messages: [{ role: 'user', content: args.prompt }],
-            }),
-          });
-
-          const data = await response.json();
-          return {
-            text: data.content[0].text,
-            model: data.model,
-            tokens: data.usage.output_tokens,
-          };
-        } catch (error: any) {
-          return { error: error.message, fallback: this.localFallback(args.prompt) };
+        // Fallback to Anthropic
+        if (anthropicKey) {
+          try {
+            return await this.anthropicComplete(anthropicKey, args);
+          } catch (error: any) {
+            return { error: error.message, fallback: this.localFallback(args.prompt) };
+          }
         }
+
+        return { error: 'No API key configured (GITHUB_TOKEN or ANTHROPIC_API_KEY)', fallback: this.localFallback(args.prompt) };
       }
 
       default:
         throw new Error(`Unknown LLM action: ${action}`);
     }
+  }
+
+  private async githubModelsComplete(token: string, args: Record<string, any>): Promise<any> {
+    const response = await fetch('https://models.github.ai/inference/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        model: args.model || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: args.prompt }
+        ],
+        temperature: args.temperature || 1.0,
+        max_tokens: args.max_tokens || 1024,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`GitHub Models API error: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      text: data.choices[0].message.content,
+      model: data.model,
+      tokens: data.usage?.completion_tokens || 0,
+      provider: 'github-models',
+    };
+  }
+
+  private async anthropicComplete(apiKey: string, args: Record<string, any>): Promise<any> {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: args.model || 'claude-3-haiku-20240307',
+        max_tokens: args.max_tokens || 1024,
+        messages: [{ role: 'user', content: args.prompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Anthropic API error: ${response.status} ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+      text: data.content[0].text,
+      model: data.model,
+      tokens: data.usage.output_tokens,
+      provider: 'anthropic',
+    };
   }
 
   private localFallback(prompt: string): string {

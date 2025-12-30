@@ -7,9 +7,10 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
-import { MemoryGraph } from 'mathison-memory';
+import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
+import { IdempotencyLedger } from './idempotency';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -28,6 +29,7 @@ export class MathisonServer {
   private actionGate: ActionGate | null = null;
   private jobExecutor: JobExecutor | null = null;
   private memoryGraph: MemoryGraph | null = null;
+  private idempotencyLedger: IdempotencyLedger;
   private config: Required<MathisonServerConfig>;
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
   private bootError: string | null = null;
@@ -52,6 +54,7 @@ export class MathisonServer {
       maxRequestSize: this.config.cifMaxRequestSize,
       maxResponseSize: this.config.cifMaxResponseSize
     });
+    this.idempotencyLedger = new IdempotencyLedger();
   }
 
   async start(): Promise<void> {
@@ -147,7 +150,8 @@ export class MathisonServer {
 
   private registerGovernancePipeline(): void {
     // P3-A: Mandatory governance pipeline for all requests
-    this.app.addHook('onRequest', async (request, reply) => {
+    // CIF Ingress happens in preValidation (after body parsing)
+    this.app.addHook('preValidation', async (request, reply) => {
       const clientId = request.ip;
 
       // CIF Ingress
@@ -447,6 +451,257 @@ export class MathisonServer {
         count: results.length,
         results
       };
+    });
+
+    // P4-B: POST /memory/nodes - create node (write with ActionGate + idempotency)
+    this.app.post('/memory/nodes', async (request, reply) => {
+      (request as any).action = 'memory_create_node';
+      const actor = request.ip;
+      const body = (request as any).sanitizedBody as any;
+
+      // Validate required fields
+      if (!body.idempotency_key || typeof body.idempotency_key !== 'string' || body.idempotency_key.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required field: idempotency_key'
+        });
+      }
+
+      if (!body.type || typeof body.type !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: type'
+        });
+      }
+
+      if (!this.memoryGraph || !this.actionGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph or ActionGate not initialized'
+        });
+      }
+
+      // Generate request hash for idempotency
+      const requestHash = IdempotencyLedger.generateRequestHash(
+        '/memory/nodes',
+        body,
+        body.idempotency_key
+      );
+
+      // Check if request already processed
+      const cachedResponse = this.idempotencyLedger.get(requestHash);
+      if (cachedResponse) {
+        return reply.code(cachedResponse.statusCode).send(cachedResponse.body);
+      }
+
+      // Generate node ID if not provided
+      const nodeId = body.id || `node-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Check if node already exists
+      const existingNode = this.memoryGraph.getNode(nodeId);
+      if (existingNode) {
+        // Check if payload matches (idempotent create)
+        const payloadMatches =
+          existingNode.type === body.type &&
+          JSON.stringify(existingNode.data) === JSON.stringify(body.data || {});
+
+        if (payloadMatches) {
+          // Idempotent: return existing node
+          const response = {
+            statusCode: 200,
+            body: {
+              node: existingNode,
+              created: false,
+              message: 'Node already exists with identical payload'
+            }
+          };
+          this.idempotencyLedger.set(requestHash, response);
+          return reply.code(200).send(response.body);
+        } else {
+          // Conflict: node exists with different payload
+          return reply.code(409).send({
+            reason_code: 'MALFORMED_REQUEST',
+            message: `Node ${nodeId} already exists with different payload`
+          });
+        }
+      }
+
+      // Execute node creation through ActionGate
+      const node: Node = {
+        id: nodeId,
+        type: body.type,
+        data: body.data || {},
+        metadata: body.metadata
+      };
+
+      const result = await this.actionGate.executeSideEffect(
+        {
+          actor,
+          action: 'MEMORY_NODE_CREATE',
+          payload: node,
+          metadata: {
+            job_id: 'memory',
+            stage: 'memory_write',
+            policy_id: 'default',
+            idempotency_key: body.idempotency_key,
+            request_hash: requestHash
+          }
+        },
+        async () => {
+          this.memoryGraph!.addNode(node);
+          return node;
+        }
+      );
+
+      if (!result.success) {
+        const errorResponse = {
+          statusCode: 403,
+          body: {
+            reason_code: result.governance.reasonCode,
+            message: result.governance.message
+          }
+        };
+        this.idempotencyLedger.set(requestHash, errorResponse);
+        return reply.code(403).send(errorResponse.body);
+      }
+
+      const successResponse = {
+        statusCode: 201,
+        body: {
+          node: result.data,
+          created: true,
+          receipt: result.receipt
+        }
+      };
+      this.idempotencyLedger.set(requestHash, successResponse);
+      return reply.code(201).send(successResponse.body);
+    });
+
+    // P4-B: POST /memory/edges - create edge (write with ActionGate + idempotency)
+    this.app.post('/memory/edges', async (request, reply) => {
+      (request as any).action = 'memory_create_edge';
+      const actor = request.ip;
+      const body = (request as any).sanitizedBody as any;
+
+      // Validate required fields
+      if (!body.idempotency_key || typeof body.idempotency_key !== 'string' || body.idempotency_key.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required field: idempotency_key'
+        });
+      }
+
+      if (!body.from || typeof body.from !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: from'
+        });
+      }
+
+      if (!body.to || typeof body.to !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: to'
+        });
+      }
+
+      if (!body.type || typeof body.type !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: type'
+        });
+      }
+
+      if (!this.memoryGraph || !this.actionGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph or ActionGate not initialized'
+        });
+      }
+
+      // Verify source and target nodes exist
+      const sourceNode = this.memoryGraph.getNode(body.from);
+      if (!sourceNode) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Source node not found: ${body.from}`
+        });
+      }
+
+      const targetNode = this.memoryGraph.getNode(body.to);
+      if (!targetNode) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Target node not found: ${body.to}`
+        });
+      }
+
+      // Generate request hash for idempotency
+      const requestHash = IdempotencyLedger.generateRequestHash(
+        '/memory/edges',
+        body,
+        body.idempotency_key
+      );
+
+      // Check if request already processed
+      const cachedResponse = this.idempotencyLedger.get(requestHash);
+      if (cachedResponse) {
+        return reply.code(cachedResponse.statusCode).send(cachedResponse.body);
+      }
+
+      // Generate edge ID
+      const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Execute edge creation through ActionGate
+      const edge: Edge = {
+        id: edgeId,
+        source: body.from,
+        target: body.to,
+        type: body.type,
+        metadata: body.metadata
+      };
+
+      const result = await this.actionGate.executeSideEffect(
+        {
+          actor,
+          action: 'MEMORY_EDGE_CREATE',
+          payload: edge,
+          metadata: {
+            job_id: 'memory',
+            stage: 'memory_write',
+            policy_id: 'default',
+            idempotency_key: body.idempotency_key,
+            request_hash: requestHash
+          }
+        },
+        async () => {
+          this.memoryGraph!.addEdge(edge);
+          return edge;
+        }
+      );
+
+      if (!result.success) {
+        const errorResponse = {
+          statusCode: 403,
+          body: {
+            reason_code: result.governance.reasonCode,
+            message: result.governance.message
+          }
+        };
+        this.idempotencyLedger.set(requestHash, errorResponse);
+        return reply.code(403).send(errorResponse.body);
+      }
+
+      const successResponse = {
+        statusCode: 201,
+        body: {
+          edge: result.data,
+          created: true,
+          receipt: result.receipt
+        }
+      };
+      this.idempotencyLedger.set(requestHash, successResponse);
+      return reply.code(201).send(successResponse.body);
     });
 
     // Catch-all for unknown routes (fail-closed)

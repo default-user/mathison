@@ -7,7 +7,9 @@
 
 Mathison is a governance-first OI (Ongoing Intelligence) system built on treaty-based constraints. It combines:
 
-- **Graph/Hypergraph Memory** — Structured memory for contexts and relationships
+- **Graph/Hypergraph Memory** — Structured memory for contexts and relationships with persistent storage
+- **OI Engine** — Local interpretation engine with memory-graph integration
+- **Distributed Mesh Protocol** — Privacy-preserving distributed computation across nodes
 - **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement
 - **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress
 - **Treaty-Based Governance** — Human-first, consent-based, fail-closed operation
@@ -58,7 +60,9 @@ mathison/
 │   ├── mathison-server/       # Main server orchestration
 │   ├── mathison-governance/   # CDI + treaty enforcement
 │   ├── mathison-memory/       # Graph/hypergraph memory
+│   ├── mathison-storage/      # Persistent storage (FILE/SQLITE)
 │   ├── mathison-oi/           # Interpretation engine
+│   ├── mathison-mesh/         # Distributed mesh protocol
 │   └── mathison-sdk-generator/ # Multi-language SDK generation
 ├── sdks/
 │   ├── typescript/
@@ -224,7 +228,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Memory Integration (v0.5.0)
+**Current Phase:** Distributed Systems (v0.6.0)
 
 ### Completed
 
@@ -237,13 +241,17 @@ Following the treaty:
 - [x] **P3-C:** Minimal job API (run/status/resume) with E2E conformance tests
 - [x] **P4-A:** Read-only memory API (GET /memory/nodes, /memory/search) fully governed
 - [x] **P4-B:** Write memory API (POST /memory/nodes, POST /memory/edges) via ActionGate + idempotency
+- [x] **P4-C:** Memory graph persistence layer (FILE/SQLITE backends for nodes/edges/hyperedges)
+- [x] **P5:** OI engine core (interpretation with memory integration, intent detection, confidence scoring)
+- [x] **P6:** Distributed mesh protocol (MeshCoordinator, task distribution, privacy-preserving architecture)
 
 ### Upcoming
 
-- [ ] **P4-C:** Memory graph persistence layer integration
-- [ ] **P5:** OI engine core (Ongoing Intelligence interpretation)
-- [ ] **P6:** gRPC APIs and streaming support
-- [ ] **P7:** SDK generation for TypeScript/Python/Rust
+- [ ] **P7:** Mobile deployment (React Native / Capacitor)
+- [ ] **P8:** Mesh discovery protocols (proximity-based, broadcast, manual)
+- [ ] **P9:** End-to-end encryption for mesh communication
+- [ ] **P10:** SDK generation for TypeScript/Python/Rust
+- [ ] **P11:** gRPC APIs and streaming support
 
 ## License
 

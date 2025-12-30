@@ -24,32 +24,95 @@ export interface Hyperedge {
   metadata?: Record<string, unknown>;
 }
 
+// GraphStore interface (matches mathison-storage)
+export interface GraphStore {
+  initialize(): Promise<void>;
+  shutdown(): Promise<void>;
+  writeNode(node: any): Promise<void>;
+  readNode(id: string): Promise<any | null>;
+  readAllNodes(): Promise<any[]>;
+  writeEdge(edge: any): Promise<void>;
+  readEdge(id: string): Promise<any | null>;
+  readAllEdges(): Promise<any[]>;
+  readEdgesByNode(nodeId: string): Promise<any[]>;
+  writeHyperedge(hyperedge: any): Promise<void>;
+  readHyperedge(id: string): Promise<any | null>;
+  readAllHyperedges(): Promise<any[]>;
+}
+
 export class MemoryGraph {
   private nodes: Map<string, Node> = new Map();
   private edges: Map<string, Edge> = new Map();
   private hyperedges: Map<string, Hyperedge> = new Map();
+  private graphStore?: GraphStore;
+
+  constructor(graphStore?: GraphStore) {
+    this.graphStore = graphStore;
+  }
 
   async initialize(): Promise<void> {
     console.log('🧠 Initializing Memory Graph...');
-    // TODO: Load from persistent storage
-    // TODO: Initialize graph indexes
+
+    if (this.graphStore) {
+      await this.graphStore.initialize();
+
+      // Load all nodes from persistent storage
+      const persistedNodes = await this.graphStore.readAllNodes();
+      for (const node of persistedNodes) {
+        this.nodes.set(node.id, node);
+      }
+
+      // Load all edges from persistent storage
+      const persistedEdges = await this.graphStore.readAllEdges();
+      for (const edge of persistedEdges) {
+        this.edges.set(edge.id, edge);
+      }
+
+      // Load all hyperedges from persistent storage
+      const persistedHyperedges = await this.graphStore.readAllHyperedges();
+      for (const hyperedge of persistedHyperedges) {
+        this.hyperedges.set(hyperedge.id, hyperedge);
+      }
+
+      console.log(`🧠 Loaded ${this.nodes.size} nodes, ${this.edges.size} edges, ${this.hyperedges.size} hyperedges from storage`);
+    }
   }
 
   async shutdown(): Promise<void> {
     console.log('🧠 Shutting down Memory Graph...');
-    // TODO: Persist to storage
+    if (this.graphStore) {
+      await this.graphStore.shutdown();
+    }
   }
 
   addNode(node: Node): void {
     this.nodes.set(node.id, node);
+    // Persist to storage if available
+    if (this.graphStore) {
+      this.graphStore.writeNode(node).catch((err) => {
+        console.error(`Failed to persist node ${node.id}:`, err);
+      });
+    }
   }
 
   addEdge(edge: Edge): void {
     this.edges.set(edge.id, edge);
+    // Persist to storage if available
+    if (this.graphStore) {
+      this.graphStore.writeEdge(edge).catch((err) => {
+        console.error(`Failed to persist edge ${edge.id}:`, err);
+      });
+    }
   }
 
   addHyperedge(hyperedge: Hyperedge): void {
     this.hyperedges.set(hyperedge.id, hyperedge);
+    // Persist to storage if available
+    if (this.graphStore) {
+      this.graphStore.writeHyperedge(hyperedge).catch((err) => {
+        console.error(`Failed to persist hyperedge ${hyperedge.id}:`, err);
+      });
+    }
   }
 
   // Read-only query methods (Phase 4-A)

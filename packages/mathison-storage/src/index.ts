@@ -5,3 +5,4 @@ export * from "./graph_store";
 export * from "./factory";
 export * from "./backends/file";
 export * from "./backends/sqlite";
+export * from "./beam_store";

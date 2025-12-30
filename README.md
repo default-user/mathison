@@ -160,6 +160,23 @@ Expected `/health` response:
 - `GET /receipts/:job_id` — Retrieve all governance receipts for a job
   - Returns: `{ job_id, receipts: [...] }`
 
+### Memory Graph (Phase 4-A: Read-Only)
+
+- `GET /memory/nodes/:id` — Retrieve node by ID
+  - Returns: `{ id, type, data, metadata? }`
+  - 404 if node not found
+
+- `GET /memory/nodes/:id/edges` — Retrieve edges for a node
+  - Returns: `{ node_id, count, edges }`
+  - 404 if node not found
+
+- `GET /memory/search?q=query&limit=10` — Search nodes by text
+  - Query params: `q` (required, search text), `limit` (optional, 1-100, default 10)
+  - Returns: `{ query, limit, count, results }`
+  - 400 for malformed request
+
+**Note:** Phase 4-A provides read-only access to the memory graph. All routes pass through the full governance pipeline (CIF ingress → CDI action check → CDI output check → CIF egress). No ActionGate required since operations have no side effects. Phase 4-B will add write endpoints with ActionGate + receipts.
+
 ## Governance Pipeline
 
 Every request passes through a mandatory governance pipeline (structurally enforced via Fastify hooks):
@@ -184,7 +201,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Governed Service (v0.3.0)
+**Current Phase:** Memory Integration (v0.4.0)
 
 ### Completed
 
@@ -195,13 +212,15 @@ Following the treaty:
 - [x] **P3-A:** Fastify server with governed pipeline (CIF→CDI→handler→CDI→CIF)
 - [x] **P3-B:** ActionGate structural enforcement + locked reason codes (17 codes)
 - [x] **P3-C:** Minimal job API (run/status/resume) with E2E conformance tests
+- [x] **P4-A:** Read-only memory API (GET /memory/nodes, /memory/search) fully governed
 
 ### Upcoming
 
-- [ ] **P4:** Memory graph persistence layer integration
-- [ ] **P4:** OI engine core (Ongoing Intelligence interpretation)
-- [ ] **P5:** gRPC APIs and streaming support
-- [ ] **P6:** SDK generation for TypeScript/Python/Rust
+- [ ] **P4-B:** Write endpoints for memory graph (via ActionGate + receipts)
+- [ ] **P4-C:** Memory graph persistence layer integration
+- [ ] **P5:** OI engine core (Ongoing Intelligence interpretation)
+- [ ] **P6:** gRPC APIs and streaming support
+- [ ] **P7:** SDK generation for TypeScript/Python/Rust
 
 ## License
 

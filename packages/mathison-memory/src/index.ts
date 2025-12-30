@@ -52,6 +52,43 @@ export class MemoryGraph {
     this.hyperedges.set(hyperedge.id, hyperedge);
   }
 
+  // Read-only query methods (Phase 4-A)
+  getNode(id: string): Node | undefined {
+    return this.nodes.get(id);
+  }
+
+  getNodeEdges(nodeId: string): Edge[] {
+    const edges: Edge[] = [];
+    for (const edge of this.edges.values()) {
+      if (edge.source === nodeId || edge.target === nodeId) {
+        edges.push(edge);
+      }
+    }
+    return edges;
+  }
+
+  search(query: string, limit: number = 10): Node[] {
+    const results: Node[] = [];
+    const lowerQuery = query.toLowerCase();
+
+    for (const node of this.nodes.values()) {
+      if (results.length >= limit) break;
+
+      // Search in node type, id, and stringified data
+      const searchableText = [
+        node.id,
+        node.type,
+        JSON.stringify(node.data)
+      ].join(' ').toLowerCase();
+
+      if (searchableText.includes(lowerQuery)) {
+        results.push(node);
+      }
+    }
+
+    return results;
+  }
+
   // TODO: Implement graph traversal algorithms
   // TODO: Implement hypergraph operations
   // TODO: Add query DSL for complex graph queries

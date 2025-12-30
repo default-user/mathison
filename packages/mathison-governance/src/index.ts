@@ -27,6 +27,10 @@ export type { ActionContext, ActionResult } from './cdi';
 export { CIF } from './cif';
 export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressResult } from './cif';
 
+// Re-export Audit Logger
+export { AuditLogger } from './audit/logger';
+export type { AuditEntry, AuditLoggerConfig } from './audit/logger';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

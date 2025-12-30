@@ -5,9 +5,10 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, AuditLogger } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
+import { OIEngine } from 'mathison-oi';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
@@ -25,10 +26,12 @@ export class MathisonServer {
   private governance: GovernanceEngine;
   private cdi: CDI;
   private cif: CIF;
+  private auditLogger: AuditLogger;
   private stores: Stores | null = null;
   private actionGate: ActionGate | null = null;
   private jobExecutor: JobExecutor | null = null;
   private memoryGraph: MemoryGraph | null = null;
+  private oiEngine: OIEngine | null = null;
   private idempotencyLedger: IdempotencyLedger;
   private config: Required<MathisonServerConfig>;
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
@@ -54,6 +57,7 @@ export class MathisonServer {
       maxRequestSize: this.config.cifMaxRequestSize,
       maxResponseSize: this.config.cifMaxResponseSize
     });
+    this.auditLogger = new AuditLogger({ enabled: true });
     this.idempotencyLedger = new IdempotencyLedger();
   }
 
@@ -97,9 +101,13 @@ export class MathisonServer {
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
     await this.app.close();
+    if (this.oiEngine) {
+      await this.oiEngine.shutdown();
+    }
     if (this.memoryGraph) {
       await this.memoryGraph.shutdown();
     }
+    await this.auditLogger.shutdown();
     await this.cif.shutdown();
     await this.cdi.shutdown();
     await this.governance.shutdown();
@@ -113,6 +121,7 @@ export class MathisonServer {
       await this.governance.initialize();
       await this.cdi.initialize();
       await this.cif.initialize();
+      await this.auditLogger.initialize();
       console.log('✓ Governance layer initialized');
     } catch (error) {
       console.error('❌ Governance initialization failed');
@@ -142,6 +151,11 @@ export class MathisonServer {
       this.memoryGraph = new MemoryGraph();
       await this.memoryGraph.initialize();
       console.log('✓ MemoryGraph initialized');
+
+      // Initialize OI Engine with memory graph integration
+      this.oiEngine = new OIEngine({ enableMemoryIntegration: true });
+      await this.oiEngine.initialize(this.memoryGraph);
+      console.log('✓ OI Engine initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -702,6 +716,49 @@ export class MathisonServer {
       };
       this.idempotencyLedger.set(requestHash, successResponse);
       return reply.code(201).send(successResponse.body);
+    });
+
+    // POST /interpret - OI Engine interpretation with memory context
+    this.app.post('/interpret', async (request, reply) => {
+      (request as any).action = 'interpret';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.oiEngine) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'OI Engine not initialized'
+        });
+      }
+
+      // Validate input
+      if (!body.input) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing required field: input'
+        });
+      }
+
+      try {
+        const result = await this.oiEngine.interpret({
+          input: body.input,
+          inputType: body.inputType,
+          memoryContext: body.memoryContext,
+          metadata: body.metadata
+        });
+
+        return {
+          interpretation: result.interpretation,
+          confidence: result.confidence,
+          alternatives: result.alternatives,
+          contextUsed: result.contextUsed,
+          metadata: result.metadata
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Interpretation failed'
+        });
+      }
     });
 
     // Catch-all for unknown routes (fail-closed)

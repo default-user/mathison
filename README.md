@@ -1,6 +1,6 @@
 # Mathison OI — Governance-First Ongoing Intelligence
 
-**Version:** 0.1.0 (bootstrap phase)
+**Version:** 0.6.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
@@ -162,20 +162,45 @@ Expected `/health` response:
 
 ### Memory Graph
 
-**Read Operations (Phase 4-A):**
+**Read Operations (Phase 4-C: Bounded + Paginated):**
 
 - `GET /memory/nodes/:id` — Retrieve node by ID
   - Returns: `{ id, type, data, metadata? }`
   - 404 if node not found
 
-- `GET /memory/nodes/:id/edges` — Retrieve edges for a node
-  - Returns: `{ node_id, count, edges }`
-  - 404 if node not found
+- `GET /memory/nodes/:id/edges` — Retrieve edges for a node (paginated, filtered)
+  - Query params:
+    - `limit` (optional, 1-200, default 50) — Max edges to return
+    - `cursor` (optional) — Opaque pagination cursor
+    - `direction` (optional, `in`|`out`|`both`, default `both`) — Edge direction
+    - `types` (optional, comma-separated) — Filter by edge types
+  - Returns: `{ node_id, direction, types, limit, count, total, edges, next_cursor? }`
+  - 404 if node not found, 400 for invalid params
 
-- `GET /memory/search?q=query&limit=10` — Search nodes by text
-  - Query params: `q` (required, search text), `limit` (optional, 1-100, default 10)
-  - Returns: `{ query, limit, count, results }`
-  - 400 for malformed request
+- `GET /memory/search` — Search nodes by text (paginated, bounded)
+  - Query params:
+    - `q` (required, 1-256 chars) — Search text
+    - `limit` (optional, 1-200, default 50) — Max results to return
+    - `cursor` (optional) — Opaque pagination cursor
+  - Returns: `{ query, limit, count, total, results, next_cursor? }`
+  - 400 for malformed/missing query or invalid params
+
+- `GET /memory/traverse` — Bounded graph traversal (NEW in P4-C)
+  - Query params:
+    - `start` (required) — Starting node ID
+    - `direction` (optional, `in`|`out`|`both`, default `both`) — Traversal direction
+    - `depth` (optional, 1-3, default 1) — Max traversal depth (hard cap: 3)
+    - `limit` (optional, 1-200, default 50) — Max nodes to return
+    - `cursor` (optional) — Opaque pagination cursor
+    - `types` (optional, comma-separated) — Edge types to follow
+  - Returns: `{ start, direction, depth, types, limit, nodes, node_count, total_nodes, edges, edge_count, total_edges, next_cursor? }`
+  - 404 if start node not found, 400 for invalid params
+
+**Pagination & Bounds (Treaty Rule 8: Honest Limits):**
+- All read endpoints enforce hard caps: `limit` 1-200 (default 50), `depth` 1-3 (default 1), `q` length 1-256
+- Cursor-based pagination with opaque base64 tokens for stable multi-page results
+- Deterministic ordering (stable sort by ID) guarantees consistent results across repeated calls
+- No unbounded queries permitted (fail-closed on invalid params)
 
 **Write Operations (Phase 4-B) — Via ActionGate + Idempotency:**
 
@@ -187,11 +212,12 @@ Expected `/health` response:
   - **Receipt:** Includes `action`, `decision`, `policy_id`, `store_backend`, `timestamp`
 
 - `POST /memory/edges` — Create edge (idempotent)
-  - Body: `{ from: string, to: string, type: string, metadata?: object, idempotency_key: string }`
+  - Body: `{ id?: string, from: string, to: string, type: string, metadata?: object, idempotency_key: string }`
   - Returns: `{ edge, created: boolean, receipt }`
   - **Idempotency:** Repeat requests with same `idempotency_key` return same response
-  - 201 on success, 404 if source/target node not found, 400 for malformed request
+  - 201 on success, 200 if idempotent, 404 if source/target node not found, 400 for malformed request
   - **Receipt:** Includes `action`, `decision`, `policy_id`, `store_backend`, `timestamp`
+  - **Note:** `id` field is optional; if omitted, server generates unique ID
 
 **Governance Notes:**
 - **Read operations** pass through full governance pipeline (CIF→CDI→handler→CDI→CIF) without ActionGate (no side effects)
@@ -224,7 +250,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Memory Integration (v0.5.0)
+**Current Phase:** Memory API v0.6.0 (Bounded Queries + Pagination)
 
 ### Completed
 
@@ -237,13 +263,21 @@ Following the treaty:
 - [x] **P3-C:** Minimal job API (run/status/resume) with E2E conformance tests
 - [x] **P4-A:** Read-only memory API (GET /memory/nodes, /memory/search) fully governed
 - [x] **P4-B:** Write memory API (POST /memory/nodes, POST /memory/edges) via ActionGate + idempotency
+- [x] **P4-C:** Bounded queries + universal pagination + deterministic ordering + traversal (GET /memory/traverse)
+
+**Test Coverage:** 53 passing tests
+- 6 storage conformance tests (FILE + SQLite backends)
+- 14 server conformance tests (boot + pipeline + jobs)
+- 11 memory conformance tests (Phase 4-A read-only)
+- 9 memory write conformance tests (Phase 4-B ActionGate enforcement)
+- 11 memory read conformance tests (Phase 4-C bounds + pagination)
 
 ### Upcoming
 
-- [ ] **P4-C:** Memory graph persistence layer integration
 - [ ] **P5:** OI engine core (Ongoing Intelligence interpretation)
 - [ ] **P6:** gRPC APIs and streaming support
 - [ ] **P7:** SDK generation for TypeScript/Python/Rust
+- [ ] **P8:** Memory graph persistence layer integration (beyond in-memory)
 
 ## License
 

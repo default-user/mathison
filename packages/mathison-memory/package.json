@@ -5,10 +5,15 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "migrate": "node dist/migrations/runner.js"
+  },
+  "dependencies": {
+    "pg": "^8.11.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
+    "@types/pg": "^8.10.0",
     "typescript": "^5.3.0",
     "jest": "^29.7.0",
     "@types/jest": "^29.5.11"

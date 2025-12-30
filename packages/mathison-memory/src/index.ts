@@ -145,9 +145,37 @@ export class InMemoryBackend implements MemoryBackend {
 // MemoryGraph with pluggable backend
 export class MemoryGraph {
   private backend: MemoryBackend;
+  private _traversal?: import('./traversal').GraphTraversal;
+  private _analytics?: import('./analytics').GraphAnalytics;
+  private _query?: import('./query').GraphQuery;
 
   constructor(backend?: MemoryBackend) {
     this.backend = backend || new InMemoryBackend();
+  }
+
+  // Lazy-load graph intelligence modules
+  get traversal(): import('./traversal').GraphTraversal {
+    if (!this._traversal) {
+      const { GraphTraversal } = require('./traversal');
+      this._traversal = new GraphTraversal(this.backend);
+    }
+    return this._traversal!;
+  }
+
+  get analytics(): import('./analytics').GraphAnalytics {
+    if (!this._analytics) {
+      const { GraphAnalytics } = require('./analytics');
+      this._analytics = new GraphAnalytics(this.backend);
+    }
+    return this._analytics!;
+  }
+
+  get query(): import('./query').GraphQuery {
+    if (!this._query) {
+      const { GraphQuery } = require('./query');
+      this._query = new GraphQuery(this.backend);
+    }
+    return this._query!;
   }
 
   async initialize(): Promise<void> {
@@ -228,5 +256,10 @@ export class MemoryGraph {
 
 // Re-export backends
 export { PostgreSQLBackend } from './backends/postgresql';
+
+// Re-export graph intelligence modules
+export { GraphTraversal, TraversalOptions, PathResult } from './traversal';
+export { GraphAnalytics, GraphMetrics, NodeMetrics } from './analytics';
+export { GraphQuery, NodePattern, EdgePattern, PathPattern, QueryResult } from './query';
 
 export default MemoryGraph;

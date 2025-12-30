@@ -160,7 +160,9 @@ Expected `/health` response:
 - `GET /receipts/:job_id` — Retrieve all governance receipts for a job
   - Returns: `{ job_id, receipts: [...] }`
 
-### Memory Graph (Phase 4-A: Read-Only)
+### Memory Graph
+
+**Read Operations (Phase 4-A):**
 
 - `GET /memory/nodes/:id` — Retrieve node by ID
   - Returns: `{ id, type, data, metadata? }`
@@ -175,7 +177,28 @@ Expected `/health` response:
   - Returns: `{ query, limit, count, results }`
   - 400 for malformed request
 
-**Note:** Phase 4-A provides read-only access to the memory graph. All routes pass through the full governance pipeline (CIF ingress → CDI action check → CDI output check → CIF egress). No ActionGate required since operations have no side effects. Phase 4-B will add write endpoints with ActionGate + receipts.
+**Write Operations (Phase 4-B) — Via ActionGate + Idempotency:**
+
+- `POST /memory/nodes` — Create node (idempotent)
+  - Body: `{ id?: string, type: string, data?: object, metadata?: object, idempotency_key: string }`
+  - Returns: `{ node, created: boolean, receipt }`
+  - **Idempotency:** Repeat requests with same `idempotency_key` return same response
+  - 201 on success, 200 if already exists with identical payload, 409 if conflict, 400 for malformed request
+  - **Receipt:** Includes `action`, `decision`, `policy_id`, `store_backend`, `timestamp`
+
+- `POST /memory/edges` — Create edge (idempotent)
+  - Body: `{ from: string, to: string, type: string, metadata?: object, idempotency_key: string }`
+  - Returns: `{ edge, created: boolean, receipt }`
+  - **Idempotency:** Repeat requests with same `idempotency_key` return same response
+  - 201 on success, 404 if source/target node not found, 400 for malformed request
+  - **Receipt:** Includes `action`, `decision`, `policy_id`, `store_backend`, `timestamp`
+
+**Governance Notes:**
+- **Read operations** pass through full governance pipeline (CIF→CDI→handler→CDI→CIF) without ActionGate (no side effects)
+- **Write operations** MUST go through ActionGate for structural enforcement
+- All writes create receipts (success or deny)
+- All writes require `idempotency_key` for safe retry behavior
+- Direct store mutation is structurally forbidden (all mutations via ActionGate)
 
 ## Governance Pipeline
 
@@ -201,7 +224,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Memory Integration (v0.4.0)
+**Current Phase:** Memory Integration (v0.5.0)
 
 ### Completed
 
@@ -213,10 +236,10 @@ Following the treaty:
 - [x] **P3-B:** ActionGate structural enforcement + locked reason codes (17 codes)
 - [x] **P3-C:** Minimal job API (run/status/resume) with E2E conformance tests
 - [x] **P4-A:** Read-only memory API (GET /memory/nodes, /memory/search) fully governed
+- [x] **P4-B:** Write memory API (POST /memory/nodes, POST /memory/edges) via ActionGate + idempotency
 
 ### Upcoming
 
-- [ ] **P4-B:** Write endpoints for memory graph (via ActionGate + receipts)
 - [ ] **P4-C:** Memory graph persistence layer integration
 - [ ] **P5:** OI engine core (Ongoing Intelligence interpretation)
 - [ ] **P6:** gRPC APIs and streaming support

@@ -1,5 +1,7 @@
 # Quadratic OI — Deployment & Permalinks
 
+**Version:** 0.9.0 — Distributed AI with GitHub Models API
+
 ## Quick Access Permalinks
 
 ### Local File Access
@@ -29,11 +31,12 @@ npx serve -p 8080
 **1. Enable GitHub Pages:**
 ```bash
 # Push to your GitHub repository
-git push origin claude/vision-distributed-ai-XzjFP
+git push origin master
+# Or use the current branch: claude/merged-master-ups2n
 
 # Then in GitHub web UI:
 # Settings → Pages → Source: Deploy from branch
-# Branch: select your branch → /root → Save
+# Branch: select master (or your branch) → /root → Save
 ```
 
 **2. Your permalink will be:**
@@ -195,6 +198,23 @@ docker run -d \
 # Permalink
 http://localhost:3142
 ```
+
+## LLM Environment Variables
+
+For LLM capabilities in all deployment modes:
+
+```bash
+# GitHub Models API (free tier — recommended for testing)
+export GITHUB_TOKEN="ghp_your_token_here"
+# Limits: 15 req/min, 150 req/day
+
+# Anthropic API (fallback if GitHub unavailable)
+export ANTHROPIC_API_KEY="sk-ant-your_key_here"
+
+# Bridge will try: GitHub Models → Anthropic → Local fallback
+```
+
+See `GITHUB_MODELS_SETUP.md` for complete LLM setup guide.
 
 ## Environment-Specific Permalinks
 

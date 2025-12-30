@@ -1,6 +1,7 @@
 # CIF (Context Integrity Firewall) — Specification v0.1
 
 **Component:** Governance Layer
+**Mathison Version:** 0.9.0
 **Purpose:** Boundary control for safe ingress/egress of data
 
 ## Overview

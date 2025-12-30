@@ -147,5 +147,5 @@ For implementation details, see:
 For mesh computing roadmap and embodiment research, watch the project repository.
 
 **Mathison** — Governance-first ongoing intelligence
-**Version:** 0.1.0 (bootstrap phase)
+**Version:** 0.9.0 (distributed AI + GitHub Models)
 **Governance:** Tiriti o te Kai v1.0

@@ -1,7 +1,7 @@
 # ROOT_CODEC.md — Root Codec (Dialogue-First) v0.1
 
-**Status:** Draft (implementation-oriented)  
-**Applies to:** Mathison OI runtime + any governed OI instances  
+**Status:** Draft (implementation-oriented)
+**Applies to:** Mathison OI runtime v0.9.0 + any governed OI instances
 **Root Codec Name:** **Dialogue Codec** (with Perception–Action spine)
 
 ---

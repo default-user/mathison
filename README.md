@@ -1,6 +1,6 @@
 # Mathison OI — Governance-First Ongoing Intelligence
 
-**Version:** 0.8.0
+**Version:** 0.9.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
@@ -315,7 +315,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Production Ready (v0.8.0)
+**Current Phase:** Production Ready (v0.9.0 — GitHub Models API + Distributed Mesh)
 
 ## Recent Major Features
 

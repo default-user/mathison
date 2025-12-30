@@ -1,6 +1,7 @@
 # CDI (Conscience Decision Interface) — Specification v0.1
 
 **Component:** Governance Layer
+**Mathison Version:** 0.9.0
 **Purpose:** Kernel-level enforcement of Tiriti o te Kai governance rules
 
 ## Overview

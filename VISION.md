@@ -146,6 +146,22 @@ For implementation details, see:
 
 For mesh computing roadmap and embodiment research, watch the project repository.
 
+---
+
 **Mathison** — Governance-first ongoing intelligence
-**Version:** 0.9.0 (distributed AI + GitHub Models)
+**Version:** 1.0.0 (Production Release)
+**Status:** Stable — Ready for deployment
 **Governance:** Tiriti o te Kai v1.0
+
+**What's New in 1.0:**
+- ✓ GitHub Models API integration (free tier LLM access)
+- ✓ Distributed mesh computing with ModelBus kernel
+- ✓ Mobile deployment for iOS/Android (React Native)
+- ✓ Quadratic Bridge v0.3.0 (production-grade security)
+- ✓ Memory graph persistence (File + SQLite backends)
+- ✓ Complete documentation and deployment guides
+- ✓ All packages at stable v1.0.0
+
+**Get Started:** `git clone https://github.com/default-user/mathison && cd mathison && ./bootstrap-oi.sh`
+
+See `RELEASE-NOTES-1.0.md` for complete release details.

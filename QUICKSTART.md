@@ -1,6 +1,6 @@
 # Quadratic OI — Quick Start for New Users
 
-**Version:** 0.9.0 — Now with GitHub Models API (free tier LLM access!)
+**Version:** 1.0.0 — Now with GitHub Models API (free tier LLM access!)
 
 ## One-Command Bootstrap
 

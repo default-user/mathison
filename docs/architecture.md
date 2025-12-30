@@ -1,6 +1,6 @@
 # Mathison OI — System Architecture
 
-**Version:** 0.9.0
+**Version:** 1.0.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview

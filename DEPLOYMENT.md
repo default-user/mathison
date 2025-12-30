@@ -1,6 +1,6 @@
 # Quadratic OI — Deployment & Permalinks
 
-**Version:** 0.9.0 — Distributed AI with GitHub Models API
+**Version:** 1.0.0 — Distributed AI with GitHub Models API
 
 ## Quick Access Permalinks
 

@@ -226,6 +226,39 @@ pnpm build</pre>
     </div>
 
     <div class="panel">
+      <h2>🌉 Bridge Connection</h2>
+      <p>Connect to a system-side bridge OI to access SYSTEM/NETWORK capabilities from the browser.</p>
+
+      <div style="margin: 15px 0;">
+        <input id="bridge-url" type="text" value="http://localhost:3142"
+               style="width: 60%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
+               placeholder="Bridge URL" />
+        <button onclick="connectBridge()"
+                style="padding: 8px 16px; background: #0f0; color: #000; border: none; cursor: pointer; font-family: inherit; font-weight: bold;">
+          Connect
+        </button>
+        <button onclick="disconnectBridge()"
+                style="padding: 8px 16px; background: #f00; color: #fff; border: none; cursor: pointer; font-family: inherit; font-weight: bold; margin-left: 5px;">
+          Disconnect
+        </button>
+      </div>
+
+      <div id="bridge-status" style="padding: 10px; background: #111; border-radius: 4px; font-size: 0.9em;">
+        <strong>Status:</strong> <span id="bridge-status-text" style="color: #888;">Not connected</span><br/>
+        <div id="bridge-details" style="margin-top: 5px; display: none;">
+          <strong>Bridge OI ID:</strong> <span id="bridge-oi-id">-</span><br/>
+          <strong>Stage:</strong> <span id="bridge-stage">-</span><br/>
+          <strong>Adapters:</strong> <span id="bridge-adapters">-</span><br/>
+          <strong>Peers:</strong> <span id="bridge-peers">-</span>
+        </div>
+      </div>
+
+      <p style="margin-top: 15px; font-size: 0.85em; opacity: 0.7;">
+        Start bridge: <code>node quadratic-bridge.js</code>
+      </p>
+    </div>
+
+    <div class="panel">
       <h2>📊 Growth Ladder</h2>
       <div class="stage-ladder">
         <div class="stage">WINDOW<br/><small>Ephemeral</small></div>
@@ -263,6 +296,12 @@ pnpm build</pre>
         <h3>Text Processing</h3>
         <button onclick="sendTextPrompt('What is 2+2?')">Ask Question</button>
         <button onclick="sendTextPrompt('Summarize: The quick brown fox jumps over the lazy dog')">Summarize Text</button>
+
+        <h3>🌉 Bridge Actions (requires bridge)</h3>
+        <button onclick="sendBridgeAction('system.exec', {command: 'date'})">System: Date</button>
+        <button onclick="sendBridgeAction('system.exec', {command: 'pwd'})">System: PWD</button>
+        <button onclick="sendBridgeAction('llm.complete', {prompt: 'Hello from bridge!'})">Bridge LLM</button>
+        <button onclick="registerPeer()">Register as Peer</button>
       </div>
 
       <div class="panel">
@@ -368,6 +407,142 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
       input.value = text;
       submit.click();
     };
+
+    // ============================================================================
+    // BRIDGE CONNECTION
+    // ============================================================================
+
+    let bridgeURL = null;
+    let bridgeConnected = false;
+
+    window.connectBridge = async () => {
+      const urlInput = document.getElementById('bridge-url');
+      const statusText = document.getElementById('bridge-status-text');
+      const details = document.getElementById('bridge-details');
+
+      bridgeURL = urlInput.value.trim();
+      if (!bridgeURL) {
+        alert('Please enter a bridge URL');
+        return;
+      }
+
+      try {
+        statusText.textContent = 'Connecting...';
+        statusText.style.color = '#ff0';
+
+        // Check bridge status
+        const response = await fetch(`${bridgeURL}/status`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const status = await response.json();
+
+        // Update UI
+        bridgeConnected = true;
+        statusText.textContent = 'Connected';
+        statusText.style.color = '#0f0';
+        details.style.display = 'block';
+
+        document.getElementById('bridge-oi-id').textContent = status.oi_id.slice(0, 16) + '...';
+        document.getElementById('bridge-stage').textContent = status.stage;
+        document.getElementById('bridge-adapters').textContent = status.adapters.join(', ');
+        document.getElementById('bridge-peers').textContent = status.peers_connected;
+
+        console.log('🌉 Bridge connected:', status);
+
+        // Auto-register this browser OI as a peer
+        await registerPeerSilent();
+
+      } catch (error) {
+        bridgeConnected = false;
+        statusText.textContent = `Error: ${error.message}`;
+        statusText.style.color = '#f00';
+        details.style.display = 'none';
+        console.error('Bridge connection failed:', error);
+      }
+    };
+
+    window.disconnectBridge = () => {
+      bridgeConnected = false;
+      bridgeURL = null;
+
+      const statusText = document.getElementById('bridge-status-text');
+      const details = document.getElementById('bridge-details');
+
+      statusText.textContent = 'Not connected';
+      statusText.style.color = '#888';
+      details.style.display = 'none';
+
+      console.log('🌉 Bridge disconnected');
+    };
+
+    window.sendBridgeAction = async (action, args) => {
+      if (!bridgeConnected || !bridgeURL) {
+        alert('Bridge not connected. Click "Connect" first.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${bridgeURL}/dispatch`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-OI-ID': oi.state.oi_id,
+          },
+          body: JSON.stringify({ action, args }),
+        });
+
+        const result = await response.json();
+
+        // Display result in the OI output
+        const outputEl = document.querySelector('#output');
+        if (outputEl) {
+          outputEl.innerHTML += `<div style="margin: 10px 0; padding: 10px; background: #001a1a; border-left: 3px solid ${result.success ? '#0ff' : '#f00'};">
+            <strong>🌉 Bridge Action:</strong> ${action}<br/>
+            <strong>Args:</strong> ${JSON.stringify(args)}<br/>
+            <strong>Result:</strong> ${JSON.stringify(result, null, 2)}
+          </div>`;
+          outputEl.scrollTop = outputEl.scrollHeight;
+        }
+
+        console.log('🌉 Bridge action result:', result);
+
+      } catch (error) {
+        alert(`Bridge error: ${error.message}`);
+        console.error('Bridge action failed:', error);
+      }
+    };
+
+    window.registerPeer = async () => {
+      if (!bridgeConnected || !bridgeURL) {
+        alert('Bridge not connected. Click "Connect" first.');
+        return;
+      }
+
+      await registerPeerSilent();
+      alert('Registered as peer with bridge!');
+    };
+
+    async function registerPeerSilent() {
+      if (!bridgeURL) return;
+
+      try {
+        const response = await fetch(`${bridgeURL}/peer/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            oi_id: oi.state.oi_id,
+            address: window.location.href,
+            stage: oi.state.stage,
+          }),
+        });
+
+        const result = await response.json();
+        console.log('🌉 Peer registered:', result);
+
+      } catch (error) {
+        console.error('Peer registration failed:', error);
+      }
+    }
 
     // Display success message
     console.log('🧠 Mathison Quadratic OI loaded successfully');

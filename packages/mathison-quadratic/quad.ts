@@ -55,6 +55,26 @@ enum ReceiptReason {
   DENY_CIF_REDACT = 'DENY_CIF_REDACT',
   DENY_REPLAY = 'DENY_REPLAY',
   DENY_UNKNOWN_ACTION = 'DENY_UNKNOWN_ACTION',
+  DENY_NO_CAPABILITY = 'DENY_NO_CAPABILITY',
+}
+
+interface CapabilityToken {
+  token_id: string;
+  action: string;
+  expires_at: number;
+  granted_by: string;
+  conditions?: Record<string, any>;
+}
+
+interface BeamEnvelope {
+  beam_id: string;
+  from_oi: string;
+  to_oi: string;
+  message_type: 'request' | 'response' | 'event';
+  payload: any;
+  taint_labels: string[];
+  signatures?: string[];
+  timestamp: number;
 }
 
 interface IntentEnvelope {
@@ -394,22 +414,23 @@ class CDI {
       'fs.read', 'fs.write',
     ]));
 
-    // NETWORK: + HTTP calls
+    // NETWORK: + HTTP calls + LLM
     allowedActions.set(Stage.NETWORK, new Set([
       ...allowedActions.get(Stage.SYSTEM)!,
       'http.get', 'http.post',
+      'llm.complete',
     ]));
 
     // MESH: + Peer messaging
     allowedActions.set(Stage.MESH, new Set([
       ...allowedActions.get(Stage.NETWORK)!,
-      'mesh.send', 'mesh.receive',
+      'mesh.send', 'mesh.receive', 'mesh.register_peer',
     ]));
 
     // ORCHESTRA: + Multi-OI coordination
     allowedActions.set(Stage.ORCHESTRA, new Set([
       ...allowedActions.get(Stage.MESH)!,
-      'orchestra.coordinate', 'orchestra.delegate',
+      'orchestra.coordinate', 'orchestra.delegate', 'orchestra.register_oi',
     ]));
 
     const riskThresholds = new Map<Posture, RiskClass>();
@@ -592,7 +613,7 @@ class NetworkAdapter implements Adapter {
     switch (action) {
       case 'http.get': {
         // Simple allowlist (production would be more sophisticated)
-        if (!args.url.match(/^https:\/\/(api\.example\.com|localhost)/)) {
+        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|localhost)/)) {
           throw new Error('URL not in allowlist');
         }
 
@@ -601,8 +622,167 @@ class NetworkAdapter implements Adapter {
         return { status: response.status, data };
       }
 
+      case 'http.post': {
+        if (!args.url.match(/^https:\/\/(api\.example\.com|api\.anthropic\.com|api\.openai\.com|localhost)/)) {
+          throw new Error('URL not in allowlist');
+        }
+
+        const response = await fetch(args.url, {
+          method: 'POST',
+          headers: args.headers || { 'Content-Type': 'application/json' },
+          body: JSON.stringify(args.body),
+        });
+        const data = await response.text();
+        return { status: response.status, data };
+      }
+
       default:
         throw new Error(`Unknown network action: ${action}`);
+    }
+  }
+}
+
+class LLMAdapter implements Adapter {
+  name = 'llm';
+
+  async execute(action: string, args: Record<string, any>): Promise<any> {
+    switch (action) {
+      case 'llm.complete': {
+        // Use environment variable for API key
+        const apiKey = IS_NODE ? process.env.ANTHROPIC_API_KEY : (window as any).__ANTHROPIC_API_KEY__;
+
+        if (!apiKey) {
+          return { error: 'No API key configured', fallback: this.localFallback(args.prompt) };
+        }
+
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+            },
+            body: JSON.stringify({
+              model: args.model || 'claude-3-haiku-20240307',
+              max_tokens: args.max_tokens || 1024,
+              messages: [{ role: 'user', content: args.prompt }],
+            }),
+          });
+
+          const data = await response.json();
+          return {
+            text: data.content[0].text,
+            model: data.model,
+            tokens: data.usage.output_tokens,
+          };
+        } catch (error: any) {
+          return { error: error.message, fallback: this.localFallback(args.prompt) };
+        }
+      }
+
+      default:
+        throw new Error(`Unknown LLM action: ${action}`);
+    }
+  }
+
+  private localFallback(prompt: string): string {
+    // Simple pattern-based fallback
+    if (prompt.toLowerCase().includes('hello') || prompt.toLowerCase().includes('hi')) {
+      return 'Hello! I am a local fallback. For full capabilities, configure an API key.';
+    }
+    if (prompt.toLowerCase().includes('what') || prompt.toLowerCase().includes('how')) {
+      return 'I can help with that, but I need API access for detailed responses. Using local fallback mode.';
+    }
+    return `[Local Fallback] Received: "${prompt.slice(0, 50)}..."`;
+  }
+}
+
+class MeshAdapter implements Adapter {
+  name = 'mesh';
+  private beamStore: Map<string, BeamEnvelope> = new Map();
+  private peerOIs: Map<string, string> = new Map(); // oi_id -> address
+
+  async execute(action: string, args: Record<string, any>): Promise<any> {
+    switch (action) {
+      case 'mesh.send': {
+        const beam: BeamEnvelope = {
+          beam_id: generateId(),
+          from_oi: args.from_oi,
+          to_oi: args.to_oi,
+          message_type: args.message_type || 'request',
+          payload: args.payload,
+          taint_labels: args.taint_labels || [],
+          timestamp: Date.now(),
+        };
+
+        this.beamStore.set(beam.beam_id, beam);
+
+        // In production: send via WebRTC, WebSocket, or HTTP to peer
+        // For now, store locally
+        return { beam_id: beam.beam_id, sent: true };
+      }
+
+      case 'mesh.receive': {
+        const beams = Array.from(this.beamStore.values()).filter(
+          b => b.to_oi === args.oi_id
+        );
+        return { beams, count: beams.length };
+      }
+
+      case 'mesh.register_peer': {
+        this.peerOIs.set(args.oi_id, args.address);
+        return { registered: true, peer_count: this.peerOIs.size };
+      }
+
+      default:
+        throw new Error(`Unknown mesh action: ${action}`);
+    }
+  }
+}
+
+class OrchestraAdapter implements Adapter {
+  name = 'orchestra';
+  private ois: Map<string, any> = new Map(); // In-process OI instances
+
+  async execute(action: string, args: Record<string, any>): Promise<any> {
+    switch (action) {
+      case 'orchestra.coordinate': {
+        // Create a coordination task across multiple OIs
+        const taskId = generateId();
+        const results: any[] = [];
+
+        for (const oiId of args.oi_ids || []) {
+          if (this.ois.has(oiId)) {
+            const oi = this.ois.get(oiId);
+            const result = await oi.dispatch(args.task);
+            results.push({ oi_id: oiId, result });
+          }
+        }
+
+        return { task_id: taskId, results };
+      }
+
+      case 'orchestra.delegate': {
+        // Delegate task to best available OI
+        // Simple: just use first available
+        const oiId = Array.from(this.ois.keys())[0];
+        if (!oiId) {
+          throw new Error('No OIs available for delegation');
+        }
+
+        const oi = this.ois.get(oiId);
+        const result = await oi.dispatch(args.task);
+        return { delegated_to: oiId, result };
+      }
+
+      case 'orchestra.register_oi': {
+        this.ois.set(args.oi_id, args.oi_instance);
+        return { registered: true, oi_count: this.ois.size };
+      }
+
+      default:
+        throw new Error(`Unknown orchestra action: ${action}`);
     }
   }
 }
@@ -658,6 +838,15 @@ class OI {
 
     if (this.state.stage >= Stage.NETWORK) {
       this.adapters.set('network', new NetworkAdapter());
+      this.adapters.set('llm', new LLMAdapter());
+    }
+
+    if (this.state.stage >= Stage.MESH) {
+      this.adapters.set('mesh', new MeshAdapter());
+    }
+
+    if (this.state.stage >= Stage.ORCHESTRA) {
+      this.adapters.set('orchestra', new OrchestraAdapter());
     }
   }
 
@@ -765,7 +954,7 @@ class OI {
     if (action.startsWith('storage.')) {
       return RiskClass.MEDIUM;
     }
-    if (action.startsWith('fs.') || action.startsWith('http.')) {
+    if (action.startsWith('fs.') || action.startsWith('http.') || action.startsWith('llm.')) {
       return RiskClass.HIGH;
     }
     if (action.startsWith('mesh.') || action.startsWith('orchestra.')) {
@@ -777,7 +966,7 @@ class OI {
   private inferStage(action: string): Stage {
     if (action.startsWith('orchestra.')) return Stage.ORCHESTRA;
     if (action.startsWith('mesh.')) return Stage.MESH;
-    if (action.startsWith('http.')) return Stage.NETWORK;
+    if (action.startsWith('http.') || action.startsWith('llm.')) return Stage.NETWORK;
     if (action.startsWith('fs.')) return Stage.SYSTEM;
     if (action.startsWith('storage.')) return Stage.BROWSER;
     return Stage.WINDOW;
@@ -1007,6 +1196,66 @@ async function runCLI(args: string[]): Promise<void> {
       break;
     }
 
+    case 'verify': {
+      console.log('🔍 Verifying receipt hash chain...\n');
+
+      const receipts = oi.getLastReceipts(1000); // Get all receipts (up to 1000)
+
+      if (receipts.length === 0) {
+        console.log('No receipts to verify.');
+        break;
+      }
+
+      let valid = true;
+      let prevHash = '0'.repeat(64);
+
+      for (let i = 0; i < receipts.length; i++) {
+        const receipt = receipts[i];
+
+        // Check prev_hash linkage
+        if (receipt.prev_hash !== prevHash) {
+          console.error(`✗ Receipt ${i} (${receipt.receipt_id}): prev_hash mismatch`);
+          console.error(`  Expected: ${prevHash}`);
+          console.error(`  Got: ${receipt.prev_hash}`);
+          valid = false;
+          break;
+        }
+
+        // Verify logs_hash
+        const receiptData = JSON.stringify({
+          receipt_id: receipt.receipt_id,
+          intent_id: receipt.intent_id,
+          outcome: receipt.outcome,
+          reason: receipt.reason,
+          artifacts: receipt.artifacts,
+          timestamp: receipt.timestamp,
+        });
+
+        const computedHash = await sha256(receiptData);
+
+        if (computedHash !== receipt.logs_hash) {
+          console.error(`✗ Receipt ${i} (${receipt.receipt_id}): logs_hash mismatch`);
+          console.error(`  Expected: ${computedHash}`);
+          console.error(`  Got: ${receipt.logs_hash}`);
+          valid = false;
+          break;
+        }
+
+        prevHash = receipt.logs_hash;
+      }
+
+      if (valid) {
+        console.log(`✓ Hash chain verified: ${receipts.length} receipts`);
+        console.log(`  First: ${receipts[0].receipt_id}`);
+        console.log(`  Last:  ${receipts[receipts.length - 1].receipt_id}`);
+        console.log(`  Final hash: ${prevHash.slice(0, 16)}...`);
+      } else {
+        console.error('\n✗ Hash chain verification FAILED');
+        process.exit(1);
+      }
+      break;
+    }
+
     case 'selftest': {
       console.log('🧪 Running self-tests...\n');
 
@@ -1062,21 +1311,36 @@ async function runCLI(args: string[]): Promise<void> {
       console.assert(oi2.state.oi_id === oi.state.oi_id, 'Should restore OI ID');
       console.log('✓ PASS\n');
 
+      // Test 6: LLM adapter (local fallback)
+      console.log('Test 6: LLM adapter (local fallback)');
+      await oi.upgrade(Stage.NETWORK);
+      const r6 = await oi.dispatch({ action: 'llm.complete', args: { prompt: 'Hello' } });
+      console.assert(r6.success === true, 'Should allow LLM at NETWORK stage');
+      console.assert(r6.data.fallback, 'Should use fallback without API key');
+      console.log('✓ PASS\n');
+
       console.log('🎉 All tests passed!');
       break;
     }
 
     default: {
-      console.log('Mathison Quadratic Monolith v0.1.0');
+      console.log('Mathison Quadratic Monolith v0.2.0');
       console.log('');
       console.log('Commands:');
       console.log('  quad init                    - Initialize new OI');
       console.log('  quad status                  - Show OI status');
       console.log('  quad dispatch "<json>"       - Dispatch action');
       console.log('  quad upgrade <STAGE>         - Upgrade to new stage');
+      console.log('  quad verify                  - Verify receipt hash chain');
       console.log('  quad selftest                - Run self-tests');
       console.log('');
       console.log('Stages: WINDOW → BROWSER → SYSTEM → NETWORK → MESH → ORCHESTRA');
+      console.log('');
+      console.log('New in v0.2.0:');
+      console.log('  • LLM integration (llm.complete action at NETWORK stage)');
+      console.log('  • Mesh protocol (BeamEnvelope messaging at MESH stage)');
+      console.log('  • Orchestra coordination (multi-OI at ORCHESTRA stage)');
+      console.log('  • Receipt verification (quad verify command)');
       break;
     }
   }

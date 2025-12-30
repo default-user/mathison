@@ -846,6 +846,480 @@ export class MathisonServer {
       return reply.code(201).send(successResponse.body);
     });
 
+    // P4-C: Graph Intelligence API - Traversal Endpoints
+
+    // POST /memory/traversal/bfs - breadth-first search
+    this.app.post('/memory/traversal/bfs', async (request, reply) => {
+      (request as any).action = 'memory_traversal_bfs';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.startNodeId || typeof body.startNodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: startNodeId'
+        });
+      }
+
+      try {
+        const nodes = await this.memoryGraph.traversal.bfs(body.startNodeId, {
+          maxDepth: body.maxDepth,
+          nodeTypeFilter: body.nodeTypeFilter,
+          edgeTypeFilter: body.edgeTypeFilter
+        });
+
+        return {
+          startNodeId: body.startNodeId,
+          count: nodes.length,
+          nodes
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'BFS traversal failed'
+        });
+      }
+    });
+
+    // POST /memory/traversal/dfs - depth-first search
+    this.app.post('/memory/traversal/dfs', async (request, reply) => {
+      (request as any).action = 'memory_traversal_dfs';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.startNodeId || typeof body.startNodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: startNodeId'
+        });
+      }
+
+      try {
+        const nodes = await this.memoryGraph.traversal.dfs(body.startNodeId, {
+          maxDepth: body.maxDepth,
+          nodeTypeFilter: body.nodeTypeFilter,
+          edgeTypeFilter: body.edgeTypeFilter
+        });
+
+        return {
+          startNodeId: body.startNodeId,
+          count: nodes.length,
+          nodes
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'DFS traversal failed'
+        });
+      }
+    });
+
+    // POST /memory/traversal/shortest-path - find shortest path
+    this.app.post('/memory/traversal/shortest-path', async (request, reply) => {
+      (request as any).action = 'memory_traversal_shortest_path';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.startNodeId || typeof body.startNodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: startNodeId'
+        });
+      }
+
+      if (!body.endNodeId || typeof body.endNodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: endNodeId'
+        });
+      }
+
+      try {
+        const path = await this.memoryGraph.traversal.shortestPath(
+          body.startNodeId,
+          body.endNodeId
+        );
+
+        if (!path) {
+          return reply.code(404).send({
+            reason_code: 'ROUTE_NOT_FOUND',
+            message: `No path found between ${body.startNodeId} and ${body.endNodeId}`
+          });
+        }
+
+        return {
+          startNodeId: body.startNodeId,
+          endNodeId: body.endNodeId,
+          distance: path.totalDistance,
+          path: {
+            nodes: path.nodes,
+            edges: path.edges
+          }
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Shortest path calculation failed'
+        });
+      }
+    });
+
+    // POST /memory/traversal/neighborhood - get node neighborhood
+    this.app.post('/memory/traversal/neighborhood', async (request, reply) => {
+      (request as any).action = 'memory_traversal_neighborhood';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.nodeId || typeof body.nodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: nodeId'
+        });
+      }
+
+      try {
+        const neighbors = await this.memoryGraph.traversal.neighborhood(
+          body.nodeId,
+          body.depth ?? 1
+        );
+
+        return {
+          nodeId: body.nodeId,
+          depth: body.depth ?? 1,
+          count: neighbors.length,
+          neighbors
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Neighborhood query failed'
+        });
+      }
+    });
+
+    // P4-C: Graph Intelligence API - Analytics Endpoints
+
+    // GET /memory/analytics/node/:id/degree - node degree metrics
+    this.app.get('/memory/analytics/node/:id/degree', async (request, reply) => {
+      (request as any).action = 'memory_analytics_degree';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const metrics = await this.memoryGraph.analytics.nodeDegree(id);
+        return {
+          nodeId: id,
+          metrics
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Degree calculation failed'
+        });
+      }
+    });
+
+    // GET /memory/analytics/node/:id/centrality - centrality metrics
+    this.app.get('/memory/analytics/node/:id/centrality', async (request, reply) => {
+      (request as any).action = 'memory_analytics_centrality';
+      const { id } = request.params as { id: string };
+      const { sampleSize } = request.query as { sampleSize?: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const nodeDegreeMetrics = await this.memoryGraph.analytics.nodeDegree(id);
+        const allNodes = await this.memoryBackend!.getAllNodes();
+        const totalNodes = allNodes.length;
+
+        // Degree centrality = degree / (n - 1) where n is total nodes
+        const degreeCentrality = totalNodes > 1
+          ? nodeDegreeMetrics.degree / (totalNodes - 1)
+          : 0;
+
+        const betweenness = await this.memoryGraph.analytics.betweennessCentrality(
+          id,
+          sampleSize ? parseInt(sampleSize, 10) : 20
+        );
+        const closeness = await this.memoryGraph.analytics.closenessCentrality(id);
+
+        return {
+          nodeId: id,
+          centrality: {
+            degree: degreeCentrality,
+            betweenness,
+            closeness
+          }
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Centrality calculation failed'
+        });
+      }
+    });
+
+    // GET /memory/analytics/hubs - find hub nodes
+    this.app.get('/memory/analytics/hubs', async (request, reply) => {
+      (request as any).action = 'memory_analytics_hubs';
+      const { limit } = request.query as { limit?: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const hubs = await this.memoryGraph.analytics.findHubs(
+          limit ? parseInt(limit, 10) : 10
+        );
+
+        return {
+          count: hubs.length,
+          hubs
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Hub detection failed'
+        });
+      }
+    });
+
+    // GET /memory/analytics/components - connected components
+    this.app.get('/memory/analytics/components', async (request, reply) => {
+      (request as any).action = 'memory_analytics_components';
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const components = await this.memoryGraph.analytics.connectedComponents();
+
+        return {
+          count: components.length,
+          components: components.map(comp => ({
+            size: comp.length,
+            nodes: comp
+          }))
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Component analysis failed'
+        });
+      }
+    });
+
+    // GET /memory/analytics/metrics - overall graph metrics
+    this.app.get('/memory/analytics/metrics', async (request, reply) => {
+      (request as any).action = 'memory_analytics_metrics';
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const metrics = await this.memoryGraph.analytics.graphMetrics();
+
+        return {
+          metrics
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Metrics calculation failed'
+        });
+      }
+    });
+
+    // P4-C: Graph Intelligence API - Query DSL Endpoints
+
+    // POST /memory/query/match - Cypher-like pattern matching
+    this.app.post('/memory/query/match', async (request, reply) => {
+      (request as any).action = 'memory_query_match';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.query || typeof body.query !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: query'
+        });
+      }
+
+      try {
+        const result = await this.memoryGraph.query.match(body.query);
+
+        return {
+          query: body.query,
+          nodeCount: result.nodes.length,
+          edgeCount: result.edges.length,
+          pathCount: result.paths?.length ?? 0,
+          result
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Query execution failed'
+        });
+      }
+    });
+
+    // POST /memory/query/pattern - declarative pattern query
+    this.app.post('/memory/query/pattern', async (request, reply) => {
+      (request as any).action = 'memory_query_pattern';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.pattern || typeof body.pattern !== 'object') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: pattern'
+        });
+      }
+
+      try {
+        const result = await this.memoryGraph.query.findPaths(body.pattern);
+
+        return {
+          pattern: body.pattern,
+          nodeCount: result.nodes.length,
+          edgeCount: result.edges.length,
+          pathCount: result.paths?.length ?? 0,
+          result
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Pattern query failed'
+        });
+      }
+    });
+
+    // POST /memory/query/subgraph - extract subgraph around center node
+    this.app.post('/memory/query/subgraph', async (request, reply) => {
+      (request as any).action = 'memory_query_subgraph';
+      const body = (request as any).sanitizedBody as any;
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      if (!body.centerNodeId || typeof body.centerNodeId !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: centerNodeId'
+        });
+      }
+
+      try {
+        const result = await this.memoryGraph.query.subgraph(
+          body.centerNodeId,
+          body.depth ?? 2,
+          body.filters
+        );
+
+        return {
+          centerNodeId: body.centerNodeId,
+          depth: body.depth ?? 2,
+          nodeCount: result.nodes.length,
+          edgeCount: result.edges.length,
+          result
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Subgraph extraction failed'
+        });
+      }
+    });
+
+    // GET /memory/query/triangles - find triangles (3-node cycles)
+    this.app.get('/memory/query/triangles', async (request, reply) => {
+      (request as any).action = 'memory_query_triangles';
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      try {
+        const triangles = await this.memoryGraph.query.findTriangles();
+
+        return {
+          count: triangles.length,
+          triangles
+        };
+      } catch (error) {
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Triangle detection failed'
+        });
+      }
+    });
+
     // POST /interpret - OI Engine interpretation with memory context
     this.app.post('/interpret', async (request, reply) => {
       (request as any).action = 'interpret';

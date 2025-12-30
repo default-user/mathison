@@ -11,6 +11,15 @@ import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
+import {
+  parseLimit,
+  parseDepth,
+  parseCursor,
+  generateCursor,
+  validateQueryLength,
+  stableSort,
+  paginate
+} from './pagination';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -383,10 +392,16 @@ export class MathisonServer {
       return node;
     });
 
-    // P4-A: GET /memory/nodes/:id/edges - retrieve edges for node (read-only)
+    // P4-C: GET /memory/nodes/:id/edges - paginated edges with filtering
     this.app.get('/memory/nodes/:id/edges', async (request, reply) => {
       (request as any).action = 'memory_read_edges';
       const { id } = request.params as { id: string };
+      const { limit, cursor, direction, types } = request.query as {
+        limit?: string;
+        cursor?: string;
+        direction?: string;
+        types?: string;
+      };
 
       if (!this.memoryGraph) {
         return reply.code(503).send({
@@ -404,18 +419,72 @@ export class MathisonServer {
         });
       }
 
-      const edges = this.memoryGraph.getNodeEdges(id);
+      // Parse and validate pagination parameters
+      let parsedLimit;
+      let parsedCursor;
+      try {
+        parsedLimit = parseLimit(limit);
+        parsedCursor = parseCursor(cursor);
+      } catch (error) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      // Validate cursor
+      if (!parsedCursor.isValid) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Invalid cursor parameter'
+        });
+      }
+
+      // Validate direction parameter
+      const validDirections = ['in', 'out', 'both'];
+      const parsedDirection = (direction || 'both') as 'in' | 'out' | 'both';
+      if (!validDirections.includes(parsedDirection)) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: `Invalid direction parameter: must be one of ${validDirections.join(', ')}`
+        });
+      }
+
+      // Parse types filter (comma-separated)
+      const parsedTypes = types ? types.split(',').map(t => t.trim()).filter(t => t.length > 0) : undefined;
+
+      // Get filtered edges
+      const edges = this.memoryGraph.getNodeEdgesFiltered(id, parsedDirection, parsedTypes);
+
+      // Apply deterministic ordering
+      const sortedEdges = stableSort(edges);
+
+      // Apply pagination
+      const paginated = paginate(sortedEdges, parsedCursor.offset, parsedLimit.value);
+
       return {
         node_id: id,
-        count: edges.length,
-        edges
+        direction: parsedDirection,
+        types: parsedTypes,
+        limit: parsedLimit.value,
+        count: paginated.results.length,
+        total: sortedEdges.length,
+        edges: paginated.results,
+        next_cursor: paginated.next_cursor
       };
     });
 
-    // P4-A: GET /memory/search - search nodes (read-only)
-    this.app.get('/memory/search', async (request, reply) => {
-      (request as any).action = 'memory_search';
-      const { q, limit } = request.query as { q?: string; limit?: string };
+    // P4-C: GET /memory/traverse - bounded graph traversal
+    this.app.get('/memory/traverse', async (request, reply) => {
+      (request as any).action = 'memory_traverse';
+      const { start, direction, depth, limit, cursor, types } = request.query as {
+        start?: string;
+        direction?: string;
+        depth?: string;
+        limit?: string;
+        cursor?: string;
+        types?: string;
+      };
 
       if (!this.memoryGraph) {
         return reply.code(503).send({
@@ -424,7 +493,114 @@ export class MathisonServer {
         });
       }
 
-      // Validate query parameter
+      // Validate start node parameter
+      if (!start || start.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required parameter "start"'
+        });
+      }
+
+      // Check if start node exists
+      const startNode = this.memoryGraph.getNode(start);
+      if (!startNode) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Start node not found: ${start}`
+        });
+      }
+
+      // Parse and validate pagination/traversal parameters
+      let parsedLimit;
+      let parsedDepth;
+      let parsedCursor;
+      try {
+        parsedLimit = parseLimit(limit);
+        parsedDepth = parseDepth(depth);
+        parsedCursor = parseCursor(cursor);
+      } catch (error) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      // Validate cursor
+      if (!parsedCursor.isValid) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Invalid cursor parameter'
+        });
+      }
+
+      // Validate direction parameter
+      const validDirections = ['in', 'out', 'both'];
+      const parsedDirection = (direction || 'both') as 'in' | 'out' | 'both';
+      if (!validDirections.includes(parsedDirection)) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: `Invalid direction parameter: must be one of ${validDirections.join(', ')}`
+        });
+      }
+
+      // Parse types filter (comma-separated)
+      const parsedTypes = types ? types.split(',').map(t => t.trim()).filter(t => t.length > 0) : undefined;
+
+      // Execute bounded traversal
+      const { nodes, edges } = this.memoryGraph.traverse(
+        start,
+        parsedDirection,
+        parsedDepth.value,
+        parsedTypes
+      );
+
+      // Apply deterministic ordering to both nodes and edges
+      const sortedNodes = stableSort(nodes);
+      const sortedEdges = stableSort(edges);
+
+      // Apply pagination to nodes (limit applies to nodes discovered)
+      const paginatedNodes = paginate(sortedNodes, parsedCursor.offset, parsedLimit.value);
+
+      // Return edges only for the paginated nodes (for response size control)
+      // Include all edges that connect nodes in the current page
+      const nodeIdsInPage = new Set(paginatedNodes.results.map(n => n.id));
+      const edgesForPage = sortedEdges.filter(
+        e => nodeIdsInPage.has(e.source) || nodeIdsInPage.has(e.target)
+      );
+
+      return {
+        start,
+        direction: parsedDirection,
+        depth: parsedDepth.value,
+        types: parsedTypes,
+        limit: parsedLimit.value,
+        nodes: paginatedNodes.results,
+        node_count: paginatedNodes.results.length,
+        total_nodes: sortedNodes.length,
+        edges: edgesForPage,
+        edge_count: edgesForPage.length,
+        total_edges: sortedEdges.length,
+        next_cursor: paginatedNodes.next_cursor
+      };
+    });
+
+    // P4-C: GET /memory/search - paginated search with deterministic ordering
+    this.app.get('/memory/search', async (request, reply) => {
+      (request as any).action = 'memory_search';
+      const { q, limit, cursor } = request.query as {
+        q?: string;
+        limit?: string;
+        cursor?: string;
+      };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Validate and sanitize query parameter
       if (!q || q.trim() === '') {
         return reply.code(400).send({
           reason_code: 'MALFORMED_REQUEST',
@@ -432,24 +608,54 @@ export class MathisonServer {
         });
       }
 
-      // Validate limit parameter
-      let parsedLimit = 10;
-      if (limit) {
-        parsedLimit = parseInt(limit, 10);
-        if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
-          return reply.code(400).send({
-            reason_code: 'MALFORMED_REQUEST',
-            message: 'Invalid limit parameter (must be between 1 and 100)'
-          });
-        }
+      let validatedQuery;
+      try {
+        validatedQuery = validateQueryLength(q);
+      } catch (error) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: error instanceof Error ? error.message : String(error)
+        });
       }
 
-      const results = this.memoryGraph.search(q, parsedLimit);
+      // Parse and validate pagination parameters
+      let parsedLimit;
+      let parsedCursor;
+      try {
+        parsedLimit = parseLimit(limit);
+        parsedCursor = parseCursor(cursor);
+      } catch (error) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      // Validate cursor
+      if (!parsedCursor.isValid) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Invalid cursor parameter'
+        });
+      }
+
+      // Search with unbounded limit to get all results for deterministic ordering
+      // We'll apply pagination after sorting
+      const allResults = this.memoryGraph.search(validatedQuery, Number.MAX_SAFE_INTEGER);
+
+      // Apply deterministic ordering
+      const sortedResults = stableSort(allResults);
+
+      // Apply pagination
+      const paginated = paginate(sortedResults, parsedCursor.offset, parsedLimit.value);
+
       return {
-        query: q,
-        limit: parsedLimit,
-        count: results.length,
-        results
+        query: validatedQuery,
+        limit: parsedLimit.value,
+        count: paginated.results.length,
+        total: sortedResults.length,
+        results: paginated.results,
+        next_cursor: paginated.next_cursor
       };
     });
 

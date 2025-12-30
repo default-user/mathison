@@ -198,7 +198,7 @@ describe('Phase 4-A: Memory API Conformance', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.query).toBe('Test');
-      expect(body.limit).toBe(10);
+      expect(body.limit).toBe(50); // P4-C: new default limit
       expect(body.count).toBeGreaterThan(0);
       expect(body.results).toBeInstanceOf(Array);
       

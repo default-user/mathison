@@ -7,11 +7,13 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF, AuditLogger } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
-import { MemoryGraph, Node, Edge } from 'mathison-memory';
+import { MemoryGraph, Node, Edge, PostgreSQLBackend, MemoryBackend, InMemoryBackend } from 'mathison-memory';
+import { MigrationRunner } from 'mathison-memory/dist/migrations/runner';
 import { OIEngine } from 'mathison-oi';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
+import * as path from 'path';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -19,6 +21,15 @@ export interface MathisonServerConfig {
   cdiStrictMode?: boolean;
   cifMaxRequestSize?: number;
   cifMaxResponseSize?: number;
+  memoryBackend?: 'memory' | 'postgres';
+  postgresConfig?: {
+    host?: string;
+    port?: number;
+    database?: string;
+    user?: string;
+    password?: string;
+    connectionString?: string;
+  };
 }
 
 export class MathisonServer {
@@ -31,9 +42,26 @@ export class MathisonServer {
   private actionGate: ActionGate | null = null;
   private jobExecutor: JobExecutor | null = null;
   private memoryGraph: MemoryGraph | null = null;
+  private memoryBackend: MemoryBackend | null = null;
+  private memoryBackendType: 'memory' | 'postgres' = 'memory';
   private oiEngine: OIEngine | null = null;
   private idempotencyLedger: IdempotencyLedger;
-  private config: Required<MathisonServerConfig>;
+  private config: {
+    port: number;
+    host: string;
+    cdiStrictMode: boolean;
+    cifMaxRequestSize: number;
+    cifMaxResponseSize: number;
+    memoryBackend?: 'memory' | 'postgres';
+    postgresConfig?: {
+      host?: string;
+      port?: number;
+      database?: string;
+      user?: string;
+      password?: string;
+      connectionString?: string;
+    };
+  };
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
   private bootError: string | null = null;
 
@@ -43,7 +71,9 @@ export class MathisonServer {
       host: config.host ?? '0.0.0.0',
       cdiStrictMode: config.cdiStrictMode ?? true,
       cifMaxRequestSize: config.cifMaxRequestSize ?? 1048576,
-      cifMaxResponseSize: config.cifMaxResponseSize ?? 1048576
+      cifMaxResponseSize: config.cifMaxResponseSize ?? 1048576,
+      memoryBackend: config.memoryBackend,
+      postgresConfig: config.postgresConfig
     };
 
     this.app = Fastify({
@@ -147,19 +177,67 @@ export class MathisonServer {
       this.jobExecutor = new JobExecutor(this.actionGate);
       console.log('✓ ActionGate and JobExecutor initialized');
 
-      // P4-A: Initialize MemoryGraph (read-only access)
-      this.memoryGraph = new MemoryGraph();
-      await this.memoryGraph.initialize();
-      console.log('✓ MemoryGraph initialized');
+      // P3-A: Initialize MemoryGraph with backend selection
+      await this.initializeMemoryBackend();
 
       // Initialize OI Engine with memory graph integration
       this.oiEngine = new OIEngine({ enableMemoryIntegration: true });
-      await this.oiEngine.initialize(this.memoryGraph);
+      await this.oiEngine.initialize(this.memoryGraph!);
       console.log('✓ OI Engine initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
     }
+  }
+
+  private async initializeMemoryBackend(): Promise<void> {
+    const backendType = process.env.MATHISON_MEMORY_BACKEND || this.config.memoryBackend || 'memory';
+    this.memoryBackendType = backendType as 'memory' | 'postgres';
+    console.log(`🧠 Initializing MemoryGraph with ${backendType} backend...`);
+
+    let backend: MemoryBackend;
+
+    if (backendType === 'postgres') {
+      // PostgreSQL backend configuration
+      const postgresConfig = this.config.postgresConfig || {
+        host: process.env.PGHOST || 'localhost',
+        port: parseInt(process.env.PGPORT || '5432'),
+        database: process.env.PGDATABASE || 'mathison',
+        user: process.env.PGUSER || 'mathison',
+        password: process.env.PGPASSWORD,
+        connectionString: process.env.DATABASE_URL
+      };
+
+      console.log(`🗄️  PostgreSQL config: ${postgresConfig.host}:${postgresConfig.port}/${postgresConfig.database}`);
+
+      // Run migrations first
+      const migrationsPath = path.join(__dirname, '../../mathison-memory/migrations');
+      console.log(`📊 Running migrations from ${migrationsPath}...`);
+
+      const migrationRunner = new MigrationRunner(postgresConfig);
+      try {
+        await migrationRunner.initialize();
+        await migrationRunner.runMigrations(migrationsPath);
+        await migrationRunner.shutdown();
+        console.log('✓ Migrations complete');
+      } catch (error) {
+        console.error('❌ Migration failed:', error);
+        throw new Error(`MIGRATION_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      // Create PostgreSQL backend
+      backend = new PostgreSQLBackend(postgresConfig);
+    } else {
+      // Default to in-memory backend
+      console.log('📦 Using in-memory backend (no persistence)');
+      backend = new InMemoryBackend();
+    }
+
+    // Initialize MemoryGraph with selected backend
+    this.memoryBackend = backend;
+    this.memoryGraph = new MemoryGraph(backend);
+    await this.memoryGraph.initialize();
+    console.log('✓ MemoryGraph initialized');
   }
 
   private registerGovernancePipeline(): void {
@@ -294,8 +372,21 @@ export class MathisonServer {
         });
       }
 
+      // Test database connectivity if using PostgreSQL
+      let dbHealthy = true;
+      let dbError: string | undefined;
+      if (this.memoryBackendType === 'postgres' && this.memoryBackend) {
+        try {
+          // Quick health check: try to get all nodes (should be fast even if empty)
+          await this.memoryBackend.getAllNodes();
+        } catch (error) {
+          dbHealthy = false;
+          dbError = error instanceof Error ? error.message : String(error);
+        }
+      }
+
       return {
-        status: 'healthy',
+        status: dbHealthy ? 'healthy' : 'degraded',
         bootStatus: this.bootStatus,
         governance: {
           treaty: {
@@ -316,7 +407,11 @@ export class MathisonServer {
           initialized: this.stores !== null
         },
         memory: {
-          initialized: this.memoryGraph !== null
+          initialized: this.memoryGraph !== null,
+          backend: this.memoryBackendType,
+          persistent: this.memoryBackendType === 'postgres',
+          healthy: dbHealthy,
+          error: dbError
         }
       };
     });

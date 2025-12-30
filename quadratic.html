@@ -3,431 +3,788 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mathison Quadratic — Browser OI Runtime</title>
+  <title>Mathison Quadratic — Distributed AI Runtime</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
 
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --secondary: #8b5cf6;
+      --accent: #06b6d4;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.2);
+      --glass: rgba(30, 41, 59, 0.7);
+    }
+
     body {
-      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
-      background: #0a0a0a;
-      color: #0f0;
-      padding: 20px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
       line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
     }
 
-    .header {
-      text-align: center;
-      padding: 40px 20px;
-      border-bottom: 2px solid #0f0;
-      margin-bottom: 30px;
-    }
-
-    .header h1 {
-      font-size: 2.5em;
-      margin-bottom: 10px;
-      text-shadow: 0 0 10px #0f0;
-    }
-
-    .header p {
-      font-size: 1.1em;
-      opacity: 0.8;
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
     }
 
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 60px 20px 40px;
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+
+    .logo {
+      display: inline-block;
+      width: 60px;
+      height: 60px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3); }
+      50% { transform: scale(1.05); box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5); }
+    }
+
+    h1 {
+      font-size: 3em;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      letter-spacing: -1px;
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 30px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    @keyframes glow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-label {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      margin-right: 5px;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: 'SF Mono', monospace;
+      font-size: 0.95em;
+    }
+
+    /* Grid Layout */
     .grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 24px;
       margin-bottom: 30px;
     }
 
-    @media (max-width: 768px) {
-      .grid {
-        grid-template-columns: 1fr;
-      }
+    /* Cards */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
     }
 
-    .panel {
-      background: #111;
-      border: 1px solid #0f0;
-      border-radius: 4px;
-      padding: 20px;
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.2);
+      border-color: rgba(99, 102, 241, 0.4);
     }
 
-    .panel h2 {
-      margin-bottom: 15px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid #0f0;
+    .card h2 {
+      font-size: 1.4em;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-primary);
+    }
+
+    .card-icon {
       font-size: 1.3em;
     }
 
-    .panel h3 {
-      margin-top: 15px;
-      margin-bottom: 8px;
-      color: #0f0;
-      font-size: 1.1em;
-    }
-
-    .panel ul {
-      margin-left: 20px;
-      margin-bottom: 10px;
-    }
-
-    .panel li {
-      margin-bottom: 5px;
-    }
-
-    .panel code {
-      background: #000;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 0.9em;
-      color: #0ff;
-    }
-
-    .panel pre {
-      background: #000;
-      padding: 10px;
-      border-radius: 4px;
-      overflow-x: auto;
-      margin: 10px 0;
-      color: #0ff;
-      font-size: 0.85em;
-      border: 1px solid #333;
-    }
-
-    .examples button {
-      background: #0f0;
-      color: #000;
+    /* Buttons */
+    button {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
       border: none;
-      padding: 8px 16px;
-      margin: 5px 5px 5px 0;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.95em;
+      font-weight: 500;
       cursor: pointer;
-      border-radius: 4px;
-      font-family: inherit;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+      font-family: 'Inter', sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #059669);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--warning), #d97706);
+    }
+
+    .btn-small {
+      padding: 8px 16px;
+      font-size: 0.85em;
+    }
+
+    /* Input Fields */
+    input[type="text"],
+    input[type="password"],
+    textarea {
+      width: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-family: 'SF Mono', monospace;
+      font-size: 0.95em;
+      transition: all 0.3s ease;
+      margin-bottom: 12px;
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
       font-size: 0.9em;
-      font-weight: bold;
-      transition: all 0.2s;
+      font-weight: 500;
+      color: var(--text-secondary);
     }
 
-    .examples button:hover {
-      background: #0ff;
-      box-shadow: 0 0 10px #0ff;
+    /* Output Display */
+    .output {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-family: 'SF Mono', monospace;
+      font-size: 0.85em;
+      color: var(--accent);
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.8;
     }
 
-    .examples button:active {
-      transform: scale(0.95);
+    .output::-webkit-scrollbar {
+      width: 8px;
     }
 
-    #oi-mount {
-      margin-top: 30px;
+    .output::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+      border-radius: 4px;
     }
 
-    .stage-ladder {
+    .output::-webkit-scrollbar-thumb {
+      background: var(--primary);
+      border-radius: 4px;
+    }
+
+    .output-line {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+
+    .output-line:last-child {
+      border-bottom: none;
+    }
+
+    .output-label {
+      color: var(--text-muted);
+      margin-right: 10px;
+    }
+
+    .output-value {
+      color: var(--success);
+    }
+
+    /* Bridge Connection Panel */
+    .bridge-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .bridge-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .bridge-indicator.connected {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .bridge-details {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      border-left: 3px solid var(--primary);
+    }
+
+    .bridge-details.visible {
+      display: block;
+    }
+
+    .detail-row {
       display: flex;
       justify-content: space-between;
-      margin: 20px 0;
-      padding: 15px;
-      background: #000;
-      border-radius: 4px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
     }
 
-    .stage-ladder .stage {
-      padding: 8px 12px;
-      background: #111;
-      border: 1px solid #333;
-      border-radius: 3px;
-      font-size: 0.85em;
+    .detail-row:last-child {
+      border-bottom: none;
     }
 
-    .stage-ladder .arrow {
-      align-self: center;
-      color: #0f0;
-      font-size: 1.2em;
+    .detail-label {
+      color: var(--text-muted);
+      font-size: 0.9em;
     }
 
-    .warning {
-      background: #332200;
-      border: 1px solid #ff0;
-      color: #ff0;
-      padding: 15px;
-      border-radius: 4px;
-      margin: 20px 0;
+    .detail-value {
+      font-family: 'SF Mono', monospace;
+      font-size: 0.9em;
+      color: var(--accent);
     }
 
-    .success {
-      background: #003322;
-      border: 1px solid #0f0;
-      color: #0f0;
-      padding: 15px;
-      border-radius: 4px;
-      margin: 20px 0;
+    /* Growth Ladder */
+    .ladder {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border-radius: 8px;
     }
 
-    a {
-      color: #0ff;
+    .ladder-stage {
+      flex: 1;
+      text-align: center;
+      padding: 12px 8px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      font-size: 0.75em;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .ladder-stage.active {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .ladder-stage::after {
+      content: '→';
+      position: absolute;
+      right: -12px;
+      color: var(--text-muted);
+    }
+
+    .ladder-stage:last-child::after {
+      content: '';
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2em;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-bar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .ladder {
+        flex-wrap: wrap;
+      }
+
+      .ladder-stage {
+        font-size: 0.7em;
+      }
+    }
+
+    /* Loading Animation */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    /* Success/Error Messages */
+    .message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 12px;
+      font-size: 0.9em;
+      display: none;
+    }
+
+    .message.visible {
+      display: block;
+    }
+
+    .message.success {
+      background: rgba(16, 185, 129, 0.1);
+      border-left: 3px solid var(--success);
+      color: var(--success);
+    }
+
+    .message.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-left: 3px solid var(--danger);
+      color: var(--danger);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 0.9em;
+      margin-top: 60px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer a {
+      color: var(--primary);
       text-decoration: none;
+      transition: color 0.3s ease;
     }
 
-    a:hover {
-      text-decoration: underline;
+    .footer a:hover {
+      color: var(--accent);
     }
   </style>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <div class="header">
-      <h1>🧠 MATHISON QUADRATIC</h1>
-      <p>Single-file OI Runtime — Two-Plane Architecture — Growth Ladder Governance</p>
-      <p style="font-size: 0.9em; margin-top: 10px; opacity: 0.6;">v0.2.0: LLM · Mesh · Orchestra · Receipt Verification</p>
+      <div class="logo">🧠</div>
+      <h1>Mathison Quadratic</h1>
+      <p class="subtitle">Distributed AI Runtime • Growth Ladder Architecture</p>
     </div>
 
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot"></div>
+        <span class="status-label">OI ID:</span>
+        <span class="status-value" id="oi-id">Initializing...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Stage:</span>
+        <span class="status-value" id="oi-stage">BROWSER</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Posture:</span>
+        <span class="status-value" id="oi-posture">MEDIUM</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Receipts:</span>
+        <span class="status-value" id="receipt-count">0</span>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
     <div class="grid">
-      <div class="panel">
-        <h2>📖 About</h2>
-        <p>Quadratic is a self-contained Originating Intelligence (OI) runtime that implements:</p>
-        <ul>
-          <li><strong>Two-Plane Separation:</strong> Meaning (governance) vs Capability (execution)</li>
-          <li><strong>Growth Ladder:</strong> Progressive capability unlock with stage gates</li>
-          <li><strong>Receipt Hash Chain:</strong> Tamper-evident action log with replay protection</li>
-          <li><strong>Anti-Hive Design:</strong> Namespace isolation, no identity fusion</li>
-        </ul>
+      <!-- OI Control Panel -->
+      <div class="card">
+        <h2><span class="card-icon">⚡</span>OI Control</h2>
 
-        <h3>Architecture Planes</h3>
-        <p><strong>Plane A (Meaning):</strong> CIF boundary, CDI gating, Memory graph, Receipt verification</p>
-        <p><strong>Plane B (Capability):</strong> Memory, Storage, System, Network, LLM, Mesh, Orchestra adapters</p>
-      </div>
-
-      <div class="panel">
-        <h2>🎯 Quick Start</h2>
-
-        <div class="warning">
-          <strong>⚠️ Build Required:</strong> This page expects <code>quad.js</code> to be built from TypeScript.
+        <div class="button-group">
+          <button onclick="testMemory()">💾 Memory Test</button>
+          <button onclick="testLLM()">🤖 LLM Fallback</button>
+          <button onclick="getReceipts()" class="btn-secondary">📜 View Receipts</button>
         </div>
 
-        <p><strong>Build the runtime:</strong></p>
-        <pre>cd packages/mathison-quadratic
-pnpm install
-pnpm build</pre>
+        <div class="output" id="control-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Ready for commands</span>
+          </div>
+        </div>
+      </div>
 
-        <p><strong>Or use esbuild directly:</strong></p>
-        <pre>npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
+      <!-- Bridge Connection -->
+      <div class="card">
+        <h2><span class="card-icon">🌉</span>Bridge Connection</h2>
 
-        <p><strong>Then open this HTML file</strong> in your browser.</p>
+        <div class="bridge-status">
+          <div class="bridge-indicator" id="bridge-indicator"></div>
+          <span id="bridge-status-text">Not Connected</span>
+        </div>
+
+        <label>Bridge URL</label>
+        <input type="text" id="bridge-url" value="http://localhost:3142" placeholder="http://localhost:3142">
+
+        <label>API Key (optional)</label>
+        <input type="password" id="bridge-api-key" placeholder="Leave blank for dev mode">
+
+        <div class="button-group">
+          <button onclick="connectBridge()">🔌 Connect</button>
+          <button onclick="disconnectBridge()" class="btn-secondary">🔌 Disconnect</button>
+        </div>
+
+        <div class="bridge-details" id="bridge-details">
+          <div class="detail-row">
+            <span class="detail-label">Bridge OI ID:</span>
+            <span class="detail-value" id="bridge-oi-id">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Stage:</span>
+            <span class="detail-value" id="bridge-stage">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Adapters:</span>
+            <span class="detail-value" id="bridge-adapters">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Peers:</span>
+            <span class="detail-value" id="bridge-peers">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bridge Actions -->
+      <div class="card">
+        <h2><span class="card-icon">🚀</span>Bridge Actions</h2>
+
+        <div class="button-group">
+          <button onclick="bridgeAction('system.exec', {cmd: 'date'})" class="btn-success">📅 System: Date</button>
+          <button onclick="bridgeAction('http.get', {url: 'https://api.github.com'})" class="btn-success">🌐 HTTP: GitHub API</button>
+          <button onclick="bridgeAction('llm.complete', {prompt: 'Hello!', max_tokens: 50})" class="btn-success">🤖 LLM: Complete</button>
+        </div>
+
+        <div class="output" id="bridge-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Connect to bridge to enable actions</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mesh Network -->
+      <div class="card">
+        <h2><span class="card-icon">🕸️</span>Mesh Network</h2>
+
+        <label>Peer OI ID</label>
+        <input type="text" id="peer-oi-id" placeholder="target-oi-id">
+
+        <label>Message</label>
+        <input type="text" id="mesh-message" placeholder="Hello from mesh!">
+
+        <div class="button-group">
+          <button onclick="registerPeer()">📡 Register as Peer</button>
+          <button onclick="sendMeshMessage()" class="btn-secondary">📨 Send Message</button>
+        </div>
+
+        <div class="output" id="mesh-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Mesh networking ready</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>🌉 Bridge Connection</h2>
-      <p>Connect to a system-side bridge OI to access SYSTEM/NETWORK capabilities from the browser.</p>
-
-      <div style="margin: 15px 0;">
-        <div style="margin-bottom: 10px;">
-          <input id="bridge-url" type="text" value="http://localhost:3142"
-                 style="width: 100%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
-                 placeholder="Bridge URL (e.g., http://localhost:3142)" />
-        </div>
-        <div style="margin-bottom: 10px;">
-          <input id="bridge-api-key" type="password"
-                 style="width: 100%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
-                 placeholder="API Key (optional if bridge auth disabled)" />
-        </div>
-        <button onclick="connectBridge()"
-                style="padding: 8px 16px; background: #0f0; color: #000; border: none; cursor: pointer; font-family: inherit; font-weight: bold;">
-          Connect
-        </button>
-        <button onclick="disconnectBridge()"
-                style="padding: 8px 16px; background: #f00; color: #fff; border: none; cursor: pointer; font-family: inherit; font-weight: bold; margin-left: 5px;">
-          Disconnect
-        </button>
-      </div>
-
-      <div id="bridge-status" style="padding: 10px; background: #111; border-radius: 4px; font-size: 0.9em;">
-        <strong>Status:</strong> <span id="bridge-status-text" style="color: #888;">Not connected</span><br/>
-        <div id="bridge-details" style="margin-top: 5px; display: none;">
-          <strong>Bridge OI ID:</strong> <span id="bridge-oi-id">-</span><br/>
-          <strong>Stage:</strong> <span id="bridge-stage">-</span><br/>
-          <strong>Adapters:</strong> <span id="bridge-adapters">-</span><br/>
-          <strong>Peers:</strong> <span id="bridge-peers">-</span>
-        </div>
-      </div>
-
-      <p style="margin-top: 15px; font-size: 0.85em; opacity: 0.7;">
-        Start bridge: <code>BRIDGE_API_KEY=$(openssl rand -hex 32) npx tsx quadratic-bridge.mjs</code><br/>
-        Or disable auth: <code>BRIDGE_REQUIRE_AUTH=false npx tsx quadratic-bridge.mjs</code>
+    <!-- Growth Ladder -->
+    <div class="card">
+      <h2><span class="card-icon">🪜</span>Growth Ladder</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        Progress through capability stages as trust and verification increase
       </p>
-    </div>
-
-    <div class="panel">
-      <h2>📊 Growth Ladder</h2>
-      <div class="stage-ladder">
-        <div class="stage">WINDOW<br/><small>Ephemeral</small></div>
-        <div class="arrow">→</div>
-        <div class="stage">BROWSER<br/><small>+ Storage</small></div>
-        <div class="arrow">→</div>
-        <div class="stage">SYSTEM<br/><small>+ Filesystem</small></div>
-        <div class="arrow">→</div>
-        <div class="stage">NETWORK<br/><small>+ HTTP + LLM</small></div>
-        <div class="arrow">→</div>
-        <div class="stage">MESH<br/><small>+ Peers</small></div>
-        <div class="arrow">→</div>
-        <div class="stage">ORCHESTRA<br/><small>+ Multi-OI</small></div>
-      </div>
-      <p><small>Each stage unlocks new actions while preserving all previous capabilities. CDI enforces stage-based allowlists.</small></p>
-    </div>
-
-    <div class="grid">
-      <div class="panel examples">
-        <h2>🧪 Example Actions</h2>
-
-        <h3>Memory Operations</h3>
-        <button onclick="sendAction('memory.store', {key: 'name', value: 'Alice'})">Store Memory</button>
-        <button onclick="sendAction('memory.recall', {key: 'name'})">Recall Memory</button>
-        <button onclick="sendAction('memory.search', {query: 'Alice'})">Search Memory</button>
-
-        <h3>Storage (BROWSER stage)</h3>
-        <button onclick="sendAction('storage.save', {key: 'data', value: {test: 123}})">Save Storage</button>
-        <button onclick="sendAction('storage.load', {key: 'data'})">Load Storage</button>
-
-        <h3>LLM (NETWORK stage)</h3>
-        <button onclick="sendAction('llm.complete', {prompt: 'Hello, introduce yourself'})">LLM Fallback</button>
-        <button onclick="sendAction('llm.complete', {prompt: 'Explain quantum computing', model: 'claude-3-haiku-20240307'})">LLM (needs API key)</button>
-
-        <h3>Text Processing</h3>
-        <button onclick="sendTextPrompt('What is 2+2?')">Ask Question</button>
-        <button onclick="sendTextPrompt('Summarize: The quick brown fox jumps over the lazy dog')">Summarize Text</button>
-
-        <h3>🌉 Bridge Actions (requires bridge)</h3>
-        <button onclick="sendBridgeAction('system.exec', {command: 'date'})">System: Date</button>
-        <button onclick="sendBridgeAction('system.exec', {command: 'pwd'})">System: PWD</button>
-        <button onclick="sendBridgeAction('llm.complete', {prompt: 'Hello from bridge!'})">Bridge LLM</button>
-        <button onclick="registerPeer()">Register as Peer</button>
-      </div>
-
-      <div class="panel">
-        <h2>🔐 Security Model</h2>
-
-        <h3>CIF (Contextual Input Filter)</h3>
-        <ul>
-          <li>Input sanitization and size limits</li>
-          <li>Redaction of sensitive patterns</li>
-          <li>Prevents injection attacks</li>
-        </ul>
-
-        <h3>CDI (Capability Definition Index)</h3>
-        <ul>
-          <li>Stage-based action allowlists</li>
-          <li>Risk threshold enforcement</li>
-          <li>Fail-closed by default</li>
-        </ul>
-
-        <h3>Receipt Verification</h3>
-        <ul>
-          <li>SHA-256 hash chain linkage</li>
-          <li>Replay attack prevention</li>
-          <li>Tamper detection</li>
-        </ul>
+      <div class="ladder">
+        <div class="ladder-stage">WINDOW</div>
+        <div class="ladder-stage active">BROWSER</div>
+        <div class="ladder-stage">SYSTEM</div>
+        <div class="ladder-stage">NETWORK</div>
+        <div class="ladder-stage">MESH</div>
+        <div class="ladder-stage">ORCHESTRA</div>
       </div>
     </div>
 
-    <div class="panel">
-      <h2>🎮 Interactive OI Runtime</h2>
-      <p>The OI runtime will mount below. Use the input field to send actions (JSON or text prompts).</p>
-
-      <h3>Example JSON Actions:</h3>
-      <pre>{"action": "memory.store", "args": {"key": "test", "value": "hello"}}
-{"action": "memory.recall", "args": {"key": "test"}}
-{"action": "llm.complete", "args": {"prompt": "What is OI?"}}</pre>
-
-      <h3>Example Text Prompts:</h3>
-      <pre>What is 2+2?
-Summarize: [your text]
-Remember that my name is Alice
-What's my name?</pre>
-    </div>
-
-    <div id="oi-mount"></div>
-
-    <div class="panel" style="margin-top: 30px;">
-      <h2>📚 Resources</h2>
-      <ul>
-        <li><strong>Documentation:</strong> <code>packages/mathison-quadratic/README.md</code></li>
-        <li><strong>Architecture:</strong> <code>packages/mathison-quadratic/ARCHITECTURE.md</code></li>
-        <li><strong>Source Code:</strong> <code>packages/mathison-quadratic/quad.ts</code> (1377 lines, single-file monolith)</li>
-        <li><strong>CLI Usage:</strong> <code>pnpm quad:selftest</code> or <code>node quad.ts selftest</code></li>
-      </ul>
+    <!-- Footer -->
+    <div class="footer">
+      <p>Mathison Quadratic v0.2.0 • Open Source Distributed AI</p>
+      <p style="margin-top: 8px;">
+        <a href="https://github.com/default-user/mathison" target="_blank">Documentation</a> •
+        <a href="DEPLOYMENT.md">Deployment Guide</a> •
+        <a href="BRIDGE.md">Bridge Security</a>
+      </p>
     </div>
   </div>
 
+  <!-- Load the Quadratic OI Runtime -->
   <script type="module">
-    // Try to import the compiled quad.js module
-    let bootBrowser, createOI;
+    import { QuadraticOI } from './quad.js';
 
-    try {
-      const module = await import('./quad.js');
-      bootBrowser = module.bootBrowser;
-      createOI = module.createOI;
-    } catch (error) {
-      // If quad.js doesn't exist, show build instructions
-      const mount = document.getElementById('oi-mount');
-      mount.innerHTML = `
-        <div style="background: #330000; border: 2px solid #f00; padding: 30px; border-radius: 4px; text-align: center;">
-          <h2 style="color: #f00; margin-bottom: 20px;">❌ Runtime Not Found</h2>
-          <p style="color: #ff6666; margin-bottom: 20px;">Could not load <code>quad.js</code>. Please build the runtime first:</p>
-          <pre style="text-align: left; background: #000; padding: 15px; border-radius: 4px; color: #0ff;">cd packages/mathison-quadratic
-npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
-          <p style="color: #ff6666; margin-top: 20px;"><small>Error: ${error.message}</small></p>
-        </div>
-      `;
-      throw error;
-    }
+    // Initialize OI
+    const oi = new QuadraticOI();
+    window.oi = oi;
 
-    // Boot the OI runtime in the browser
-    const mount = document.getElementById('oi-mount');
-    const oi = bootBrowser({ mount });
+    // Update status
+    document.getElementById('oi-id').textContent = oi.oi_id.slice(0, 20) + '...';
+    document.getElementById('oi-stage').textContent = oi.stage;
+    document.getElementById('oi-posture').textContent = oi.posture;
 
-    // Make OI available globally for example buttons
-    window.quadOI = oi;
+    // Update receipt count periodically
+    setInterval(() => {
+      const receipts = oi.getLastReceipts(1);
+      document.getElementById('receipt-count').textContent = receipts.length > 0 ? receipts[0].receipt_id : '0';
+    }, 2000);
 
-    // Helper functions for example buttons
-    window.sendAction = async (action, args) => {
-      const input = document.querySelector('#input');
-      const submit = document.querySelector('#submit');
-      if (!input || !submit) return;
-
-      input.value = JSON.stringify({ action, args });
-      submit.click();
-    };
-
-    window.sendTextPrompt = async (text) => {
-      const input = document.querySelector('#input');
-      const submit = document.querySelector('#submit');
-      if (!input || !submit) return;
-
-      input.value = text;
-      submit.click();
-    };
-
-    // ============================================================================
-    // BRIDGE CONNECTION
-    // ============================================================================
-
-    let bridgeURL = null;
-    let bridgeAPIKey = null;
+    // Bridge connection state
+    let bridgeURL = '';
+    let bridgeAPIKey = '';
     let bridgeConnected = false;
 
+    // Test Memory
+    window.testMemory = async () => {
+      const output = document.getElementById('control-output');
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Testing memory...</div>';
+
+      try {
+        const storeResult = await oi.processIntent({
+          intent_id: 'mem-test-' + Date.now(),
+          action: 'memory.store',
+          args: { key: 'test', value: 'Hello from Quadratic!' },
+        });
+
+        const recallResult = await oi.processIntent({
+          intent_id: 'mem-recall-' + Date.now(),
+          action: 'memory.recall',
+          args: { key: 'test' },
+        });
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Stored: ${storeResult.result}</div>
+          <div class="output-line"><span class="output-label">✓</span> Recalled: ${recallResult.result}</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Test LLM
+    window.testLLM = async () => {
+      const output = document.getElementById('control-output');
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Testing LLM...</div>';
+
+      try {
+        const result = await oi.processIntent({
+          intent_id: 'llm-test-' + Date.now(),
+          action: 'llm.complete',
+          args: { prompt: 'Say hello!', max_tokens: 20 },
+        });
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Response: ${result.result.fallback || result.result.text}</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Get Receipts
+    window.getReceipts = () => {
+      const output = document.getElementById('control-output');
+      const receipts = oi.getLastReceipts(5);
+
+      if (receipts.length === 0) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">ℹ</span> No receipts yet</div>';
+        return;
+      }
+
+      let html = '';
+      receipts.forEach(r => {
+        html += `
+          <div class="output-line">
+            <span class="output-label">#${r.receipt_id}</span>
+            ${r.intent_id} → ${r.outcome}
+          </div>
+        `;
+      });
+      output.innerHTML = html;
+    };
+
+    // Connect Bridge
     window.connectBridge = async () => {
       const urlInput = document.getElementById('bridge-url');
       const apiKeyInput = document.getElementById('bridge-api-key');
       const statusText = document.getElementById('bridge-status-text');
+      const indicator = document.getElementById('bridge-indicator');
       const details = document.getElementById('bridge-details');
 
       bridgeURL = urlInput.value.trim();
@@ -440,66 +797,59 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
 
       try {
         statusText.textContent = 'Connecting...';
-        statusText.style.color = '#ff0';
+        indicator.classList.remove('connected');
 
-        // Check bridge status (public endpoint)
         const response = await fetch(`${bridgeURL}/status`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const status = await response.json();
 
-        // Update UI
         bridgeConnected = true;
-        statusText.textContent = 'Connected';
-        statusText.style.color = '#0f0';
-        details.style.display = 'block';
+        statusText.textContent = '✓ Connected';
+        indicator.classList.add('connected');
+        details.classList.add('visible');
 
-        document.getElementById('bridge-oi-id').textContent = status.oi_id.slice(0, 16) + '...';
+        document.getElementById('bridge-oi-id').textContent = status.oi_id.slice(0, 20) + '...';
         document.getElementById('bridge-stage').textContent = status.stage;
         document.getElementById('bridge-adapters').textContent = status.adapters.join(', ');
-        document.getElementById('bridge-peers').textContent = status.peers_connected;
+        document.getElementById('bridge-peers').textContent = status.peers_connected || '0';
 
-        console.log('🌉 Bridge connected:', status);
-
-        // Auto-register this browser OI as a peer
         await registerPeerSilent();
-
       } catch (error) {
         bridgeConnected = false;
-        statusText.textContent = `Error: ${error.message}`;
-        statusText.style.color = '#f00';
-        details.style.display = 'none';
-        console.error('Bridge connection failed:', error);
+        statusText.textContent = `✗ Error: ${error.message}`;
+        indicator.classList.remove('connected');
+        details.classList.remove('visible');
       }
     };
 
+    // Disconnect Bridge
     window.disconnectBridge = () => {
       bridgeConnected = false;
-      bridgeURL = null;
+      bridgeURL = '';
+      bridgeAPIKey = '';
 
-      const statusText = document.getElementById('bridge-status-text');
-      const details = document.getElementById('bridge-details');
-
-      statusText.textContent = 'Not connected';
-      statusText.style.color = '#888';
-      details.style.display = 'none';
-
-      console.log('🌉 Bridge disconnected');
+      document.getElementById('bridge-status-text').textContent = 'Not Connected';
+      document.getElementById('bridge-indicator').classList.remove('connected');
+      document.getElementById('bridge-details').classList.remove('visible');
     };
 
-    window.sendBridgeAction = async (action, args) => {
-      if (!bridgeConnected || !bridgeURL) {
-        alert('Bridge not connected. Click "Connect" first.');
+    // Bridge Action
+    window.bridgeAction = async (action, args) => {
+      const output = document.getElementById('bridge-output');
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Not connected to bridge</div>';
         return;
       }
+
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Executing...</div>';
 
       try {
         const headers = {
           'Content-Type': 'application/json',
-          'X-OI-ID': oi.state.oi_id,
+          'X-OI-ID': oi.oi_id,
         };
-
-        // Add API key if provided
         if (bridgeAPIKey) {
           headers['X-API-Key'] = bridgeAPIKey;
         }
@@ -510,44 +860,38 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
           body: JSON.stringify({ action, args }),
         });
 
-        const result = await response.json();
-
-        // Display result in the OI output
-        const outputEl = document.querySelector('#output');
-        if (outputEl) {
-          outputEl.innerHTML += `<div style="margin: 10px 0; padding: 10px; background: #001a1a; border-left: 3px solid ${result.success ? '#0ff' : '#f00'};">
-            <strong>🌉 Bridge Action:</strong> ${action}<br/>
-            <strong>Args:</strong> ${JSON.stringify(args)}<br/>
-            <strong>Result:</strong> ${JSON.stringify(result, null, 2)}
-          </div>`;
-          outputEl.scrollTop = outputEl.scrollHeight;
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `HTTP ${response.status}`);
         }
 
-        console.log('🌉 Bridge action result:', result);
+        const result = await response.json();
 
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Action: ${action}</div>
+          <div class="output-line"><span class="output-label">→</span> ${JSON.stringify(result.result, null, 2)}</div>
+        `;
       } catch (error) {
-        alert(`Bridge error: ${error.message}`);
-        console.error('Bridge action failed:', error);
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
       }
     };
 
+    // Register Peer
     window.registerPeer = async () => {
-      if (!bridgeConnected || !bridgeURL) {
-        alert('Bridge not connected. Click "Connect" first.');
+      const output = document.getElementById('mesh-output');
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Connect to bridge first</div>';
         return;
       }
 
-      await registerPeerSilent();
-      alert('Registered as peer with bridge!');
-    };
-
-    async function registerPeerSilent() {
-      if (!bridgeURL) return;
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Registering...</div>';
 
       try {
-        const headers = { 'Content-Type': 'application/json' };
-
-        // Add API key if provided
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
         if (bridgeAPIKey) {
           headers['X-API-Key'] = bridgeAPIKey;
         }
@@ -556,24 +900,96 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
           method: 'POST',
           headers,
           body: JSON.stringify({
-            oi_id: oi.state.oi_id,
-            address: window.location.href,
-            stage: oi.state.stage,
+            peer_oi_id: oi.oi_id,
+            endpoint: window.location.href,
           }),
         });
 
         const result = await response.json();
-        console.log('🌉 Peer registered:', result);
 
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Registered as peer</div>
+          <div class="output-line"><span class="output-label">→</span> OI ID: ${oi.oi_id.slice(0, 30)}...</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Register Peer Silently
+    async function registerPeerSilent() {
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        await fetch(`${bridgeURL}/peer/register`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            peer_oi_id: oi.oi_id,
+            endpoint: window.location.href,
+          }),
+        });
       } catch (error) {
         console.error('Peer registration failed:', error);
       }
     }
 
-    // Display success message
-    console.log('🧠 Mathison Quadratic OI loaded successfully');
-    console.log('OI Instance:', oi);
-    console.log('Status:', oi.getStatus());
+    // Send Mesh Message
+    window.sendMeshMessage = async () => {
+      const output = document.getElementById('mesh-output');
+      const peerOIID = document.getElementById('peer-oi-id').value.trim();
+      const message = document.getElementById('mesh-message').value.trim();
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Connect to bridge first</div>';
+        return;
+      }
+
+      if (!peerOIID || !message) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Enter peer OI ID and message</div>';
+        return;
+      }
+
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Sending...</div>';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        const response = await fetch(`${bridgeURL}/mesh/send`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            to_oi: peerOIID,
+            message_type: 'request',
+            payload: { text: message },
+            taint_labels: [],
+          }),
+        });
+
+        const result = await response.json();
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Message sent</div>
+          <div class="output-line"><span class="output-label">→</span> Beam ID: ${result.beam_id.slice(0, 20)}...</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    console.log('🧠 Quadratic OI initialized:', oi.oi_id);
   </script>
 </body>
 </html>

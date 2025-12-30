@@ -230,9 +230,16 @@ pnpm build</pre>
       <p>Connect to a system-side bridge OI to access SYSTEM/NETWORK capabilities from the browser.</p>
 
       <div style="margin: 15px 0;">
-        <input id="bridge-url" type="text" value="http://localhost:3142"
-               style="width: 60%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
-               placeholder="Bridge URL" />
+        <div style="margin-bottom: 10px;">
+          <input id="bridge-url" type="text" value="http://localhost:3142"
+                 style="width: 100%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
+                 placeholder="Bridge URL (e.g., http://localhost:3142)" />
+        </div>
+        <div style="margin-bottom: 10px;">
+          <input id="bridge-api-key" type="password"
+                 style="width: 100%; padding: 8px; background: #111; color: #0f0; border: 1px solid #333; font-family: inherit;"
+                 placeholder="API Key (optional if bridge auth disabled)" />
+        </div>
         <button onclick="connectBridge()"
                 style="padding: 8px 16px; background: #0f0; color: #000; border: none; cursor: pointer; font-family: inherit; font-weight: bold;">
           Connect
@@ -254,7 +261,8 @@ pnpm build</pre>
       </div>
 
       <p style="margin-top: 15px; font-size: 0.85em; opacity: 0.7;">
-        Start bridge: <code>node quadratic-bridge.js</code>
+        Start bridge: <code>BRIDGE_API_KEY=$(openssl rand -hex 32) npx tsx quadratic-bridge.mjs</code><br/>
+        Or disable auth: <code>BRIDGE_REQUIRE_AUTH=false npx tsx quadratic-bridge.mjs</code>
       </p>
     </div>
 
@@ -413,14 +421,18 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
     // ============================================================================
 
     let bridgeURL = null;
+    let bridgeAPIKey = null;
     let bridgeConnected = false;
 
     window.connectBridge = async () => {
       const urlInput = document.getElementById('bridge-url');
+      const apiKeyInput = document.getElementById('bridge-api-key');
       const statusText = document.getElementById('bridge-status-text');
       const details = document.getElementById('bridge-details');
 
       bridgeURL = urlInput.value.trim();
+      bridgeAPIKey = apiKeyInput.value.trim();
+
       if (!bridgeURL) {
         alert('Please enter a bridge URL');
         return;
@@ -430,7 +442,7 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
         statusText.textContent = 'Connecting...';
         statusText.style.color = '#ff0';
 
-        // Check bridge status
+        // Check bridge status (public endpoint)
         const response = await fetch(`${bridgeURL}/status`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -482,12 +494,19 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
       }
 
       try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.state.oi_id,
+        };
+
+        // Add API key if provided
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
         const response = await fetch(`${bridgeURL}/dispatch`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-OI-ID': oi.state.oi_id,
-          },
+          headers,
           body: JSON.stringify({ action, args }),
         });
 
@@ -526,9 +545,16 @@ npx esbuild quad.ts --bundle --format=esm --outfile=../../quad.js</pre>
       if (!bridgeURL) return;
 
       try {
+        const headers = { 'Content-Type': 'application/json' };
+
+        // Add API key if provided
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
         const response = await fetch(`${bridgeURL}/peer/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             oi_id: oi.state.oi_id,
             address: window.location.href,

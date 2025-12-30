@@ -85,9 +85,9 @@ export class MemoryGraph {
     for (const edge of this.edges.values()) {
       // Direction filtering
       const matchesDirection =
-        direction === 'both' ||
         (direction === 'out' && edge.source === nodeId) ||
-        (direction === 'in' && edge.target === nodeId);
+        (direction === 'in' && edge.target === nodeId) ||
+        (direction === 'both' && (edge.source === nodeId || edge.target === nodeId));
 
       if (!matchesDirection) continue;
 

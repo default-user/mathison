@@ -855,8 +855,8 @@ export class MathisonServer {
         return reply.code(cachedResponse.statusCode).send(cachedResponse.body);
       }
 
-      // Generate edge ID
-      const edgeId = `edge-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      // Generate edge ID if not provided
+      const edgeId = body.id || `edge-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // Execute edge creation through ActionGate
       const edge: Edge = {

@@ -1,18 +1,20 @@
 # Mathison OI — Governance-First Ongoing Intelligence
 
-**Version:** 0.1.0 (bootstrap phase)
+**Version:** 0.8.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
 
 Mathison is a governance-first OI (Ongoing Intelligence) system built on treaty-based constraints. It combines:
 
+- **Quadratic Monolith (v0.2.0)** — Single-file OI runtime with two-plane architecture and growth ladder
+- **Quadratic Bridge (v0.3.0)** — Secure system-side relay for browser OIs with enterprise-grade security
 - **Graph/Hypergraph Memory** — Structured memory for contexts and relationships with persistent storage
 - **OI Engine** — Local interpretation engine with memory-graph integration
-- **Distributed Mesh Protocol** — Privacy-preserving distributed computation across nodes
+- **Distributed Mesh Protocol** — Privacy-preserving distributed computation with BeamEnvelope messaging
 - **Mobile Personal OI** — On-device LLM inference and proximity mesh for Android/iOS
-- **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement
-- **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress
+- **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement with stage-based allowlists
+- **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress with receipt verification
 - **Treaty-Based Governance** — Human-first, consent-based, fail-closed operation
 
 ## Governance Root
@@ -65,9 +67,14 @@ mathison/
 │   ├── mathison-memory/       # Graph/hypergraph memory
 │   ├── mathison-storage/      # Persistent storage (FILE/SQLITE)
 │   ├── mathison-oi/           # Interpretation engine
-│   ├── mathison-mesh/         # Distributed mesh protocol
+│   ├── mathison-mesh/         # Distributed mesh protocol + ModelBus
 │   ├── mathison-mobile/       # Mobile components (React Native)
+│   ├── mathison-quadratic/    # Single-file OI runtime (v0.2.0)
 │   └── mathison-sdk-generator/ # Multi-language SDK generation
+├── quadratic-bridge.mjs       # Secure bridge server (v0.3.0)
+├── quadratic.html             # Browser bootstrap UI
+├── quad.js                    # Compiled browser bundle
+├── BRIDGE.md                  # Bridge documentation
 ├── sdks/
 │   ├── typescript/
 │   ├── python/
@@ -298,7 +305,34 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Mobile Deployment (v0.7.0)
+**Current Phase:** Production Ready (v0.8.0)
+
+## Recent Major Features
+
+### Quadratic Monolith (v0.2.0)
+- Single-file OI runtime (1377 lines, zero dependencies)
+- Two-plane architecture: Meaning (governance) + Capability (execution)
+- Growth ladder: WINDOW → BROWSER → SYSTEM → NETWORK → MESH → ORCHESTRA
+- Receipt hash chain with tamper detection
+- LLM, Mesh, and Orchestra adapters
+- CLI: `pnpm quad:selftest`
+
+### Quadratic Bridge (v0.3.0 - Secure)
+- System-side HTTP relay for browser OIs
+- API key authentication with constant-time comparison
+- CORS origin allowlist (no wildcards)
+- Action allowlist with risk levels (LOW/MEDIUM/HIGH/CRITICAL)
+- Rate limiting: 100 req/min per client
+- Audit logging with structured JSON
+- System actions disabled by default
+- Start: `BRIDGE_API_KEY=$(openssl rand -hex 32) npx tsx quadratic-bridge.mjs`
+
+### Browser Bootstrap
+- Interactive HTML UI (`quadratic.html`)
+- Live OI status display
+- Bridge connection with API key support
+- Example actions for all stages
+- Open: `open quadratic.html`
 
 ### Completed
 

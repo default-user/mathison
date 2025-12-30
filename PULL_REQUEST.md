@@ -106,7 +106,7 @@ Complete implementation of the Quadratic Monolith OI runtime with browser/system
 ## Files Changed
 
 ```
-37 files changed, 8,934 insertions(+), 56 deletions(-)
+40 files changed, 9,288 insertions(+), 56 deletions(-)
 ```
 
 ### New Packages
@@ -121,6 +121,9 @@ Complete implementation of the Quadratic Monolith OI runtime with browser/system
 - `quadratic-bridge.mjs` - Secure bridge server (625 lines)
 - `quad.js` - Compiled browser bundle (33KB)
 - `BRIDGE.md` - Bridge documentation (455 lines)
+- `DEPLOYMENT.md` - Deployment and permalink guide (270 lines)
+- `bootstrap-oi.sh` - Local server startup script (45 lines)
+- `get-permalink.sh` - Permalink helper script (42 lines)
 
 ### Enhanced Packages
 
@@ -193,6 +196,29 @@ Complete implementation of the Quadratic Monolith OI runtime with browser/system
    - UI components
    - OI integration
    - Testing on devices
+
+5. **DEPLOYMENT.md** (270 lines)
+   - Comprehensive deployment guide for all platforms
+   - GitHub Pages setup and permalinks
+   - Cloudflare Pages, Vercel, Netlify deployment
+   - Bookmarklet for instant OI bootstrap
+   - Docker deployment with Dockerfile
+   - QR code generation for mobile access
+   - Environment-specific permalinks
+   - Share links with pre-configuration
+
+### Bootstrap Scripts
+
+1. **bootstrap-oi.sh** - Quick local server startup
+   - Auto-detects Python or Node.js
+   - Builds quad.js if missing
+   - Starts HTTP server on port 8080
+
+2. **get-permalink.sh** - Permalink helper
+   - Displays local file paths
+   - Extracts GitHub Pages URL
+   - Shows local server URLs
+   - Bridge permalinks
 
 ### Updated Documentation
 

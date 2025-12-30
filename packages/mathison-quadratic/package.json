@@ -1,6 +1,6 @@
 {
   "name": "mathison-quadratic",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Quadratic Monolith: Single-file OI runtime (Meaning + Capability planes)",
   "main": "dist/quad.js",
   "types": "dist/quad.d.ts",

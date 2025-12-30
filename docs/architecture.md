@@ -1,6 +1,6 @@
 # Mathison OI — System Architecture
 
-**Version:** 0.6.0
+**Version:** 1.0.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
@@ -9,8 +9,8 @@ Mathison is a governance-first distributed OI system with four core layers:
 
 1. **Governance Layer** (CDI + CIF) — Treaty-based constraints
 2. **Intelligence Layer** (OI Engine + Memory Graph) — Local interpretation and context
-3. **Mesh Layer** (ModelBus + MeshCoordinator) — Distributed LLM inference kernel
-4. **Interface Layer** (Server + SDKs) — API surface
+3. **Mesh Layer** (ModelBus + MeshCoordinator) — Distributed LLM inference kernel with GitHub Models API
+4. **Interface Layer** (Server + SDKs + Quadratic Bridge) — API surface with browser and mobile support
 
 ## Architectural Diagram
 

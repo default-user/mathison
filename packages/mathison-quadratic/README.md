@@ -136,6 +136,7 @@ await restored.importBundle(bundle);
 ### NETWORK Stage (+SYSTEM)
 - `http.get` - HTTP GET (allowlisted domains)
 - `http.post` - HTTP POST (allowlisted domains)
+- `llm.complete` - LLM inference (GitHub Models API → Anthropic fallback)
 
 ### MESH Stage (+NETWORK)
 - `mesh.send` - Send message to peer OI
@@ -304,12 +305,16 @@ Default patterns (configurable):
 - No mesh/orchestra adapters implemented yet (stubs only)
 - localStorage has quota limits (~5-10MB in most browsers)
 
+**Current Features:**
+- ✓ LLM integration (GitHub Models API with free tier, Anthropic fallback)
+- ✓ Mesh protocol (BeamEnvelope messaging)
+- ✓ Orchestra coordination protocol
+
 **Future Enhancements:**
-- Vector search integration
+- Vector search integration (embeddings via LLM adapter)
 - Capability-based security tokens
-- Actual peer mesh protocol (BeamEnvelope)
-- Orchestra coordination protocol
-- LLM integration via adapters
+- Enhanced peer discovery (WebRTC/WebSocket)
+- IndexedDB for larger browser storage
 
 ## License
 

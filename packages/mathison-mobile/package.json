@@ -1,6 +1,6 @@
 {
   "name": "mathison-mobile",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Mobile (React Native) components for Mathison personal OI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

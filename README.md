@@ -1,6 +1,6 @@
 # Mathison OI — Governance-First Ongoing Intelligence
 
-**Version:** 0.8.0
+**Version:** 1.0.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
@@ -110,11 +110,21 @@ Required for server operation:
 - `MATHISON_STORE_BACKEND` — Storage backend: `FILE` or `SQLITE` (fail-closed if missing)
 - `MATHISON_STORE_PATH` — Base path for storage files (fail-closed if missing)
 
+Optional for LLM integration:
+
+- `GITHUB_TOKEN` — GitHub token for Models API (free tier: 15 req/min, 150 req/day)
+- `ANTHROPIC_API_KEY` — Anthropic API key (fallback if GitHub Models unavailable)
+
 Example:
 ```bash
 export MATHISON_STORE_BACKEND=FILE
 export MATHISON_STORE_PATH=./data
+export GITHUB_TOKEN=ghp_your_token_here  # For free LLM access
 ```
+
+**LLM Provider Priority:** GitHub Models → Anthropic → Local Fallback
+
+See [GITHUB_MODELS_SETUP.md](./GITHUB_MODELS_SETUP.md) for complete setup guide.
 
 ### Start Server
 
@@ -305,7 +315,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Production Ready (v0.8.0)
+**Current Phase:** Production Ready (v1.0.0 — Stable Release)
 
 ## Recent Major Features
 

@@ -177,6 +177,14 @@ export class MathisonServer {
         timestamp: Date.now()
       });
 
+      // Audit log ingress
+      this.auditLogger.logIngress(
+        clientId,
+        request.url,
+        ingressResult.allowed,
+        ingressResult.violations
+      );
+
       if (!ingressResult.allowed) {
         reply.code(400).send({
           error: 'CIF_INGRESS_BLOCKED',
@@ -201,6 +209,15 @@ export class MathisonServer {
         payload: (request as any).sanitizedBody
       });
 
+      // Audit log action check
+      this.auditLogger.logAction(
+        clientId,
+        action,
+        actionResult.verdict === 'allow',
+        actionResult.verdict,
+        actionResult.reason
+      );
+
       if (actionResult.verdict !== 'allow') {
         reply.code(403).send({
           error: 'CDI_ACTION_DENIED',
@@ -220,6 +237,13 @@ export class MathisonServer {
         content: typeof payload === 'string' ? payload : JSON.stringify(payload)
       });
 
+      // Audit log output check
+      this.auditLogger.logOutput(
+        clientId,
+        outputCheck.allowed,
+        outputCheck.violations
+      );
+
       if (!outputCheck.allowed) {
         reply.code(403);
         return JSON.stringify({
@@ -234,6 +258,15 @@ export class MathisonServer {
         endpoint: request.url,
         payload: typeof payload === 'string' ? JSON.parse(payload) : payload
       });
+
+      // Audit log egress
+      this.auditLogger.logEgress(
+        clientId,
+        request.url,
+        egressResult.allowed,
+        egressResult.violations,
+        egressResult.leaksDetected
+      );
 
       if (!egressResult.allowed) {
         reply.code(403);

@@ -8,7 +8,10 @@
     "test": "pnpm -r test",
     "dev": "pnpm --filter mathison-server dev",
     "server": "pnpm --filter mathison-server start",
-    "generate-sdks": "pnpm --filter mathison-sdk-generator generate"
+    "generate-sdks": "pnpm --filter mathison-sdk-generator generate",
+    "quad:node": "pnpm --filter mathison-quadratic dev",
+    "quad:selftest": "pnpm --filter mathison-quadratic selftest",
+    "quad:build": "pnpm --filter mathison-quadratic build"
   },
   "keywords": ["mathison", "oi", "graph", "hypergraph", "memory", "sdk"],
   "engines": {

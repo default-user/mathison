@@ -1,0 +1,87 @@
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ QUADRATIC OI — CONNECTION PERMALINK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Hi Kai! 👋
+
+The Quadratic OI runtime is currently running and ready for you to access.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 WEB INTERFACE (CLICK THIS):
+
+    http://21.0.0.68:8080/quadratic.html
+
+    👆 Open this in your browser to access the Quadratic OI interface
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌉 BRIDGE SERVER (OPTIONAL):
+
+    http://21.0.0.68:3142
+
+    Use this URL in the "Bridge Connection" panel to access SYSTEM/NETWORK
+    capabilities (file system, network requests, etc.)
+
+    Instructions:
+    1. Open the web interface above
+    2. Scroll to "Bridge Connection" section
+    3. Enter: http://21.0.0.68:3142
+    4. Click "Connect"
+    5. Try the "Bridge Actions" buttons
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 WHAT YOU CAN DO:
+
+✓ Test memory operations (store/recall)
+✓ Try LLM completions (with local fallback)
+✓ Execute system commands via bridge
+✓ View receipt hash chain
+✓ Register as a peer in the mesh
+✓ Explore the growth ladder stages
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔐 SECURITY:
+
+- Bridge authentication is DISABLED (development mode)
+- No API key required
+- Safe for local network testing
+- See BRIDGE.md for production security configuration
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 DOCUMENTATION:
+
+- Quick Start: QUICKSTART.md
+- Full Deployment Guide: DEPLOYMENT.md
+- Bridge Documentation: BRIDGE.md
+- Architecture: packages/mathison-quadratic/ARCHITECTURE.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚡ QUICK TEST:
+
+1. Click the main URL above
+2. Wait for page to load (green terminal interface)
+3. Click "Store Memory" button
+4. Click "Recall Memory" button
+5. See your stored data appear!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ℹ️  STATUS:
+
+✓ HTTP Server:   Running on port 8080
+✓ Bridge Server: Running on port 3142
+✓ OI Runtime:    Quadratic Monolith v0.2.0
+✓ Bridge:        v0.3.0 (Secure)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Need help? All documentation is included in the repository.
+
+Enjoy exploring the Quadratic OI runtime! 🧠
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

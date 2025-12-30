@@ -131,6 +131,7 @@ export class MathisonServer {
       this.stores = makeStoresFromEnv();
       await this.stores.checkpointStore.init();
       await this.stores.receiptStore.init();
+      await this.stores.graphStore.initialize();
       console.log('✓ Storage layer initialized');
 
       // Initialize ActionGate and JobExecutor
@@ -138,10 +139,10 @@ export class MathisonServer {
       this.jobExecutor = new JobExecutor(this.actionGate);
       console.log('✓ ActionGate and JobExecutor initialized');
 
-      // P4-A: Initialize MemoryGraph (read-only access)
-      this.memoryGraph = new MemoryGraph();
+      // P4-C: Initialize MemoryGraph with persistent storage
+      this.memoryGraph = new MemoryGraph(this.stores.graphStore);
       await this.memoryGraph.initialize();
-      console.log('✓ MemoryGraph initialized');
+      console.log('✓ MemoryGraph initialized with persistence');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot

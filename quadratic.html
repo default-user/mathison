@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mathison Quadratic — Distributed AI Runtime</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --secondary: #8b5cf6;
+      --accent: #06b6d4;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-tertiary: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.2);
+      --glass: rgba(30, 41, 59, 0.7);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background:
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 50%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 60px 20px 40px;
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    }
+
+    .logo {
+      display: inline-block;
+      width: 60px;
+      height: 60px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3); }
+      50% { transform: scale(1.05); box-shadow: 0 8px 30px rgba(99, 102, 241, 0.5); }
+    }
+
+    h1 {
+      font-size: 3em;
+      font-weight: 700;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6, #06b6d4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 10px;
+      letter-spacing: -1px;
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      color: var(--text-secondary);
+      font-weight: 400;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 30px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: glow 2s ease-in-out infinite;
+    }
+
+    @keyframes glow {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-label {
+      font-size: 0.9em;
+      color: var(--text-muted);
+      margin-right: 5px;
+    }
+
+    .status-value {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: 'SF Mono', monospace;
+      font-size: 0.95em;
+    }
+
+    /* Grid Layout */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 24px;
+      margin-bottom: 30px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.2);
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+
+    .card h2 {
+      font-size: 1.4em;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-primary);
+    }
+
+    .card-icon {
+      font-size: 1.3em;
+    }
+
+    /* Buttons */
+    button {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 0.95em;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+      font-family: 'Inter', sans-serif;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .btn-secondary {
+      background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #059669);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--warning), #d97706);
+    }
+
+    .btn-small {
+      padding: 8px 16px;
+      font-size: 0.85em;
+    }
+
+    /* Input Fields */
+    input[type="text"],
+    input[type="password"],
+    textarea {
+      width: 100%;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-family: 'SF Mono', monospace;
+      font-size: 0.95em;
+      transition: all 0.3s ease;
+      margin-bottom: 12px;
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.9em;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    /* Output Display */
+    .output {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+      font-family: 'SF Mono', monospace;
+      font-size: 0.85em;
+      color: var(--accent);
+      max-height: 300px;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+
+    .output::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .output::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+      border-radius: 4px;
+    }
+
+    .output::-webkit-scrollbar-thumb {
+      background: var(--primary);
+      border-radius: 4px;
+    }
+
+    .output-line {
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+
+    .output-line:last-child {
+      border-bottom: none;
+    }
+
+    .output-label {
+      color: var(--text-muted);
+      margin-right: 10px;
+    }
+
+    .output-value {
+      color: var(--success);
+    }
+
+    /* Bridge Connection Panel */
+    .bridge-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .bridge-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .bridge-indicator.connected {
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+
+    .bridge-details {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border-radius: 8px;
+      border-left: 3px solid var(--primary);
+    }
+
+    .bridge-details.visible {
+      display: block;
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-label {
+      color: var(--text-muted);
+      font-size: 0.9em;
+    }
+
+    .detail-value {
+      font-family: 'SF Mono', monospace;
+      font-size: 0.9em;
+      color: var(--accent);
+    }
+
+    /* Growth Ladder */
+    .ladder {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border-radius: 8px;
+    }
+
+    .ladder-stage {
+      flex: 1;
+      text-align: center;
+      padding: 12px 8px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      font-size: 0.75em;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .ladder-stage.active {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .ladder-stage::after {
+      content: '→';
+      position: absolute;
+      right: -12px;
+      color: var(--text-muted);
+    }
+
+    .ladder-stage:last-child::after {
+      content: '';
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 2em;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .status-bar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .ladder {
+        flex-wrap: wrap;
+      }
+
+      .ladder-stage {
+        font-size: 0.7em;
+      }
+    }
+
+    /* Loading Animation */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    /* Success/Error Messages */
+    .message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-top: 12px;
+      font-size: 0.9em;
+      display: none;
+    }
+
+    .message.visible {
+      display: block;
+    }
+
+    .message.success {
+      background: rgba(16, 185, 129, 0.1);
+      border-left: 3px solid var(--success);
+      color: var(--success);
+    }
+
+    .message.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-left: 3px solid var(--danger);
+      color: var(--danger);
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+      font-size: 0.9em;
+      margin-top: 60px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer a {
+      color: var(--primary);
+      text-decoration: none;
+      transition: color 0.3s ease;
+    }
+
+    .footer a:hover {
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">🧠</div>
+      <h1>Mathison Quadratic</h1>
+      <p class="subtitle">Distributed AI Runtime • Growth Ladder Architecture</p>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-item">
+        <div class="status-dot"></div>
+        <span class="status-label">OI ID:</span>
+        <span class="status-value" id="oi-id">Initializing...</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Stage:</span>
+        <span class="status-value" id="oi-stage">BROWSER</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Posture:</span>
+        <span class="status-value" id="oi-posture">MEDIUM</span>
+      </div>
+      <div class="status-item">
+        <span class="status-label">Receipts:</span>
+        <span class="status-value" id="receipt-count">0</span>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid">
+      <!-- OI Control Panel -->
+      <div class="card">
+        <h2><span class="card-icon">⚡</span>OI Control</h2>
+
+        <div class="button-group">
+          <button onclick="testMemory()">💾 Memory Test</button>
+          <button onclick="testLLM()">🤖 LLM Fallback</button>
+          <button onclick="getReceipts()" class="btn-secondary">📜 View Receipts</button>
+        </div>
+
+        <div class="output" id="control-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Ready for commands</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bridge Connection -->
+      <div class="card">
+        <h2><span class="card-icon">🌉</span>Bridge Connection</h2>
+
+        <div class="bridge-status">
+          <div class="bridge-indicator" id="bridge-indicator"></div>
+          <span id="bridge-status-text">Not Connected</span>
+        </div>
+
+        <label>Bridge URL</label>
+        <input type="text" id="bridge-url" value="http://localhost:3142" placeholder="http://localhost:3142">
+
+        <label>API Key (optional)</label>
+        <input type="password" id="bridge-api-key" placeholder="Leave blank for dev mode">
+
+        <div class="button-group">
+          <button onclick="connectBridge()">🔌 Connect</button>
+          <button onclick="disconnectBridge()" class="btn-secondary">🔌 Disconnect</button>
+        </div>
+
+        <div class="bridge-details" id="bridge-details">
+          <div class="detail-row">
+            <span class="detail-label">Bridge OI ID:</span>
+            <span class="detail-value" id="bridge-oi-id">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Stage:</span>
+            <span class="detail-value" id="bridge-stage">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Adapters:</span>
+            <span class="detail-value" id="bridge-adapters">—</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Peers:</span>
+            <span class="detail-value" id="bridge-peers">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bridge Actions -->
+      <div class="card">
+        <h2><span class="card-icon">🚀</span>Bridge Actions</h2>
+
+        <div class="button-group">
+          <button onclick="bridgeAction('system.exec', {cmd: 'date'})" class="btn-success">📅 System: Date</button>
+          <button onclick="bridgeAction('http.get', {url: 'https://api.github.com'})" class="btn-success">🌐 HTTP: GitHub API</button>
+          <button onclick="bridgeAction('llm.complete', {prompt: 'Hello!', max_tokens: 50})" class="btn-success">🤖 LLM: Complete</button>
+        </div>
+
+        <div class="output" id="bridge-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Connect to bridge to enable actions</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mesh Network -->
+      <div class="card">
+        <h2><span class="card-icon">🕸️</span>Mesh Network</h2>
+
+        <label>Peer OI ID</label>
+        <input type="text" id="peer-oi-id" placeholder="target-oi-id">
+
+        <label>Message</label>
+        <input type="text" id="mesh-message" placeholder="Hello from mesh!">
+
+        <div class="button-group">
+          <button onclick="registerPeer()">📡 Register as Peer</button>
+          <button onclick="sendMeshMessage()" class="btn-secondary">📨 Send Message</button>
+        </div>
+
+        <div class="output" id="mesh-output">
+          <div class="output-line">
+            <span class="output-label">→</span>
+            <span>Mesh networking ready</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Growth Ladder -->
+    <div class="card">
+      <h2><span class="card-icon">🪜</span>Growth Ladder</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 16px;">
+        Progress through capability stages as trust and verification increase
+      </p>
+      <div class="ladder">
+        <div class="ladder-stage">WINDOW</div>
+        <div class="ladder-stage active">BROWSER</div>
+        <div class="ladder-stage">SYSTEM</div>
+        <div class="ladder-stage">NETWORK</div>
+        <div class="ladder-stage">MESH</div>
+        <div class="ladder-stage">ORCHESTRA</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>Mathison Quadratic v0.2.0 • Open Source Distributed AI</p>
+      <p style="margin-top: 8px;">
+        <a href="https://github.com/default-user/mathison" target="_blank">Documentation</a> •
+        <a href="DEPLOYMENT.md">Deployment Guide</a> •
+        <a href="BRIDGE.md">Bridge Security</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Load the Quadratic OI Runtime -->
+  <script type="module">
+    import { QuadraticOI } from './quad.js';
+
+    // Initialize OI
+    const oi = new QuadraticOI();
+    window.oi = oi;
+
+    // Update status
+    document.getElementById('oi-id').textContent = oi.oi_id.slice(0, 20) + '...';
+    document.getElementById('oi-stage').textContent = oi.stage;
+    document.getElementById('oi-posture').textContent = oi.posture;
+
+    // Update receipt count periodically
+    setInterval(() => {
+      const receipts = oi.getLastReceipts(1);
+      document.getElementById('receipt-count').textContent = receipts.length > 0 ? receipts[0].receipt_id : '0';
+    }, 2000);
+
+    // Bridge connection state
+    let bridgeURL = '';
+    let bridgeAPIKey = '';
+    let bridgeConnected = false;
+
+    // Test Memory
+    window.testMemory = async () => {
+      const output = document.getElementById('control-output');
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Testing memory...</div>';
+
+      try {
+        const storeResult = await oi.processIntent({
+          intent_id: 'mem-test-' + Date.now(),
+          action: 'memory.store',
+          args: { key: 'test', value: 'Hello from Quadratic!' },
+        });
+
+        const recallResult = await oi.processIntent({
+          intent_id: 'mem-recall-' + Date.now(),
+          action: 'memory.recall',
+          args: { key: 'test' },
+        });
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Stored: ${storeResult.result}</div>
+          <div class="output-line"><span class="output-label">✓</span> Recalled: ${recallResult.result}</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Test LLM
+    window.testLLM = async () => {
+      const output = document.getElementById('control-output');
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Testing LLM...</div>';
+
+      try {
+        const result = await oi.processIntent({
+          intent_id: 'llm-test-' + Date.now(),
+          action: 'llm.complete',
+          args: { prompt: 'Say hello!', max_tokens: 20 },
+        });
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Response: ${result.result.fallback || result.result.text}</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Get Receipts
+    window.getReceipts = () => {
+      const output = document.getElementById('control-output');
+      const receipts = oi.getLastReceipts(5);
+
+      if (receipts.length === 0) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">ℹ</span> No receipts yet</div>';
+        return;
+      }
+
+      let html = '';
+      receipts.forEach(r => {
+        html += `
+          <div class="output-line">
+            <span class="output-label">#${r.receipt_id}</span>
+            ${r.intent_id} → ${r.outcome}
+          </div>
+        `;
+      });
+      output.innerHTML = html;
+    };
+
+    // Connect Bridge
+    window.connectBridge = async () => {
+      const urlInput = document.getElementById('bridge-url');
+      const apiKeyInput = document.getElementById('bridge-api-key');
+      const statusText = document.getElementById('bridge-status-text');
+      const indicator = document.getElementById('bridge-indicator');
+      const details = document.getElementById('bridge-details');
+
+      bridgeURL = urlInput.value.trim();
+      bridgeAPIKey = apiKeyInput.value.trim();
+
+      if (!bridgeURL) {
+        alert('Please enter a bridge URL');
+        return;
+      }
+
+      try {
+        statusText.textContent = 'Connecting...';
+        indicator.classList.remove('connected');
+
+        const response = await fetch(`${bridgeURL}/status`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const status = await response.json();
+
+        bridgeConnected = true;
+        statusText.textContent = '✓ Connected';
+        indicator.classList.add('connected');
+        details.classList.add('visible');
+
+        document.getElementById('bridge-oi-id').textContent = status.oi_id.slice(0, 20) + '...';
+        document.getElementById('bridge-stage').textContent = status.stage;
+        document.getElementById('bridge-adapters').textContent = status.adapters.join(', ');
+        document.getElementById('bridge-peers').textContent = status.peers_connected || '0';
+
+        await registerPeerSilent();
+      } catch (error) {
+        bridgeConnected = false;
+        statusText.textContent = `✗ Error: ${error.message}`;
+        indicator.classList.remove('connected');
+        details.classList.remove('visible');
+      }
+    };
+
+    // Disconnect Bridge
+    window.disconnectBridge = () => {
+      bridgeConnected = false;
+      bridgeURL = '';
+      bridgeAPIKey = '';
+
+      document.getElementById('bridge-status-text').textContent = 'Not Connected';
+      document.getElementById('bridge-indicator').classList.remove('connected');
+      document.getElementById('bridge-details').classList.remove('visible');
+    };
+
+    // Bridge Action
+    window.bridgeAction = async (action, args) => {
+      const output = document.getElementById('bridge-output');
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Not connected to bridge</div>';
+        return;
+      }
+
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Executing...</div>';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        const response = await fetch(`${bridgeURL}/dispatch`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action, args }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Action: ${action}</div>
+          <div class="output-line"><span class="output-label">→</span> ${JSON.stringify(result.result, null, 2)}</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Register Peer
+    window.registerPeer = async () => {
+      const output = document.getElementById('mesh-output');
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Connect to bridge first</div>';
+        return;
+      }
+
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Registering...</div>';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        const response = await fetch(`${bridgeURL}/peer/register`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            peer_oi_id: oi.oi_id,
+            endpoint: window.location.href,
+          }),
+        });
+
+        const result = await response.json();
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Registered as peer</div>
+          <div class="output-line"><span class="output-label">→</span> OI ID: ${oi.oi_id.slice(0, 30)}...</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    // Register Peer Silently
+    async function registerPeerSilent() {
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        await fetch(`${bridgeURL}/peer/register`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            peer_oi_id: oi.oi_id,
+            endpoint: window.location.href,
+          }),
+        });
+      } catch (error) {
+        console.error('Peer registration failed:', error);
+      }
+    }
+
+    // Send Mesh Message
+    window.sendMeshMessage = async () => {
+      const output = document.getElementById('mesh-output');
+      const peerOIID = document.getElementById('peer-oi-id').value.trim();
+      const message = document.getElementById('mesh-message').value.trim();
+
+      if (!bridgeConnected) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Connect to bridge first</div>';
+        return;
+      }
+
+      if (!peerOIID || !message) {
+        output.innerHTML = '<div class="output-line"><span class="output-label">✗</span> Enter peer OI ID and message</div>';
+        return;
+      }
+
+      output.innerHTML = '<div class="output-line"><span class="spinner"></span> Sending...</div>';
+
+      try {
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-OI-ID': oi.oi_id,
+        };
+        if (bridgeAPIKey) {
+          headers['X-API-Key'] = bridgeAPIKey;
+        }
+
+        const response = await fetch(`${bridgeURL}/mesh/send`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            to_oi: peerOIID,
+            message_type: 'request',
+            payload: { text: message },
+            taint_labels: [],
+          }),
+        });
+
+        const result = await response.json();
+
+        output.innerHTML = `
+          <div class="output-line"><span class="output-label">✓</span> Message sent</div>
+          <div class="output-line"><span class="output-label">→</span> Beam ID: ${result.beam_id.slice(0, 20)}...</div>
+        `;
+      } catch (error) {
+        output.innerHTML = `<div class="output-line"><span class="output-label">✗</span> Error: ${error.message}</div>`;
+      }
+    };
+
+    console.log('🧠 Quadratic OI initialized:', oi.oi_id);
+  </script>
+</body>
+</html>

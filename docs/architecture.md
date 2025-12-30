@@ -1,17 +1,20 @@
 # Mathison OI — System Architecture
 
-**Version:** 0.1.0
+**Version:** 1.0.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
 
-Mathison is a governance-first OI system with three core layers:
+Mathison is a governance-first distributed OI system with four core layers:
 
-1. **Governance Layer** (CDI + CIF)
-2. **Intelligence Layer** (OI Engine + Memory Graph)
-3. **Interface Layer** (Server + SDKs)
+1. **Governance Layer** (CDI + CIF) — Treaty-based constraints
+2. **Intelligence Layer** (OI Engine + Memory Graph) — Local interpretation and context
+3. **Mesh Layer** (ModelBus + MeshCoordinator) — Distributed LLM inference kernel with GitHub Models API
+4. **Interface Layer** (Server + SDKs + Quadratic Bridge) — API surface with browser and mobile support
 
 ## Architectural Diagram
+
+### Single Node (Personal OI)
 
 ```
 ┌───────────────────────────────────────────────────────────┐
@@ -44,24 +47,65 @@ Mathison is a governance-first OI system with three core layers:
            └───────────┬────────────────────┘
                        ▼
         ┌──────────────────────────────────┐
-        │      OI Engine (Interpretation)   │
-        │      ┌──────────────────────┐     │
-        │      │ Context Assembly     │     │
-        │      │ Confidence Scoring   │     │
-        │      │ Alternative Paths    │     │
-        │      └──────────────────────┘     │
+        │         Mesh Layer (Kernel)       │
+        │  ┌────────────────────────────┐   │
+        │  │  ModelBus                  │   │
+        │  │  - Inference routing       │   │
+        │  │  - Load balancing          │   │
+        │  │  - Ensemble synthesis      │   │
+        │  ├────────────────────────────┤   │
+        │  │  MeshCoordinator           │   │
+        │  │  - Mesh formation          │   │
+        │  │  - Node discovery          │   │
+        │  │  - Task distribution       │   │
+        │  └────────────────────────────┘   │
         └──────────────┬───────────────────┘
                        │
-                       ▼
-        ┌──────────────────────────────────┐
-        │    Memory Graph (Hypergraph)     │
-        │    ┌──────────────────────┐      │
-        │    │ Nodes (entities)     │      │
-        │    │ Edges (relations)    │      │
-        │    │ Hyperedges (n-ary)   │      │
-        │    │ Persistence layer    │      │
-        │    └──────────────────────┘      │
-        └─────────────────────────────────┘
+        ┌──────────────┴────────────────┐
+        ▼                                ▼
+┌──────────────────────┐     ┌──────────────────────┐
+│  OI Engine           │     │  Memory Graph        │
+│  ┌────────────────┐  │     │  ┌────────────────┐  │
+│  │ Local inference│  │     │  │ Nodes/Edges    │  │
+│  │ Intent detect  │  │     │  │ Hyperedges     │  │
+│  │ Context query  │  │     │  │ Persistence    │  │
+│  └────────────────┘  │     │  │ (FILE/SQLITE)  │  │
+└──────────────────────┘     │  └────────────────┘  │
+                             └──────────────────────┘
+```
+
+### Distributed Mesh (Room-Scale)
+
+```
+   ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
+   │  Node A     │       │  Node B     │       │  Node C     │
+   │  (Phone 1)  │◄─────►│  (Phone 2)  │◄─────►│  (Phone 3)  │
+   └──────┬──────┘       └──────┬──────┘       └──────┬──────┘
+          │                     │                     │
+          │    ModelBus mesh communication            │
+          │         (inference routing)               │
+          └─────────────────────┼─────────────────────┘
+                                │
+                    ┌───────────▼──────────┐
+                    │  Structural          │
+                    │  Generative          │
+                    │  Synthesis           │
+                    │                      │
+                    │  - Ensemble N models │
+                    │  - Compositional     │
+                    │  - Quality aggregate │
+                    └──────────────────────┘
+
+Each node runs:
+  - Personal OI (local memory + interpretation)
+  - ModelBus (inference routing kernel)
+  - MeshCoordinator (task distribution)
+  - Governance (CDI/CIF enforcement)
+
+Privacy-preserving:
+  - No raw memory sharing between nodes
+  - Encrypted inference requests
+  - Consent-based mesh participation
 ```
 
 ## Component Responsibilities
@@ -143,6 +187,65 @@ Evaluate constraints
 
 **Implementation:** `packages/mathison-memory/src/index.ts`
 
+### ModelBus (The Kernel)
+
+**Purpose:** Distributed LLM inference routing and structural generative synthesis
+
+**Core Functions:**
+1. **Model Registry** — Track available models (text, embedding, vision, multimodal)
+2. **Node-Model Mapping** — Which models are available on which nodes
+3. **Inference Routing** — Intelligent routing based on load, latency, quality
+4. **Ensemble Synthesis** — Compositional generation across multiple models
+5. **Load Balancing** — Distribute requests across available nodes
+
+**Routing Strategy:**
+- **Model preference** — Route to preferred model if available
+- **Fallback** — Degrade to alternative model if allowed
+- **Load-aware** — Prefer nodes with lower queue depth
+- **Latency-aware** — Route to lowest-latency node meeting requirements
+- **Diversity** — For ensemble, prefer different model types
+
+**Structural Synthesis:**
+```
+Ensemble Request (N=3)
+    ↓
+Select 3 diverse models across mesh
+    ↓
+┌─────────┬─────────┬─────────┐
+│ Model A │ Model B │ Model C │
+│ Node 1  │ Node 2  │ Node 3  │
+└─────────┴─────────┴─────────┘
+    │         │         │
+    └─────────┼─────────┘
+              ↓
+    Compositional Synthesis
+    - Merge outputs
+    - Quality aggregation
+    - Contributor tracking
+              ↓
+        Final Result
+```
+
+**Implementation:** `packages/mathison-mesh/src/model-bus.ts`
+
+### MeshCoordinator
+
+**Purpose:** Distributed task orchestration and mesh lifecycle
+
+**Core Functions:**
+1. **Mesh Formation** — Create computational mesh with privacy controls
+2. **Node Discovery** — Find nearby nodes (proximity, broadcast, manual)
+3. **Task Distribution** — Route generic tasks across mesh
+4. **Mesh Dissolution** — Clean teardown with no residual state
+
+**Privacy Controls:**
+- **Encryption requirement** — Enforce end-to-end encryption
+- **Node allowlist** — Restrict mesh to trusted nodes only
+- **Data sharing consent** — No raw memory sharing without explicit opt-in
+- **Anti-hive enforcement** — No identity fusion between nodes
+
+**Implementation:** `packages/mathison-mesh/src/index.ts`
+
 ## Data Flow Example
 
 ### Request: "Interpret this user message"
@@ -169,6 +272,57 @@ Evaluate constraints
 8. Server returns response to client
 ```
 
+### Distributed Inference: "Ensemble synthesis across mesh"
+
+```
+1. Client requests inference with ensemble synthesis
+   ↓
+2. Server receives request
+   ↓
+3. CIF/CDI governance checks
+   ↓
+4. ModelBus.synthesize(request, ensemble=3)
+   ↓
+5. Select 3 diverse models across mesh:
+   ┌────────────────┬────────────────┬────────────────┐
+   │ Node A         │ Node B         │ Node C         │
+   │ Model: GPT-4   │ Model: Claude  │ Model: Llama   │
+   │ Load: 20%      │ Load: 35%      │ Load: 10%      │
+   └────────────────┴────────────────┴────────────────┘
+   ↓
+6. Parallel inference execution:
+   ┌────────────────┬────────────────┬────────────────┐
+   │ Execute on A   │ Execute on B   │ Execute on C   │
+   │ Result A       │ Result B       │ Result C       │
+   │ Quality: 0.87  │ Quality: 0.91  │ Quality: 0.84  │
+   └────────────────┴────────────────┴────────────────┘
+   ↓
+7. Compositional Synthesis:
+   - Merge outputs structurally
+   - Aggregate quality: (0.87 + 0.91 + 0.84) / 3 = 0.87
+   - Track contributors: [Node A, Node B, Node C]
+   - Preserve diversity signals
+   ↓
+8. CDI.checkOutput(synthesized_result)
+   ↓
+9. CIF.egress() — final boundary check
+   ↓
+10. Return synthesized result with metadata:
+    {
+      output: <compositional_synthesis>,
+      quality: 0.87,
+      contributors: ["GPT-4", "Claude", "Llama"],
+      nodes: ["Node A", "Node B", "Node C"]
+    }
+```
+
+**Key Properties:**
+- Each node maintains local memory (no sharing)
+- Inference requests encrypted in transit
+- Quality-based result weighting
+- Contributor attribution preserved
+- Governance enforced at coordination node
+
 ## Governance Integration Points
 
 Every component respects treaty rules:
@@ -179,20 +333,63 @@ Every component respects treaty rules:
 | **CDI** | Core governance logic, fail-closed kernel |
 | **OI Engine** | Honest uncertainty, no false confidence |
 | **Memory** | Bounded persistence, no covert cross-instance sharing |
+| **ModelBus** | No hive mind, explicit routing consent, quality honesty |
+| **MeshCoordinator** | Privacy controls, node allowlisting, mesh consent |
 | **Server** | Consent tracking, immediate stop on request |
 
 ## Deployment Model
 
-### Phase 1 (Current): Monolithic
+### Single Node (Personal OI)
 
-Single server process orchestrating all components.
+**Current deployment:** One Mathison instance per device (phone, laptop, server)
 
-### Phase 2 (Future): Distributed
+**Components:**
+- Mathison Server (HTTP/gRPC)
+- Governance layer (CDI + CIF)
+- OI Engine (local inference)
+- Memory Graph (FILE or SQLITE persistence)
+- ModelBus (local models + mesh-ready)
+- MeshCoordinator (dormant until mesh formed)
 
-- CDI/CIF as shared governance service
-- Multiple OI Engine instances
-- Distributed memory graph
-- Message-passing only (anti-hive)
+**Use cases:**
+- Personal AI companion
+- Offline-capable intelligence
+- Private memory and context
+- Local-first architecture
+
+### Distributed Mesh (Room-Scale)
+
+**Deployment:** Multiple Mathison nodes forming computational mesh
+
+**Topology:**
+```
+Personal Node 1 ←→ Personal Node 2 ←→ Personal Node 3
+       ↓                   ↓                   ↓
+   ModelBus mesh communication (inference routing)
+       ↓                   ↓                   ↓
+       └───────────────────┴───────────────────┘
+                           ↓
+              Structural Generative Synthesis
+```
+
+**Components per node:**
+- Full Mathison stack (personal OI)
+- ModelBus (active mesh participation)
+- MeshCoordinator (mesh lifecycle management)
+- Local models (contribution to ensemble)
+
+**Privacy guarantees:**
+- No raw memory sharing between nodes
+- Encrypted inference requests
+- Consent-based mesh formation
+- Automatic dissolution (no persistent mesh state)
+- Anti-hive enforcement (no identity fusion)
+
+**Use cases:**
+- Conference room super-computing
+- Team collaboration with pooled resources
+- Emergency compute scaling
+- Privacy-preserving distributed inference
 
 ## Security Model
 

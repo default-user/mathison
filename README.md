@@ -1,15 +1,20 @@
 # Mathison OI — Governance-First Ongoing Intelligence
 
-**Version:** 0.1.0 (bootstrap phase)
+**Version:** 1.0.0
 **Governance:** Tiriti o te Kai v1.0
 
 ## Overview
 
 Mathison is a governance-first OI (Ongoing Intelligence) system built on treaty-based constraints. It combines:
 
-- **Graph/Hypergraph Memory** — Structured memory for contexts and relationships
-- **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement
-- **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress
+- **Quadratic Monolith (v0.2.0)** — Single-file OI runtime with two-plane architecture and growth ladder
+- **Quadratic Bridge (v0.3.0)** — Secure system-side relay for browser OIs with enterprise-grade security
+- **Graph/Hypergraph Memory** — Structured memory for contexts and relationships with persistent storage
+- **OI Engine** — Local interpretation engine with memory-graph integration
+- **Distributed Mesh Protocol** — Privacy-preserving distributed computation with BeamEnvelope messaging
+- **Mobile Personal OI** — On-device LLM inference and proximity mesh for Android/iOS
+- **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement with stage-based allowlists
+- **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress with receipt verification
 - **Treaty-Based Governance** — Human-first, consent-based, fail-closed operation
 
 ## Governance Root
@@ -50,16 +55,26 @@ See [docs/architecture.md](./docs/architecture.md) for details.
 ```
 mathison/
 ├── docs/
-│   ├── tiriti.md          # Governance treaty v1.0
-│   ├── architecture.md    # System architecture
-│   ├── cdi-spec.md        # CDI specification
-│   └── cif-spec.md        # CIF specification
+│   ├── tiriti.md                  # Governance treaty v1.0
+│   ├── architecture.md            # System architecture
+│   ├── cdi-spec.md                # CDI specification
+│   ├── cif-spec.md                # CIF specification
+│   ├── mobile-deployment.md       # Mobile deployment strategy
+│   └── react-native-app-guide.md  # React Native implementation guide
 ├── packages/
 │   ├── mathison-server/       # Main server orchestration
 │   ├── mathison-governance/   # CDI + treaty enforcement
 │   ├── mathison-memory/       # Graph/hypergraph memory
+│   ├── mathison-storage/      # Persistent storage (FILE/SQLITE)
 │   ├── mathison-oi/           # Interpretation engine
+│   ├── mathison-mesh/         # Distributed mesh protocol + ModelBus
+│   ├── mathison-mobile/       # Mobile components (React Native)
+│   ├── mathison-quadratic/    # Single-file OI runtime (v0.2.0)
 │   └── mathison-sdk-generator/ # Multi-language SDK generation
+├── quadratic-bridge.mjs       # Secure bridge server (v0.3.0)
+├── quadratic.html             # Browser bootstrap UI
+├── quad.js                    # Compiled browser bundle
+├── BRIDGE.md                  # Bridge documentation
 ├── sdks/
 │   ├── typescript/
 │   ├── python/
@@ -95,11 +110,21 @@ Required for server operation:
 - `MATHISON_STORE_BACKEND` — Storage backend: `FILE` or `SQLITE` (fail-closed if missing)
 - `MATHISON_STORE_PATH` — Base path for storage files (fail-closed if missing)
 
+Optional for LLM integration:
+
+- `GITHUB_TOKEN` — GitHub token for Models API (free tier: 15 req/min, 150 req/day)
+- `ANTHROPIC_API_KEY` — Anthropic API key (fallback if GitHub Models unavailable)
+
 Example:
 ```bash
 export MATHISON_STORE_BACKEND=FILE
 export MATHISON_STORE_PATH=./data
+export GITHUB_TOKEN=ghp_your_token_here  # For free LLM access
 ```
+
+**LLM Provider Priority:** GitHub Models → Anthropic → Local Fallback
+
+See [GITHUB_MODELS_SETUP.md](./GITHUB_MODELS_SETUP.md) for complete setup guide.
 
 ### Start Server
 
@@ -200,6 +225,72 @@ Expected `/health` response:
 - All writes require `idempotency_key` for safe retry behavior
 - Direct store mutation is structurally forbidden (all mutations via ActionGate)
 
+## Mobile Deployment
+
+Mathison includes mobile-first components for building personal OI companions on Android and iOS devices.
+
+### mathison-mobile Package
+
+React Native compatible package providing:
+
+- **MobileModelBus** — On-device LLM inference (Gemini Nano via Android AICore, llama.cpp fallback)
+- **MobileGraphStore** — Mobile persistence (AsyncStorage for key-value, SQLite for structured queries)
+- **MobileMeshCoordinator** — Proximity-based mesh formation using Android Nearby Connections API
+
+### Quick Start (React Native)
+
+```bash
+# Install mobile package
+npm install mathison-mobile
+
+# Install React Native dependencies
+npm install @react-native-async-storage/async-storage
+npm install react-native-sqlite-storage
+npm install react-native-nearby-connections
+```
+
+```typescript
+import { NativeModules } from 'react-native';
+import { MobileModelBus, MobileGraphStore } from 'mathison-mobile';
+import { MemoryGraph } from 'mathison-memory';
+import { OIEngine } from 'mathison-oi';
+
+// Initialize on-device inference
+const modelBus = new MobileModelBus(NativeModules);
+await modelBus.initialize();
+
+// Initialize mobile storage
+const graphStore = new MobileGraphStore('sqlite', NativeModules);
+await graphStore.initialize();
+
+// Create memory graph with mobile persistence
+const memoryGraph = new MemoryGraph(graphStore);
+await memoryGraph.initialize();
+
+// Create OI engine
+const oiEngine = new OIEngine({ memoryGraph });
+await oiEngine.initialize();
+
+// Chat with your personal OI
+const response = await modelBus.inference('Explain quantum computing', {
+  maxTokens: 512,
+  temperature: 0.7,
+});
+```
+
+### Documentation
+
+- **Architecture & Strategy:** [docs/mobile-deployment.md](./docs/mobile-deployment.md)
+- **React Native Implementation:** [docs/react-native-app-guide.md](./docs/react-native-app-guide.md)
+- **Mobile Package README:** [packages/mathison-mobile/README.md](./packages/mathison-mobile/README.md)
+
+### Privacy-First Mobile Design
+
+- **100% on-device inference** — No cloud dependencies (Gemini Nano or llama.cpp)
+- **Local-first storage** — All memory persisted on device
+- **Consent-based mesh** — Explicit user approval for proximity connections
+- **No identity fusion** — Each device maintains sovereign OI instance
+
 ## Governance Pipeline
 
 Every request passes through a mandatory governance pipeline (structurally enforced via Fastify hooks):
@@ -224,7 +315,34 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Memory Integration (v0.5.0)
+**Current Phase:** Production Ready (v1.0.0 — Stable Release)
+
+## Recent Major Features
+
+### Quadratic Monolith (v0.2.0)
+- Single-file OI runtime (1377 lines, zero dependencies)
+- Two-plane architecture: Meaning (governance) + Capability (execution)
+- Growth ladder: WINDOW → BROWSER → SYSTEM → NETWORK → MESH → ORCHESTRA
+- Receipt hash chain with tamper detection
+- LLM, Mesh, and Orchestra adapters
+- CLI: `pnpm quad:selftest`
+
+### Quadratic Bridge (v0.3.0 - Secure)
+- System-side HTTP relay for browser OIs
+- API key authentication with constant-time comparison
+- CORS origin allowlist (no wildcards)
+- Action allowlist with risk levels (LOW/MEDIUM/HIGH/CRITICAL)
+- Rate limiting: 100 req/min per client
+- Audit logging with structured JSON
+- System actions disabled by default
+- Start: `BRIDGE_API_KEY=$(openssl rand -hex 32) npx tsx quadratic-bridge.mjs`
+
+### Browser Bootstrap
+- Interactive HTML UI (`quadratic.html`)
+- Live OI status display
+- Bridge connection with API key support
+- Example actions for all stages
+- Open: `open quadratic.html`
 
 ### Completed
 
@@ -237,13 +355,19 @@ Following the treaty:
 - [x] **P3-C:** Minimal job API (run/status/resume) with E2E conformance tests
 - [x] **P4-A:** Read-only memory API (GET /memory/nodes, /memory/search) fully governed
 - [x] **P4-B:** Write memory API (POST /memory/nodes, POST /memory/edges) via ActionGate + idempotency
+- [x] **P4-C:** Memory graph persistence layer (FILE/SQLITE backends for nodes/edges/hyperedges)
+- [x] **P5:** OI engine core (interpretation with memory integration, intent detection, confidence scoring)
+- [x] **P6:** Distributed mesh protocol (MeshCoordinator, task distribution, privacy-preserving architecture)
+- [x] **P7-A:** Mobile package foundation (MobileModelBus, MobileGraphStore, MobileMeshCoordinator)
 
 ### Upcoming
 
-- [ ] **P4-C:** Memory graph persistence layer integration
-- [ ] **P5:** OI engine core (Ongoing Intelligence interpretation)
-- [ ] **P6:** gRPC APIs and streaming support
-- [ ] **P7:** SDK generation for TypeScript/Python/Rust
+- [ ] **P7-B:** React Native app implementation with native modules (Gemini Nano, llama.cpp)
+- [ ] **P7-C:** Google Play Store deployment ($365/year subscription)
+- [ ] **P8:** Mesh discovery protocols (proximity-based, broadcast, manual)
+- [ ] **P9:** End-to-end encryption for mesh communication
+- [ ] **P10:** SDK generation for TypeScript/Python/Rust
+- [ ] **P11:** gRPC APIs and streaming support
 
 ## License
 

@@ -4,9 +4,6 @@
 **Root Path:** `/home/user/mathison`
 **Status:** Branch ready for merge, push blocked by permissions
 
-> **Note:** This guide is stored on branch `claude/vision-distributed-ai-ups2n`.
-> The actual feature work to be merged is on `claude/vision-distributed-ai-XzjFP`.
-
 ---
 
 ## Current State
@@ -64,8 +61,6 @@ Return to repository settings and restore protection rules.
 ### Option B: Pull Request via Web UI
 
 #### 1. Access repository web interface
-
-**GitHub (recommended):** https://github.com/default-user/mathison/pull/new/claude/vision-distributed-ai-XzjFP
 
 **Local server:** `http://127.0.0.1:27908/`
 (Try appending `/default-user/mathison` or `/repos/default-user/mathison`)

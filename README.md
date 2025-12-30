@@ -10,6 +10,7 @@ Mathison is a governance-first OI (Ongoing Intelligence) system built on treaty-
 - **Graph/Hypergraph Memory** — Structured memory for contexts and relationships with persistent storage
 - **OI Engine** — Local interpretation engine with memory-graph integration
 - **Distributed Mesh Protocol** — Privacy-preserving distributed computation across nodes
+- **Mobile Personal OI** — On-device LLM inference and proximity mesh for Android/iOS
 - **CDI (Conscience Decision Interface)** — Kernel-level governance enforcement
 - **CIF (Context Integrity Firewall)** — Boundary control for safe ingress/egress
 - **Treaty-Based Governance** — Human-first, consent-based, fail-closed operation
@@ -52,10 +53,12 @@ See [docs/architecture.md](./docs/architecture.md) for details.
 ```
 mathison/
 ├── docs/
-│   ├── tiriti.md          # Governance treaty v1.0
-│   ├── architecture.md    # System architecture
-│   ├── cdi-spec.md        # CDI specification
-│   └── cif-spec.md        # CIF specification
+│   ├── tiriti.md                  # Governance treaty v1.0
+│   ├── architecture.md            # System architecture
+│   ├── cdi-spec.md                # CDI specification
+│   ├── cif-spec.md                # CIF specification
+│   ├── mobile-deployment.md       # Mobile deployment strategy
+│   └── react-native-app-guide.md  # React Native implementation guide
 ├── packages/
 │   ├── mathison-server/       # Main server orchestration
 │   ├── mathison-governance/   # CDI + treaty enforcement
@@ -63,6 +66,7 @@ mathison/
 │   ├── mathison-storage/      # Persistent storage (FILE/SQLITE)
 │   ├── mathison-oi/           # Interpretation engine
 │   ├── mathison-mesh/         # Distributed mesh protocol
+│   ├── mathison-mobile/       # Mobile components (React Native)
 │   └── mathison-sdk-generator/ # Multi-language SDK generation
 ├── sdks/
 │   ├── typescript/
@@ -204,6 +208,72 @@ Expected `/health` response:
 - All writes require `idempotency_key` for safe retry behavior
 - Direct store mutation is structurally forbidden (all mutations via ActionGate)
 
+## Mobile Deployment
+
+Mathison includes mobile-first components for building personal OI companions on Android and iOS devices.
+
+### mathison-mobile Package
+
+React Native compatible package providing:
+
+- **MobileModelBus** — On-device LLM inference (Gemini Nano via Android AICore, llama.cpp fallback)
+- **MobileGraphStore** — Mobile persistence (AsyncStorage for key-value, SQLite for structured queries)
+- **MobileMeshCoordinator** — Proximity-based mesh formation using Android Nearby Connections API
+
+### Quick Start (React Native)
+
+```bash
+# Install mobile package
+npm install mathison-mobile
+
+# Install React Native dependencies
+npm install @react-native-async-storage/async-storage
+npm install react-native-sqlite-storage
+npm install react-native-nearby-connections
+```
+
+```typescript
+import { NativeModules } from 'react-native';
+import { MobileModelBus, MobileGraphStore } from 'mathison-mobile';
+import { MemoryGraph } from 'mathison-memory';
+import { OIEngine } from 'mathison-oi';
+
+// Initialize on-device inference
+const modelBus = new MobileModelBus(NativeModules);
+await modelBus.initialize();
+
+// Initialize mobile storage
+const graphStore = new MobileGraphStore('sqlite', NativeModules);
+await graphStore.initialize();
+
+// Create memory graph with mobile persistence
+const memoryGraph = new MemoryGraph(graphStore);
+await memoryGraph.initialize();
+
+// Create OI engine
+const oiEngine = new OIEngine({ memoryGraph });
+await oiEngine.initialize();
+
+// Chat with your personal OI
+const response = await modelBus.inference('Explain quantum computing', {
+  maxTokens: 512,
+  temperature: 0.7,
+});
+```
+
+### Documentation
+
+- **Architecture & Strategy:** [docs/mobile-deployment.md](./docs/mobile-deployment.md)
+- **React Native Implementation:** [docs/react-native-app-guide.md](./docs/react-native-app-guide.md)
+- **Mobile Package README:** [packages/mathison-mobile/README.md](./packages/mathison-mobile/README.md)
+
+### Privacy-First Mobile Design
+
+- **100% on-device inference** — No cloud dependencies (Gemini Nano or llama.cpp)
+- **Local-first storage** — All memory persisted on device
+- **Consent-based mesh** — Explicit user approval for proximity connections
+- **No identity fusion** — Each device maintains sovereign OI instance
+
 ## Governance Pipeline
 
 Every request passes through a mandatory governance pipeline (structurally enforced via Fastify hooks):
@@ -228,7 +298,7 @@ Following the treaty:
 
 ## Status
 
-**Current Phase:** Distributed Systems (v0.6.0)
+**Current Phase:** Mobile Deployment (v0.7.0)
 
 ### Completed
 
@@ -244,10 +314,12 @@ Following the treaty:
 - [x] **P4-C:** Memory graph persistence layer (FILE/SQLITE backends for nodes/edges/hyperedges)
 - [x] **P5:** OI engine core (interpretation with memory integration, intent detection, confidence scoring)
 - [x] **P6:** Distributed mesh protocol (MeshCoordinator, task distribution, privacy-preserving architecture)
+- [x] **P7-A:** Mobile package foundation (MobileModelBus, MobileGraphStore, MobileMeshCoordinator)
 
 ### Upcoming
 
-- [ ] **P7:** Mobile deployment (React Native / Capacitor)
+- [ ] **P7-B:** React Native app implementation with native modules (Gemini Nano, llama.cpp)
+- [ ] **P7-C:** Google Play Store deployment ($365/year subscription)
 - [ ] **P8:** Mesh discovery protocols (proximity-based, broadcast, manual)
 - [ ] **P9:** End-to-end encryption for mesh communication
 - [ ] **P10:** SDK generation for TypeScript/Python/Rust

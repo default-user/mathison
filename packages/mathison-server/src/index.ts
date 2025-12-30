@@ -7,6 +7,7 @@ import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
+import { MemoryGraph } from 'mathison-memory';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 
@@ -26,6 +27,7 @@ export class MathisonServer {
   private stores: Stores | null = null;
   private actionGate: ActionGate | null = null;
   private jobExecutor: JobExecutor | null = null;
+  private memoryGraph: MemoryGraph | null = null;
   private config: Required<MathisonServerConfig>;
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
   private bootError: string | null = null;
@@ -92,6 +94,9 @@ export class MathisonServer {
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
     await this.app.close();
+    if (this.memoryGraph) {
+      await this.memoryGraph.shutdown();
+    }
     await this.cif.shutdown();
     await this.cdi.shutdown();
     await this.governance.shutdown();
@@ -129,6 +134,11 @@ export class MathisonServer {
       this.actionGate = new ActionGate(this.cdi, this.cif, this.stores);
       this.jobExecutor = new JobExecutor(this.actionGate);
       console.log('✓ ActionGate and JobExecutor initialized');
+
+      // P4-A: Initialize MemoryGraph (read-only access)
+      this.memoryGraph = new MemoryGraph();
+      await this.memoryGraph.initialize();
+      console.log('✓ MemoryGraph initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -253,6 +263,9 @@ export class MathisonServer {
         },
         storage: {
           initialized: this.stores !== null
+        },
+        memory: {
+          initialized: this.memoryGraph !== null
         }
       };
     });
@@ -340,6 +353,99 @@ export class MathisonServer {
         job_id,
         count: receipts.length,
         receipts
+      };
+    });
+
+    // P4-A: GET /memory/nodes/:id - retrieve node by ID (read-only)
+    this.app.get('/memory/nodes/:id', async (request, reply) => {
+      (request as any).action = 'memory_read_node';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      const node = this.memoryGraph.getNode(id);
+      if (!node) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Node not found: ${id}`
+        });
+      }
+
+      return node;
+    });
+
+    // P4-A: GET /memory/nodes/:id/edges - retrieve edges for node (read-only)
+    this.app.get('/memory/nodes/:id/edges', async (request, reply) => {
+      (request as any).action = 'memory_read_edges';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Check if node exists first
+      const node = this.memoryGraph.getNode(id);
+      if (!node) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Node not found: ${id}`
+        });
+      }
+
+      const edges = this.memoryGraph.getNodeEdges(id);
+      return {
+        node_id: id,
+        count: edges.length,
+        edges
+      };
+    });
+
+    // P4-A: GET /memory/search - search nodes (read-only)
+    this.app.get('/memory/search', async (request, reply) => {
+      (request as any).action = 'memory_search';
+      const { q, limit } = request.query as { q?: string; limit?: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Validate query parameter
+      if (!q || q.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty query parameter "q"'
+        });
+      }
+
+      // Validate limit parameter
+      let parsedLimit = 10;
+      if (limit) {
+        parsedLimit = parseInt(limit, 10);
+        if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+          return reply.code(400).send({
+            reason_code: 'MALFORMED_REQUEST',
+            message: 'Invalid limit parameter (must be between 1 and 100)'
+          });
+        }
+      }
+
+      const results = this.memoryGraph.search(q, parsedLimit);
+      return {
+        query: q,
+        limit: parsedLimit,
+        count: results.length,
+        results
       };
     });
 

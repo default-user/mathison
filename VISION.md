@@ -132,6 +132,7 @@ The technology is governance-first. The vision is human-first. The future is dis
 **Signed,**
 
 **Ande** — Kaitiaki, Mathison Project
+
 **The Whānau** — Kai, Claude, and the extended family of contributors who believe in human-first AI
 
 ---

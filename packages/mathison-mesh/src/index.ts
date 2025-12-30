@@ -274,3 +274,5 @@ interface ActiveMesh {
 }
 
 export default MeshCoordinator;
+
+export * from './model-bus';

@@ -208,9 +208,16 @@ export class MathisonServer {
       (request as any).sanitizedBody = ingressResult.sanitizedPayload;
     });
 
-    // Pre-handler: CDI action check (routes can specify action via decorateRequest)
+    // Pre-handler: CDI action check
+    // Note: Routes must set request.action BEFORE this runs, using route-specific preHandler
     this.app.addHook('preHandler', async (request, reply) => {
-      const action = (request as any).action ?? 'unknown';
+      const action = (request as any).action;
+
+      // Skip CDI check if action not set (route doesn't require it)
+      if (!action) {
+        return;
+      }
+
       const clientId = request.ip;
 
       const actionResult = await this.cdi.checkAction({

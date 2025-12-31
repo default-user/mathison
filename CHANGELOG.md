@@ -11,13 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### mathison-memory (1.0.0 → 1.0.1)
+#### mathison-memory (1.0.0 → 1.1.0)
 - **Graph traversal algorithms**: BFS and DFS with configurable max depth
 - **Shortest path algorithm**: Dijkstra's algorithm for finding optimal paths
 - **Path finding**: `findPaths()` method with backtracking for multiple path discovery
 - **Query DSL**: Filter nodes by type and data properties
 - **Graph visualization**: DOT format export for Graphviz rendering
 - **Graph analytics**: `getStats()` method for node/edge/hyperedge statistics
+- **Hypergraph operations suite** (5 phases):
+  - **Phase 1 - Incidence queries**: `getNodeHyperedges()`, `getHypergraphNeighbors()` for basic hypergraph navigation
+  - **Phase 2 - Pattern matching**: `findHyperedgesContainingAll/Any()`, `findHyperedgesBySize()` for hyperedge set queries
+  - **Phase 3 - Hypergraph traversal**: `hypergraphBFS()`, `hypergraphDFS()` for traversing through hyperedges
+  - **Phase 4 - Clustering & analysis**: `findHypergraphClusters()` (Jaccard similarity), `getHypergraphDegree()`, `getHypergraphCentralNodes()`, `getHypergraphBetweennessCentrality()`
+  - **Phase 5 - Graph projection**: `projectToGraph()`, `findMaximalCliques()`, `getHypergraphDensity()`, `findStronglyConnectedComponents()`
 
 #### mathison-kernel-mac (1.0.0 → 1.1.0)
 - **Chat history persistence**: In-memory chat history with JSON file persistence
@@ -52,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Resolved P2 TODOs for data correctness (graph operations)
 - Resolved P4 TODOs for UX/DevEx improvements (SDK implementations, chat history)
+- Resolved P5 TODOs for advanced features (hypergraph operations suite)
 
 ### Security
 - No security-related changes (P0 TODOs: none found requiring immediate action)

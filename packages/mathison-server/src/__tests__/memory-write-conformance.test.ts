@@ -12,11 +12,69 @@ import * as os from 'os';
 describe('Phase 4-B: Memory Write API Conformance', () => {
   let tempDir: string;
   const originalEnv = { ...process.env };
+  const testGenomePath = path.join(os.tmpdir(), 'mathison-test-genome-memory-write-conformance.json');
+
+  beforeAll(() => {
+    // Create test genome file in /tmp
+    // Using absolute path in /tmp to avoid __dirname issues with ts-jest
+
+    const testGenome = {
+      schema_version: 'genome.v0.1',
+      name: 'TEST_FIXTURE_GENOME',
+      version: '1.0.0',
+      parents: [],
+      created_at: '2025-12-31T00:00:00Z',
+      authority: {
+        signers: [{
+          key_id: 'test-fixture-key',
+          alg: 'ed25519',
+          public_key: 'MCowBQYDK2VwAyEAiENVzPT23crQdta+l7RPa+wy5LW8GraUMcP/sAL3mow='
+        }],
+        threshold: 1
+      },
+      invariants: [{
+        id: 'INV-TEST',
+        severity: 'CRITICAL',
+        testable_claim: 'test invariant',
+        enforcement_hook: 'test.hook'
+      }],
+      capabilities: [{
+        cap_id: 'CAP-ALL-ACTIONS',
+        risk_class: 'A',
+        allow_actions: [
+          'health_check', 'genome_read', 'memory_read_node', 'memory_read_edges',
+          'memory_search', 'memory_create_node', 'memory_create_edge',
+          'MEMORY_NODE_CREATE', 'MEMORY_EDGE_CREATE', 'job_run', 'job_status',
+          'job_resume', 'receipts_read', 'create_checkpoint', 'save_checkpoint',
+          'append_receipt'
+        ],
+        deny_actions: []
+      }],
+      build_manifest: { files: [] },
+      signature: {
+        alg: 'ed25519',
+        signer_key_id: 'test-fixture-key',
+        sig_base64: 'A0YA7htgOfRgA2iMrMeditA/humff1XbzrgtYPfBn4HyX6/hXuJyZABEiwXTA3Xzl0f6g2LfpV4mj+o3ttELCw=='
+      }
+    };
+
+    fs.writeFileSync(testGenomePath, JSON.stringify(testGenome));
+  });
+
+  afterAll(() => {
+    // Cleanup test genome
+    if (fs.existsSync(testGenomePath)) {
+      fs.unlinkSync(testGenomePath);
+    }
+  });
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mathison-memory-write-test-'));
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = tempDir;
+
+    // Set genome path to test fixture (required for boot)
+    process.env.MATHISON_GENOME_PATH = testGenomePath;
   });
 
   afterEach(() => {

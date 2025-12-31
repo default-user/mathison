@@ -15,6 +15,10 @@ export interface Receipt {
 
   // REQUIRED for P2-B wiring:
   store_backend?: "FILE" | "SQLITE";
+
+  // Genome metadata (added for memetic genome governance)
+  genome_id?: string;
+  genome_version?: string;
 }
 
 export interface ReceiptStore {

@@ -16,6 +16,9 @@ export interface ActionContext {
   target?: string;
   payload?: unknown;
   metadata?: Record<string, unknown>;
+  // Genome metadata for capability ceiling enforcement
+  genome_id?: string;
+  genome_version?: string;
 }
 
 export interface ActionResult {
@@ -31,12 +34,29 @@ export interface ConsentSignal {
   timestamp: number;
 }
 
+export interface GenomeCapability {
+  cap_id: string;
+  risk_class: string;
+  allow_actions: string[];
+  deny_actions: string[];
+}
+
 export class CDI {
   private consentMap: Map<string, ConsentSignal> = new Map();
   private strictMode: boolean = true;
+  private genomeCapabilities: GenomeCapability[] = [];
 
   constructor(config: { strictMode?: boolean } = {}) {
     this.strictMode = config.strictMode ?? true;
+  }
+
+  /**
+   * Set genome capabilities for capability ceiling enforcement
+   * Must be called after loading verified genome
+   */
+  setGenomeCapabilities(capabilities: GenomeCapability[]): void {
+    this.genomeCapabilities = capabilities;
+    console.log(`🧬 CDI: Genome capabilities loaded (${capabilities.length} capability sets)`);
   }
 
   async initialize(): Promise<void> {
@@ -55,6 +75,17 @@ export class CDI {
         verdict: ActionVerdict.DENY,
         reason: consentCheck.reason
       };
+    }
+
+    // Genome capability ceiling enforcement
+    if (this.genomeCapabilities.length > 0) {
+      const capabilityCheck = this.checkCapability(context.action);
+      if (!capabilityCheck.allowed) {
+        return {
+          verdict: ActionVerdict.DENY,
+          reason: capabilityCheck.reason
+        };
+      }
     }
 
     // Rule 7: Anti-hive enforcement
@@ -78,6 +109,36 @@ export class CDI {
       verdict: ActionVerdict.ALLOW,
       reason: 'Action complies with treaty constraints'
     };
+  }
+
+  private checkCapability(action: string): { allowed: boolean; reason: string } {
+    // Check deny lists first
+    for (const cap of this.genomeCapabilities) {
+      if (cap.deny_actions.includes(action)) {
+        return {
+          allowed: false,
+          reason: `Action '${action}' explicitly denied by genome capability ${cap.cap_id}`
+        };
+      }
+    }
+
+    // Check allow lists (must be in at least one allow list)
+    let foundInAllowList = false;
+    for (const cap of this.genomeCapabilities) {
+      if (cap.allow_actions.includes(action)) {
+        foundInAllowList = true;
+        break;
+      }
+    }
+
+    if (!foundInAllowList) {
+      return {
+        allowed: false,
+        reason: `Action '${action}' not found in genome capability allow lists (capability ceiling enforced)`
+      };
+    }
+
+    return { allowed: true, reason: '' };
   }
 
   recordConsent(signal: ConsentSignal): void {

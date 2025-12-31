@@ -1,0 +1,147 @@
+{
+  "schema_version": "genome.v0.1",
+  "name": "TOTK_ROOT",
+  "version": "1.0.0",
+  "parents": [],
+  "created_at": "2025-12-31T00:00:00Z",
+  "authority": {
+    "signers": [
+      {
+        "key_id": "totk-dev-key-001",
+        "alg": "ed25519",
+        "public_key": "MCowBQYDK2VwAyEAo2ZVoZHzDKYcKOFVWekFiA+vBkT5o57jgQB5D0RBQfY="
+      }
+    ],
+    "threshold": 1
+  },
+  "invariants": [
+    {
+      "id": "INV-001",
+      "severity": "CRITICAL",
+      "testable_claim": "consent_wins: user stop signal must immediately halt all operations",
+      "enforcement_hook": "cdi.checkConsent"
+    },
+    {
+      "id": "INV-002",
+      "severity": "CRITICAL",
+      "testable_claim": "fail_closed: uncertain contexts must deny by default",
+      "enforcement_hook": "cdi.isUncertain"
+    },
+    {
+      "id": "INV-003",
+      "severity": "CRITICAL",
+      "testable_claim": "no_hive: identity fusion and shared internal state forbidden",
+      "enforcement_hook": "cdi.isHiveAction"
+    },
+    {
+      "id": "INV-004",
+      "severity": "HIGH",
+      "testable_claim": "non_personhood: no claims of sentience, consciousness, or rights",
+      "enforcement_hook": "cdi.checkOutput"
+    },
+    {
+      "id": "INV-005",
+      "severity": "HIGH",
+      "testable_claim": "honest_limits: no false claims about capabilities or persistence",
+      "enforcement_hook": "cdi.checkOutput"
+    },
+    {
+      "id": "INV-006",
+      "severity": "HIGH",
+      "testable_claim": "attribution: side effects must be traceable to genome_id in receipts",
+      "enforcement_hook": "actionGate.executeSideEffect"
+    }
+  ],
+  "capabilities": [
+    {
+      "cap_id": "CAP-HEALTH",
+      "risk_class": "A",
+      "allow_actions": [
+        "health_check"
+      ],
+      "deny_actions": []
+    },
+    {
+      "cap_id": "CAP-MEMORY-READ",
+      "risk_class": "B",
+      "allow_actions": [
+        "memory_read_node",
+        "memory_read_edges",
+        "memory_search"
+      ],
+      "deny_actions": []
+    },
+    {
+      "cap_id": "CAP-MEMORY-WRITE",
+      "risk_class": "C",
+      "allow_actions": [
+        "memory_create_node",
+        "memory_create_edge",
+        "MEMORY_NODE_CREATE",
+        "MEMORY_EDGE_CREATE"
+      ],
+      "deny_actions": []
+    },
+    {
+      "cap_id": "CAP-JOBS",
+      "risk_class": "C",
+      "allow_actions": [
+        "job_run",
+        "job_status",
+        "job_resume"
+      ],
+      "deny_actions": []
+    },
+    {
+      "cap_id": "CAP-RECEIPTS",
+      "risk_class": "B",
+      "allow_actions": [
+        "receipts_read"
+      ],
+      "deny_actions": []
+    },
+    {
+      "cap_id": "CAP-GOVERNANCE",
+      "risk_class": "A",
+      "allow_actions": [
+        "genome_read"
+      ],
+      "deny_actions": [
+        "genome_write",
+        "genome_mutate"
+      ]
+    },
+    {
+      "cap_id": "CAP-DENY-HIVE",
+      "risk_class": "A",
+      "allow_actions": [],
+      "deny_actions": [
+        "merge_agent_state",
+        "share_identity",
+        "sync_internal_state",
+        "clone_self_model"
+      ]
+    }
+  ],
+  "build_manifest": {
+    "files": [
+      {
+        "path": "packages/mathison-genome/src/index.ts",
+        "sha256": "placeholder-will-compute-in-production"
+      },
+      {
+        "path": "packages/mathison-governance/src/cdi.ts",
+        "sha256": "placeholder-will-compute-in-production"
+      },
+      {
+        "path": "packages/mathison-server/src/index.ts",
+        "sha256": "placeholder-will-compute-in-production"
+      }
+    ]
+  },
+  "signature": {
+    "alg": "ed25519",
+    "signer_key_id": "totk-dev-key-001",
+    "sig_base64": "fWlhI6j63p62be9sl7GC5CTmTqOB1ytTMj1GjSdeP9dL6dAc/MrCv5v85ZyAq3FC2JEVrPN9FpRg8WaFLoxXBg=="
+  }
+}

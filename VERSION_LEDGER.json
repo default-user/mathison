@@ -1,0 +1,66 @@
+{
+  "policy": "patch-only",
+  "notes": "Track patch bumps internally during work; apply all at end; single final commit.",
+  "root": {
+    "current": "1.0.0",
+    "patch_bumps": 1
+  },
+  "packages": {
+    "packages/mathison-genome": {
+      "current": "0.0.0",
+      "patch_bumps": 1
+    },
+    "packages/mathison-governance": {
+      "current": "1.0.0",
+      "patch_bumps": 1
+    },
+    "packages/mathison-server": {
+      "current": "1.0.0",
+      "patch_bumps": 1
+    },
+    "packages/mathison-storage": {
+      "current": "1.0.0",
+      "patch_bumps": 1
+    }
+  },
+  "events": [
+    {
+      "when": "2025-12-31T00:00:00Z",
+      "scope": "packages/mathison-genome",
+      "reason": "created new package with genome types, validation, canonicalization, and loader",
+      "bump": 1
+    },
+    {
+      "when": "2025-12-31T00:01:00Z",
+      "scope": "root",
+      "reason": "added genomes/ directory, scripts/genome-sign.ts, scripts/genome-keygen.ts",
+      "bump": 1
+    },
+    {
+      "when": "2025-12-31T00:02:00Z",
+      "scope": "packages/mathison-governance",
+      "reason": "added GenomeCapability interface, setGenomeCapabilities method, checkCapability enforcement in CDI",
+      "bump": 1
+    },
+    {
+      "when": "2025-12-31T00:03:00Z",
+      "scope": "packages/mathison-server",
+      "reason": "integrated genome loading at boot (fail-closed), added GET /genome endpoint, updated health endpoint",
+      "bump": 1
+    },
+    {
+      "when": "2025-12-31T00:04:00Z",
+      "scope": "packages/mathison-storage",
+      "reason": "added genome_id and genome_version fields to Receipt interface",
+      "bump": 1
+    }
+  ],
+  "applied_versions": {
+    "applied_at": "2025-12-31T00:05:00Z",
+    "root": "1.0.1",
+    "packages/mathison-genome": "0.0.1",
+    "packages/mathison-governance": "1.0.1",
+    "packages/mathison-server": "1.0.1",
+    "packages/mathison-storage": "1.0.1"
+  }
+}

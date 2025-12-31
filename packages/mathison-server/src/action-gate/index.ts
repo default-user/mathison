@@ -12,6 +12,9 @@ export interface ActionGateContext {
   action: string;
   payload?: unknown;
   metadata?: Record<string, unknown>;
+  // Genome metadata for capability enforcement and receipt attribution
+  genome_id?: string;
+  genome_version?: string;
 }
 
 export interface SideEffectResult {
@@ -75,7 +78,7 @@ export class ActionGate {
       };
     }
 
-    // 3. Record receipt
+    // 3. Record receipt (include genome metadata for auditability)
     const receipt: Receipt = {
       timestamp: new Date().toISOString(),
       job_id: context.metadata?.job_id as string ?? 'system',
@@ -84,6 +87,8 @@ export class ActionGate {
       decision: 'ALLOW',
       policy_id: context.metadata?.policy_id as string ?? 'default',
       store_backend: process.env.MATHISON_STORE_BACKEND as 'FILE' | 'SQLITE',
+      genome_id: context.genome_id,
+      genome_version: context.genome_version,
       notes: `ActionGate: ${context.action}`
     };
 

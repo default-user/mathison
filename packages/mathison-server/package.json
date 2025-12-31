@@ -1,15 +1,16 @@
 {
   "name": "mathison-server",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node copy-test-fixtures.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "test": "jest"
   },
   "dependencies": {
+    "mathison-genome": "workspace:*",
     "mathison-memory": "workspace:*",
     "mathison-oi": "workspace:*",
     "mathison-governance": "workspace:*",

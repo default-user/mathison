@@ -51,7 +51,8 @@ export interface Genome {
   invariants: GenomeInvariant[];
   capabilities: GenomeCapability[];
   build_manifest: GenomeBuildManifest;
-  signature?: GenomeSignature;
+  signature?: GenomeSignature; // legacy single signature
+  signatures?: GenomeSignature[]; // multi-signature support
 }
 
 export interface GenomeMetadata {

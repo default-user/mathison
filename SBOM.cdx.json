@@ -1,0 +1,30 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:2777947f-4bd1-4bce-a3b3-0c05c7d61bb9",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-12-31T22:19:41.322Z",
+    "tools": [
+      {
+        "vendor": "Mathison",
+        "name": "generate-sbom.mjs",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "name": "mathison-monorepo",
+      "version": "1.0.1",
+      "description": "Mathison: OI + graph/hypergraph memory with multi-language SDKs"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "@cyclonedx/cyclonedx-npm",
+      "version": "4.1.2",
+      "purl": "pkg:npm/@cyclonedx/cyclonedx-npm@4.1.2"
+    }
+  ]
+}

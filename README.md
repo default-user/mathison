@@ -28,6 +28,50 @@ All system behavior flows from **Tiriti o te Kai** ([docs/tiriti.md](./docs/tiri
 5. **No hive mind** — No identity fusion between OI instances
 6. **Honest limits** — No false claims about capabilities
 
+## Buyer Quick Eval
+
+**Status:** Prototype / Early Stage — Not production-ready without additional hardening.
+
+**Quick Start:**
+```bash
+pnpm install && pnpm demo
+```
+
+**What you get:**
+- Deterministic demo proving governance pipeline works (CIF→CDI→ActionGate→CIF)
+- Memory operations with receipts tracing back to signed governance root (Ed25519)
+- Idempotency enforcement for safe retries
+- Full test suite passing
+
+**Trust Boundaries:**
+- All requests pass through mandatory governance hooks (structurally enforced, cannot bypass)
+- All write operations generate signed receipts with genome traceability
+- Server fails-closed on missing/invalid genome (signature verification on boot)
+
+**Where Governance Lives:**
+- Treaty: `docs/tiriti.md` (human-readable governance rules)
+- Root: `genomes/TOTK_ROOT_v1.0.0/genome.json` (cryptographically signed with Ed25519)
+- Enforcement: `packages/mathison-governance/` (CDI + CIF + ActionGate implementation)
+- Verification: See `GOVERNANCE_CLAIMS.md` for strict implementation status table
+
+**Buyer Trust Pack:**
+- `LICENSE` — Apache-2.0 (full text)
+- `PROVENANCE.md` — Chain-of-title, AI disclosure, dependency verification
+- `CONTRIBUTOR_CERTIFICATE.md` — Attestation template for contributors
+- `SECURITY.md` — Vulnerability reporting + security-critical components
+- `THREAT_MODEL.md` — Assets, trust boundaries, mitigations (honest about gaps)
+- `ARCHITECTURE.md` — Monorepo map + governance pipeline diagrams
+- `GOVERNANCE_CLAIMS.md` — Truth table (only marks implemented if code + tests exist)
+- `DEMO.md` — 2-minute quickstart with troubleshooting
+- `SBOM.cdx.json` — Software Bill of Materials (CycloneDX format)
+
+**What this is NOT:**
+- Not a chat interface (it's a governance-first OI substrate)
+- Not production-ready (test genome keys in repo, no rate limiting, single-process only)
+- Not feature-complete (see README for roadmap)
+
+**For full evaluation:** See `DEMO.md` for step-by-step walkthrough.
+
 ## Architecture
 
 ```

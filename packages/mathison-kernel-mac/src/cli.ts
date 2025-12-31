@@ -9,6 +9,7 @@ import { buildLlamaCpp, isLlamaCppBuilt } from './llama';
 import { ensureDirs, loadConfig, saveConfig } from './config';
 import { SQLiteBeamStore, BeamQuery } from 'mathison-storage';
 import { BEAMSTORE_PATH } from './config';
+import { startServer } from './server';
 
 const program = new Command();
 
@@ -51,6 +52,48 @@ program
 
       // Start REPL
       await startKernelRepl(state);
+    } catch (e: any) {
+      console.error(chalk.red(`[ERROR] ${e.message}`));
+      process.exit(1);
+    }
+  });
+
+// mathison serve
+program
+  .command('serve')
+  .description('Start HTTP server with WebSocket for browser UI')
+  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('-h, --host <host>', 'Host to bind to', '0.0.0.0')
+  .option('--cors <origin>', 'CORS origin', '*')
+  .action(async (options) => {
+    try {
+      ensureDirs();
+
+      // Ensure llama.cpp is built
+      if (!isLlamaCppBuilt()) {
+        console.log(chalk.yellow('[SERVER] llama.cpp not built yet'));
+        console.log(chalk.yellow('[SERVER] Building llama.cpp from source... (this may take a few minutes)'));
+        buildLlamaCpp();
+      }
+
+      // Start server
+      await startServer({
+        port: parseInt(options.port, 10),
+        host: options.host,
+        cors_origin: options.cors,
+      });
+
+      console.log('');
+      console.log(chalk.bold.green('Mathison Server Ready'));
+      console.log('');
+      console.log(chalk.gray(`  HTTP API:   http://${options.host}:${options.port}`));
+      console.log(chalk.gray(`  WebSocket:  ws://${options.host}:${options.port}`));
+      console.log(chalk.gray(`  UI:         http://localhost:${options.port}`));
+      console.log('');
+      console.log(chalk.gray('Press Ctrl+C to stop'));
+
+      // Keep process alive
+      await new Promise(() => {});
     } catch (e: any) {
       console.error(chalk.red(`[ERROR] ${e.message}`));
       process.exit(1);

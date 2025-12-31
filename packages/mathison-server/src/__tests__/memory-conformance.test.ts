@@ -20,6 +20,9 @@ describe('Phase 4-A: Memory API Conformance', () => {
     // Set required env vars for FILE backend
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = tempDir;
+
+    // Set genome path to root genome (required for boot)
+    process.env.MATHISON_GENOME_PATH = path.join(__dirname, '../../../..', 'genomes/TOTK_ROOT_v1.0.0/genome.json');
   });
 
   afterEach(() => {

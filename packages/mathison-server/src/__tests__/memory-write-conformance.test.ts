@@ -17,6 +17,9 @@ describe('Phase 4-B: Memory Write API Conformance', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mathison-memory-write-test-'));
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = tempDir;
+
+    // Set genome path to root genome (required for boot)
+    process.env.MATHISON_GENOME_PATH = path.join(__dirname, '../../../..', 'genomes/TOTK_ROOT_v1.0.0/genome.json');
   });
 
   afterEach(() => {

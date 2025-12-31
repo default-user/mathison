@@ -8,6 +8,7 @@ import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
 import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
+import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
@@ -33,6 +34,9 @@ export class MathisonServer {
   private config: Required<MathisonServerConfig>;
   private bootStatus: 'booting' | 'ready' | 'failed' = 'booting';
   private bootError: string | null = null;
+  // Memetic Genome (loaded and verified at boot)
+  private genome: Genome | null = null;
+  private genomeId: string | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -110,13 +114,40 @@ export class MathisonServer {
     console.log('⚖️  Initializing governance layer (fail-closed)...');
 
     try {
+      // FIRST: Load and verify Memetic Genome (fail-closed)
+      await this.loadGenome();
+
       await this.governance.initialize();
       await this.cdi.initialize();
+
+      // Configure CDI with genome capabilities for capability ceiling enforcement
+      if (this.genome) {
+        this.cdi.setGenomeCapabilities(this.genome.capabilities);
+      }
+
       await this.cif.initialize();
       console.log('✓ Governance layer initialized');
     } catch (error) {
       console.error('❌ Governance initialization failed');
       throw new Error(`GOVERNANCE_INIT_FAILED: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async loadGenome(): Promise<void> {
+    const genomePath = process.env.MATHISON_GENOME_PATH || './genomes/TOTK_ROOT_v1.0.0/genome.json';
+    console.log(`🧬 Loading Memetic Genome: ${genomePath}`);
+
+    try {
+      const { genome, genome_id } = await loadAndVerifyGenome(genomePath);
+      this.genome = genome;
+      this.genomeId = genome_id;
+      console.log(`✓ Genome loaded and verified: ${genome.name} v${genome.version}`);
+      console.log(`  Genome ID: ${genome_id.substring(0, 16)}...`);
+      console.log(`  Invariants: ${genome.invariants.length}`);
+      console.log(`  Capabilities: ${genome.capabilities.length}`);
+    } catch (error) {
+      console.error('❌ Genome verification failed (FAIL-CLOSED)');
+      throw new Error(`GENOME_INVALID: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -256,6 +287,12 @@ export class MathisonServer {
             version: this.governance.getTreatyVersion(),
             authority: this.governance.getTreatyAuthority()
           },
+          genome: {
+            name: this.genome?.name,
+            version: this.genome?.version,
+            genome_id: this.genomeId?.substring(0, 16) + '...',
+            initialized: this.genome !== null
+          },
           cdi: {
             strictMode: this.config.cdiStrictMode,
             initialized: true
@@ -272,6 +309,45 @@ export class MathisonServer {
         memory: {
           initialized: this.memoryGraph !== null
         }
+      };
+    });
+
+    // GET /genome - read active genome metadata
+    this.app.get('/genome', async (request, reply) => {
+      (request as any).action = 'genome_read';
+
+      if (!this.genome || !this.genomeId) {
+        return reply.code(503).send({
+          reason_code: 'GENOME_MISSING',
+          message: 'Genome not loaded'
+        });
+      }
+
+      return {
+        genome_id: this.genomeId,
+        name: this.genome.name,
+        version: this.genome.version,
+        parents: this.genome.parents,
+        created_at: this.genome.created_at,
+        authority: {
+          threshold: this.genome.authority.threshold,
+          signers: this.genome.authority.signers.map(s => ({
+            key_id: s.key_id,
+            alg: s.alg
+            // Omit public_key from response for brevity
+          }))
+        },
+        invariants: this.genome.invariants.map(inv => ({
+          id: inv.id,
+          severity: inv.severity,
+          testable_claim: inv.testable_claim
+        })),
+        capabilities: this.genome.capabilities.map(cap => ({
+          cap_id: cap.cap_id,
+          risk_class: cap.risk_class,
+          allow_count: cap.allow_actions.length,
+          deny_count: cap.deny_actions.length
+        }))
       };
     });
 
@@ -546,7 +622,9 @@ export class MathisonServer {
             policy_id: 'default',
             idempotency_key: body.idempotency_key,
             request_hash: requestHash
-          }
+          },
+          genome_id: this.genomeId ?? undefined,
+          genome_version: this.genome?.version
         },
         async () => {
           this.memoryGraph!.addNode(node);
@@ -673,7 +751,9 @@ export class MathisonServer {
             policy_id: 'default',
             idempotency_key: body.idempotency_key,
             request_hash: requestHash
-          }
+          },
+          genome_id: this.genomeId ?? undefined,
+          genome_version: this.genome?.version
         },
         async () => {
           this.memoryGraph!.addEdge(edge);

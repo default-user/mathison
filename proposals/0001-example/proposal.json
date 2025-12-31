@@ -1,0 +1,26 @@
+{
+  "proposal_id": "PROP-0001",
+  "title": "Example Genome Mutation Proposal",
+  "status": "draft",
+  "created_at": "2025-12-31T00:00:00Z",
+  "from_genome_id": "placeholder-compute-from-TOTK_ROOT",
+  "to_genome_id": "placeholder-compute-from-proposed-genome",
+  "diff_summary": [
+    "Add new capability CAP-EXAMPLE for demonstration purposes",
+    "Update invariant INV-006 enforcement hook to include genome mutation tracking"
+  ],
+  "invariants_impacted": [
+    {
+      "invariant_id": "INV-006",
+      "impact": "enhanced",
+      "reason": "Mutation tracking will now include proposal_id in receipts"
+    }
+  ],
+  "required_tests": [
+    "test_genome_mutation_proposal_validation",
+    "test_from_genome_to_genome_lineage_trace",
+    "test_impacted_invariants_still_hold"
+  ],
+  "breaking_changes": false,
+  "backwards_compatible": true
+}

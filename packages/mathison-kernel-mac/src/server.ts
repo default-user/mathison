@@ -40,6 +40,9 @@ export class MathisonServer {
   private kernelState: KernelState | null = null;
   private activeStreams = new Map<string, { ws: WebSocket; buffer: string }>();
   private pendingApprovals = new Map<string, API.ApprovalRequestDTO>();
+  private chatHistory: API.ChatMessage[] = [];
+  private readonly CHAT_HISTORY_PATH = BEAMSTORE_PATH.replace('.db', '_chat_history.json');
+  private readonly MAX_HISTORY_SIZE = 1000;
 
   constructor(private config: ServerConfig) {
     this.app = express();
@@ -49,6 +52,7 @@ export class MathisonServer {
     this.setupMiddleware();
     this.setupRoutes();
     this.setupWebSocket();
+    this.loadChatHistory();
   }
 
   private setupMiddleware(): void {
@@ -164,6 +168,61 @@ export class MathisonServer {
     });
   }
 
+  /* ========== Chat History Persistence ========== */
+
+  private loadChatHistory(): void {
+    try {
+      const fs = require('fs');
+      if (fs.existsSync(this.CHAT_HISTORY_PATH)) {
+        const data = fs.readFileSync(this.CHAT_HISTORY_PATH, 'utf-8');
+        const parsed = JSON.parse(data);
+
+        // Validate each message
+        this.chatHistory = parsed.filter((msg: any) => {
+          const result = API.ChatMessageSchema.safeParse(msg);
+          return result.success;
+        });
+
+        console.log(`[CHAT] Loaded ${this.chatHistory.length} messages from history`);
+      }
+    } catch (e: any) {
+      console.error('[CHAT] Failed to load chat history:', e.message);
+      this.chatHistory = [];
+    }
+  }
+
+  private saveChatHistory(): void {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+
+      // Ensure directory exists
+      const dir = path.dirname(this.CHAT_HISTORY_PATH);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      // Keep only last MAX_HISTORY_SIZE messages
+      const toSave = this.chatHistory.slice(-this.MAX_HISTORY_SIZE);
+
+      fs.writeFileSync(this.CHAT_HISTORY_PATH, JSON.stringify(toSave, null, 2), 'utf-8');
+    } catch (e: any) {
+      console.error('[CHAT] Failed to save chat history:', e.message);
+    }
+  }
+
+  private addToChatHistory(message: API.ChatMessage): void {
+    this.chatHistory.push(message);
+
+    // Trim if exceeds max size
+    if (this.chatHistory.length > this.MAX_HISTORY_SIZE) {
+      this.chatHistory = this.chatHistory.slice(-this.MAX_HISTORY_SIZE);
+    }
+
+    // Persist to disk asynchronously
+    setImmediate(() => this.saveChatHistory());
+  }
+
   /* ========== HTTP Handlers ========== */
 
   private async handleGetStatus(req: Request, res: Response): Promise<void> {
@@ -244,6 +303,15 @@ export class MathisonServer {
       const messageId = crypto.randomUUID();
       const streamId = crypto.randomUUID();
 
+      // Add user message to chat history
+      const userMessage: API.ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: reqData.content,
+        timestamp: Date.now(),
+      };
+      this.addToChatHistory(userMessage);
+
       // Build system prompt
       const systemPrompt = this.buildSystemPrompt(this.kernelState);
       const fullPrompt = `${systemPrompt}\n\nUser: ${reqData.content}\n\nAssistant:`;
@@ -321,6 +389,9 @@ export class MathisonServer {
         message: assistantMessage,
       });
 
+      // Add assistant message to chat history
+      this.addToChatHistory(assistantMessage);
+
       res.json({
         message: assistantMessage,
         stream_id: streamId,
@@ -332,8 +403,27 @@ export class MathisonServer {
   }
 
   private async handleGetHistory(req: Request, res: Response): Promise<void> {
-    // TODO: Implement chat history persistence
-    res.json({ messages: [] });
+    try {
+      // Parse optional query parameters for pagination
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 100;
+      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+
+      // Return messages in reverse chronological order (newest first), with pagination
+      const messages = this.chatHistory
+        .slice()
+        .reverse()
+        .slice(offset, offset + limit);
+
+      res.json({
+        messages,
+        total: this.chatHistory.length,
+        limit,
+        offset,
+      });
+    } catch (e: any) {
+      console.error('[CHAT HISTORY ERROR]', e);
+      res.status(500).json({ error: e.message });
+    }
   }
 
   private async handleQueryBeams(req: Request, res: Response): Promise<void> {
@@ -556,14 +646,57 @@ export class MathisonServer {
 
   private async handleInstallModel(req: Request, res: Response): Promise<void> {
     try {
-      // TODO: Implement progress streaming via WebSocket
-      const modelPath = await installDefaultModel();
+      // Stream progress to all connected WebSocket clients
+      const onProgress = (downloaded: number, total: number) => {
+        const percent = total > 0 ? ((downloaded / total) * 100).toFixed(1) : '0.0';
+        const mb_downloaded = (downloaded / 1e6).toFixed(1);
+        const mb_total = (total / 1e6).toFixed(1);
+
+        const progressMessage = {
+          type: 'model_install_progress',
+          downloaded,
+          total,
+          percent: parseFloat(percent),
+          message: `Downloading: ${mb_downloaded}MB / ${mb_total}MB (${percent}%)`,
+        };
+
+        // Broadcast to all connected WebSocket clients
+        this.wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(progressMessage));
+          }
+        });
+      };
+
+      const modelPath = await installDefaultModel(onProgress);
       const cfg = loadConfig();
       cfg.model_path = modelPath;
       saveConfig(cfg);
 
+      // Send completion message via WebSocket
+      const completeMessage = {
+        type: 'model_install_complete',
+        path: modelPath,
+      };
+      this.wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(completeMessage));
+        }
+      });
+
       res.json({ path: modelPath });
     } catch (e: any) {
+      // Send error message via WebSocket
+      const errorMessage = {
+        type: 'model_install_error',
+        error: e.message,
+      };
+      this.wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(errorMessage));
+        }
+      });
+
       res.status(500).json({ error: e.message });
     }
   }

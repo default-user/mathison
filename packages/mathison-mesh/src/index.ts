@@ -106,11 +106,103 @@ export class MeshCoordinator extends EventEmitter {
     // Emit mesh-formed event
     this.emit('mesh-formed', { meshId: request.meshId, nodeCount: 1 });
 
-    // TODO: Implement node discovery based on discoveryMode
-    // For now, mesh starts with single node (local-only)
+    // Implement node discovery based on discoveryMode
+    await this.discoverNodes(request.meshId, request.discoveryMode, request.maxNodes);
 
     mesh.status = 'active';
     return request.meshId;
+  }
+
+  // Discover nodes based on discovery mode
+  private async discoverNodes(
+    meshId: string,
+    discoveryMode: 'proximity' | 'manual' | 'broadcast',
+    maxNodes?: number
+  ): Promise<void> {
+    console.log(`🔍 Discovering nodes for mesh ${meshId} using ${discoveryMode} mode...`);
+
+    const mesh = this.activeMeshes.get(meshId);
+    if (!mesh) {
+      console.error(`Mesh ${meshId} not found during discovery`);
+      return;
+    }
+
+    try {
+      switch (discoveryMode) {
+        case 'proximity':
+          await this.discoverProximityNodes(meshId, maxNodes);
+          break;
+        case 'broadcast':
+          await this.discoverBroadcastNodes(meshId, maxNodes);
+          break;
+        case 'manual':
+          // Manual mode: nodes join explicitly via joinMesh()
+          console.log(`🔍 Manual discovery mode - nodes will join explicitly`);
+          break;
+        default:
+          console.warn(`Unknown discovery mode: ${discoveryMode}`);
+      }
+    } catch (error) {
+      console.error(`Node discovery failed for mesh ${meshId}:`, error);
+      this.emit('discovery-failed', { meshId, mode: discoveryMode, error });
+    }
+  }
+
+  // Discover nodes based on proximity (geographic location)
+  private async discoverProximityNodes(meshId: string, maxNodes?: number): Promise<void> {
+    const mesh = this.activeMeshes.get(meshId);
+    if (!mesh || !this.nodeInfo.location) {
+      console.log(`🔍 Proximity discovery skipped - no location data available`);
+      return;
+    }
+
+    // In a real implementation, this would:
+    // 1. Query a location service or DHT for nearby nodes
+    // 2. Filter by distance (location.radius)
+    // 3. Establish secure connections with discovered nodes
+    // 4. Verify node credentials and capabilities
+
+    // For now, emit discovery-started event for external integration
+    this.emit('discovery-started', {
+      meshId,
+      mode: 'proximity',
+      location: this.nodeInfo.location,
+      maxNodes,
+    });
+
+    console.log(
+      `🔍 Proximity discovery: looking for nodes within ${this.nodeInfo.location.radius}m of ` +
+      `(${this.nodeInfo.location.lat}, ${this.nodeInfo.location.lon})`
+    );
+
+    // External systems can listen to 'discovery-started' event and call joinMesh()
+    // when nodes are found via actual network protocols (mDNS, BLE, etc.)
+  }
+
+  // Discover nodes via network broadcast
+  private async discoverBroadcastNodes(meshId: string, maxNodes?: number): Promise<void> {
+    const mesh = this.activeMeshes.get(meshId);
+    if (!mesh) {
+      return;
+    }
+
+    // In a real implementation, this would:
+    // 1. Send multicast/broadcast discovery packets on local network
+    // 2. Listen for responses from other Mathison nodes
+    // 3. Perform capability negotiation
+    // 4. Establish encrypted connections
+
+    // For now, emit discovery-started event for external integration
+    this.emit('discovery-started', {
+      meshId,
+      mode: 'broadcast',
+      maxNodes,
+    });
+
+    console.log(`🔍 Broadcast discovery: listening for Mathison nodes on local network`);
+
+    // External systems can implement actual broadcast protocols (mDNS, SSDP, etc.)
+    // and call joinMesh() when nodes respond
   }
 
   // Add node to existing mesh

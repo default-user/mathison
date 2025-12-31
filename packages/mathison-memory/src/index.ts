@@ -44,10 +44,31 @@ export class MemoryGraph {
   private nodes: Map<string, Node> = new Map();
   private edges: Map<string, Edge> = new Map();
   private hyperedges: Map<string, Hyperedge> = new Map();
+  private nodeToHyperedgeIds: Map<string, Set<string>> = new Map();
   private graphStore?: GraphStore;
 
   constructor(graphStore?: GraphStore) {
     this.graphStore = graphStore;
+  }
+
+  private indexHyperedge(h: Hyperedge): void {
+    for (const nodeId of h.nodes) {
+      let set = this.nodeToHyperedgeIds.get(nodeId);
+      if (!set) {
+        set = new Set();
+        this.nodeToHyperedgeIds.set(nodeId, set);
+      }
+      set.add(h.id);
+    }
+  }
+
+  private unindexHyperedge(h: Hyperedge): void {
+    for (const nodeId of h.nodes) {
+      const set = this.nodeToHyperedgeIds.get(nodeId);
+      if (!set) continue;
+      set.delete(h.id);
+      if (set.size === 0) this.nodeToHyperedgeIds.delete(nodeId);
+    }
   }
 
   async initialize(): Promise<void> {
@@ -72,6 +93,12 @@ export class MemoryGraph {
       const persistedHyperedges = await this.graphStore.readAllHyperedges();
       for (const hyperedge of persistedHyperedges) {
         this.hyperedges.set(hyperedge.id, hyperedge);
+      }
+
+      // Rebuild incidence index
+      this.nodeToHyperedgeIds.clear();
+      for (const h of this.hyperedges.values()) {
+        this.indexHyperedge(h);
       }
 
       console.log(`🧠 Loaded ${this.nodes.size} nodes, ${this.edges.size} edges, ${this.hyperedges.size} hyperedges from storage`);
@@ -106,7 +133,10 @@ export class MemoryGraph {
   }
 
   addHyperedge(hyperedge: Hyperedge): void {
+    const prev = this.hyperedges.get(hyperedge.id);
+    if (prev) this.unindexHyperedge(prev);
     this.hyperedges.set(hyperedge.id, hyperedge);
+    this.indexHyperedge(hyperedge);
     // Persist to storage if available
     if (this.graphStore) {
       this.graphStore.writeHyperedge(hyperedge).catch((err) => {
@@ -424,14 +454,18 @@ export class MemoryGraph {
 
   /**
    * Get all hyperedges containing a specific node
+   * Now uses O(incidence) index instead of O(|E|) scan
    */
   getNodeHyperedges(nodeId: string, type?: string): Hyperedge[] {
     const result: Hyperedge[] = [];
-    for (const hyperedge of this.hyperedges.values()) {
-      if (hyperedge.nodes.includes(nodeId)) {
-        if (!type || hyperedge.type === type) {
-          result.push(hyperedge);
-        }
+    const hids = this.nodeToHyperedgeIds.get(nodeId);
+    if (!hids) return result;
+
+    for (const hid of hids) {
+      const h = this.hyperedges.get(hid);
+      if (!h) continue;
+      if (!type || h.type === type) {
+        result.push(h);
       }
     }
     return result;
@@ -756,30 +790,131 @@ export class MemoryGraph {
   }
 
   /**
-   * Calculate betweenness centrality for hypergraphs
-   * Measures how often a node appears on shortest hyperpaths between other nodes
+   * Helper: Iterate neighbors in the bipartite incidence graph
+   * vertex format: "v:<nodeId>" or "e:<hyperedgeId>"
    */
-  getHypergraphBetweennessCentrality(nodeId: string, sampleSize: number = 100): number {
-    let betweenness = 0;
-    const nodeIds = Array.from(this.nodes.keys()).filter(id => id !== nodeId);
+  private *incidenceNeighbors(vertex: string, hyperedgeTypes?: string[]): Iterable<string> {
+    if (vertex.startsWith("v:")) {
+      const nodeId = vertex.slice(2);
+      const hids = this.nodeToHyperedgeIds.get(nodeId);
+      if (!hids) return;
+      for (const hid of hids) {
+        const h = this.hyperedges.get(hid);
+        if (!h) continue;
+        if (hyperedgeTypes && !hyperedgeTypes.includes(h.type)) continue;
+        yield `e:${hid}`;
+      }
+    } else {
+      const hid = vertex.slice(2);
+      const h = this.hyperedges.get(hid);
+      if (!h) return;
+      for (const nid of h.nodes) yield `v:${nid}`;
+    }
+  }
 
-    // Sample random pairs of nodes
-    const pairs = Math.min(sampleSize, nodeIds.length * (nodeIds.length - 1) / 2);
+  /**
+   * Exact betweenness centrality via Brandes algorithm on incidence graph
+   * Returns centrality for all nodes
+   */
+  getHypergraphBetweennessCentralityExact(options?: {
+    hyperedgeTypes?: string[];
+    normalize?: boolean;
+  }): Map<string, number> {
+    const cb = new Map<string, number>();
+    const sources: string[] = [];
 
-    for (let i = 0; i < pairs; i++) {
-      const source = nodeIds[Math.floor(Math.random() * nodeIds.length)];
-      const target = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+    // Initialize centrality for all nodes
+    for (const nodeId of this.nodes.keys()) {
+      const v = `v:${nodeId}`;
+      cb.set(v, 0);
+      sources.push(v);
+    }
 
-      if (source === target) continue;
+    // Brandes algorithm: single-source shortest-path accumulation
+    for (const s of sources) {
+      const stack: string[] = [];
+      const P = new Map<string, string[]>();
+      const sigma = new Map<string, number>();
+      const dist = new Map<string, number>();
 
-      // Find if nodeId is on the hypergraph path between source and target
-      const pathNodes = this.hypergraphBFS(source, Infinity);
-      if (pathNodes.some(n => n.id === nodeId) && pathNodes.some(n => n.id === target)) {
-        betweenness++;
+      // Initialize
+      for (const v of sources) {
+        P.set(v, []);
+        sigma.set(v, 0);
+        dist.set(v, -1);
+      }
+      // Also initialize for hyperedge vertices (discovered during BFS)
+      sigma.set(s, 1);
+      dist.set(s, 0);
+
+      // BFS
+      const queue: string[] = [s];
+      while (queue.length > 0) {
+        const v = queue.shift()!;
+        stack.push(v);
+
+        for (const w of this.incidenceNeighbors(v, options?.hyperedgeTypes)) {
+          // Initialize if first visit to hyperedge vertex
+          if (!dist.has(w)) {
+            dist.set(w, -1);
+            sigma.set(w, 0);
+            P.set(w, []);
+          }
+
+          // First time we see w?
+          if (dist.get(w)! < 0) {
+            queue.push(w);
+            dist.set(w, dist.get(v)! + 1);
+          }
+
+          // Shortest path to w via v?
+          if (dist.get(w) === dist.get(v)! + 1) {
+            sigma.set(w, sigma.get(w)! + sigma.get(v)!);
+            P.get(w)!.push(v);
+          }
+        }
+      }
+
+      // Accumulation (back-propagation)
+      const delta = new Map<string, number>();
+      for (const v of stack) delta.set(v, 0);
+
+      // Reverse order
+      while (stack.length > 0) {
+        const w = stack.pop()!;
+        for (const v of P.get(w) || []) {
+          const sigmaV = sigma.get(v) || 0;
+          const sigmaW = sigma.get(w) || 0;
+          const contrib = sigmaW > 0 ? (sigmaV / sigmaW) * (1 + delta.get(w)!) : 0;
+          delta.set(v, delta.get(v)! + contrib);
+        }
+        if (w !== s && w.startsWith("v:")) {
+          // Only accumulate for node-side vertices, not hyperedges
+          cb.set(w, cb.get(w)! + delta.get(w)!);
+        }
       }
     }
 
-    return betweenness / pairs;
+    // Undirected graph: divide by 2
+    // Normalization: divide by (n-1)*(n-2)/2 if requested
+    const n = this.nodes.size;
+    const normFactor = (options?.normalize && n >= 3) ? ((n - 1) * (n - 2) / 2) : 1;
+
+    const result = new Map<string, number>();
+    for (const [v, c] of cb.entries()) {
+      const nodeId = v.slice(2);
+      result.set(nodeId, (c / 2) / normFactor);
+    }
+
+    return result;
+  }
+
+  /**
+   * Calculate betweenness centrality for hypergraphs
+   * Deprecated: sampleSize preserved for compatibility; now uses exact computation for correctness.
+   */
+  getHypergraphBetweennessCentrality(nodeId: string, sampleSize: number = 100): number {
+    return this.getHypergraphBetweennessCentralityExact({ normalize: true }).get(nodeId) ?? 0;
   }
 
   // Phase 5: Graph Projection
@@ -860,24 +995,65 @@ export class MemoryGraph {
   }
 
   /**
-   * Calculate hypergraph density: ratio of actual hyperedges to possible hyperedges
+   * Calculate incidence density: average fill ratio of incidence matrix
+   * D_inc = (sum of hyperedge sizes) / (n * m)
+   * where n = #nodes, m = #hyperedges
    */
-  getHypergraphDensity(): number {
+  getHypergraphIncidenceDensity(options?: { hyperedgeTypes?: string[] }): number {
     const n = this.nodes.size;
-    if (n < 2) return 0;
+    if (n === 0) return 0;
 
-    // For simplicity, consider all possible 2-subsets (could extend to k-subsets)
-    const maxPossibleEdges = (n * (n - 1)) / 2;
-    const actualEdges = this.hyperedges.size;
+    let m = 0;
+    let totalSize = 0;
 
-    return actualEdges / maxPossibleEdges;
+    for (const h of this.hyperedges.values()) {
+      if (options?.hyperedgeTypes && !options.hyperedgeTypes.includes(h.type)) continue;
+      m++;
+      totalSize += h.nodes.length;
+    }
+
+    if (m === 0) return 0;
+    return totalSize / (n * m);
   }
 
   /**
-   * Find strongly connected components in hypergraph
+   * Calculate projection density: density of 2-section (clique expansion)
+   * D_proj = actualPairs / (n choose 2)
+   * where actualPairs = unique unordered pairs co-occurring in any hyperedge
+   */
+  getHypergraphProjectionDensity(options?: { hyperedgeTypes?: string[] }): number {
+    const n = this.nodes.size;
+    if (n < 2) return 0;
+
+    const pairs = new Set<string>();
+
+    for (const h of this.hyperedges.values()) {
+      if (options?.hyperedgeTypes && !options.hyperedgeTypes.includes(h.type)) continue;
+
+      for (let i = 0; i < h.nodes.length; i++) {
+        for (let j = i + 1; j < h.nodes.length; j++) {
+          const key = [h.nodes[i], h.nodes[j]].sort().join('::');
+          pairs.add(key);
+        }
+      }
+    }
+
+    const maxPairs = (n * (n - 1)) / 2;
+    return pairs.size / maxPairs;
+  }
+
+  /**
+   * Calculate hypergraph density (uses projection density as default)
+   */
+  getHypergraphDensity(): number {
+    return this.getHypergraphProjectionDensity();
+  }
+
+  /**
+   * Find connected components in the hypergraph
    * Returns groups of nodes that are mutually reachable via hyperedges
    */
-  findStronglyConnectedComponents(): Array<string[]> {
+  findHypergraphConnectedComponents(options?: { includeSingletons?: boolean }): Array<string[]> {
     const components: Array<string[]> = [];
     const visited = new Set<string>();
 
@@ -887,12 +1063,20 @@ export class MemoryGraph {
       const component = this.hypergraphBFS(nodeId, Infinity).map(n => n.id);
       component.forEach(id => visited.add(id));
 
-      if (component.length > 1) {
+      if (component.length > 1 || options?.includeSingletons) {
         components.push(component);
       }
     }
 
     return components.sort((a, b) => b.length - a.length);
+  }
+
+  /**
+   * Find strongly connected components in hypergraph
+   * Deprecated: hypergraph is undirected; this returns connected components (size>1).
+   */
+  findStronglyConnectedComponents(): Array<string[]> {
+    return this.findHypergraphConnectedComponents({ includeSingletons: false });
   }
 }
 

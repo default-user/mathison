@@ -812,7 +812,10 @@ export class MathisonServer {
 
 // CLI entry point
 if (require.main === module) {
-  const server = new MathisonServer();
+  const server = new MathisonServer({
+    port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
+    host: process.env.HOST
+  });
   server.start().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);

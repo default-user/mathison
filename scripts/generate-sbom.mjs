@@ -18,44 +18,44 @@ async function generateSBOM() {
     await readFile(resolve(process.cwd(), 'package.json'), 'utf-8')
   );
 
-  // Get dependency tree from pnpm
+  // Get dependency tree by parsing pnpm-lock.yaml
   let dependencies = [];
   try {
-    const output = execSync('pnpm list --json --depth=99 --recursive 2>/dev/null || pnpm list --json --depth=99', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    });
-    const parsed = JSON.parse(output);
+    // Try to read the lockfile
+    const lockfilePath = resolve(process.cwd(), 'pnpm-lock.yaml');
+    const lockfileContent = await readFile(lockfilePath, 'utf-8');
 
-    // Extract dependencies from all workspace packages
-    if (Array.isArray(parsed)) {
-      for (const pkg of parsed) {
-        // Add direct dependencies
-        if (pkg.dependencies) {
-          for (const [name, info] of Object.entries(pkg.dependencies)) {
-            dependencies.push({
-              name,
-              version: typeof info === 'object' ? info.version : info,
-              from: pkg.name
-            });
-          }
-        }
-        // Add dev dependencies
-        if (pkg.devDependencies) {
-          for (const [name, info] of Object.entries(pkg.devDependencies)) {
-            dependencies.push({
-              name,
-              version: typeof info === 'object' ? info.version : info,
-              from: pkg.name,
-              scope: 'dev'
-            });
-          }
-        }
+    // Extract package names and versions from lockfile
+    // Format: /@scope/packagename@version or /packagename@version
+    const packageRegex = /^\s+\/?(@?[\w\-@./]+)@([\d.]+(?:-[\w.]+)?(?:\+[\w.]+)?)/gm;
+    let match;
+    const seen = new Set();
+
+    while ((match = packageRegex.exec(lockfileContent)) !== null) {
+      let name = match[1];
+      const version = match[2];
+
+      // Clean up package name (remove leading /)
+      if (name.startsWith('/')) {
+        name = name.substring(1);
+      }
+
+      // Skip file: protocol and workspace: protocol packages
+      if (name.includes('file:') || name.includes('workspace:')) {
+        continue;
+      }
+
+      const key = `${name}@${version}`;
+
+      if (!seen.has(key)) {
+        seen.add(key);
+        dependencies.push({ name, version, from: 'lockfile' });
       }
     }
+
+    console.log(`  Found ${dependencies.length} dependencies in lockfile`);
   } catch (error) {
-    console.warn(`Warning: Could not get full dependency tree: ${error.message}`);
-    console.warn('Falling back to package.json files...');
+    console.warn(`Warning: Could not parse lockfile: ${error.message}`);
   }
 
   // Deduplicate

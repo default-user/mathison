@@ -417,6 +417,483 @@ export class MemoryGraph {
       nodeTypes
     };
   }
+
+  /* ========== Hypergraph Operations ========== */
+
+  // Phase 1: Incidence & Basic Queries
+
+  /**
+   * Get all hyperedges containing a specific node
+   */
+  getNodeHyperedges(nodeId: string, type?: string): Hyperedge[] {
+    const result: Hyperedge[] = [];
+    for (const hyperedge of this.hyperedges.values()) {
+      if (hyperedge.nodes.includes(nodeId)) {
+        if (!type || hyperedge.type === type) {
+          result.push(hyperedge);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Find all nodes that share at least one hyperedge with the given node
+   * (Hypergraph neighbors)
+   */
+  getHypergraphNeighbors(nodeId: string, options?: {
+    type?: string;
+    minSharedHyperedges?: number;
+  }): Map<string, { node: Node; sharedHyperedges: string[] }> {
+    const neighbors = new Map<string, { node: Node; sharedHyperedges: string[] }>();
+    const minShared = options?.minSharedHyperedges || 1;
+
+    // Find all hyperedges containing this node
+    const nodeHyperedges = this.getNodeHyperedges(nodeId, options?.type);
+
+    // For each hyperedge, add all other nodes as neighbors
+    for (const hyperedge of nodeHyperedges) {
+      for (const otherId of hyperedge.nodes) {
+        if (otherId === nodeId) continue;
+
+        if (!neighbors.has(otherId)) {
+          const node = this.nodes.get(otherId);
+          if (!node) continue;
+          neighbors.set(otherId, { node, sharedHyperedges: [] });
+        }
+        neighbors.get(otherId)!.sharedHyperedges.push(hyperedge.id);
+      }
+    }
+
+    // Filter by minimum shared hyperedges
+    for (const [id, data] of neighbors.entries()) {
+      if (data.sharedHyperedges.length < minShared) {
+        neighbors.delete(id);
+      }
+    }
+
+    return neighbors;
+  }
+
+  // Phase 2: Pattern Matching
+
+  /**
+   * Find hyperedges containing ALL of the specified nodes
+   * Use case: "Find projects that involve both Alice and Bob"
+   */
+  findHyperedgesContainingAll(nodeIds: string[], type?: string): Hyperedge[] {
+    const targetSet = new Set(nodeIds);
+    const result: Hyperedge[] = [];
+
+    for (const hyperedge of this.hyperedges.values()) {
+      if (type && hyperedge.type !== type) continue;
+
+      const hyperedgeSet = new Set(hyperedge.nodes);
+      let containsAll = true;
+
+      for (const nodeId of targetSet) {
+        if (!hyperedgeSet.has(nodeId)) {
+          containsAll = false;
+          break;
+        }
+      }
+
+      if (containsAll) {
+        result.push(hyperedge);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Find hyperedges containing ANY of the specified nodes
+   */
+  findHyperedgesContainingAny(nodeIds: string[], type?: string): Hyperedge[] {
+    const targetSet = new Set(nodeIds);
+    const result: Hyperedge[] = [];
+
+    for (const hyperedge of this.hyperedges.values()) {
+      if (type && hyperedge.type !== type) continue;
+
+      for (const nodeId of hyperedge.nodes) {
+        if (targetSet.has(nodeId)) {
+          result.push(hyperedge);
+          break;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Find hyperedges by cardinality (number of nodes)
+   */
+  findHyperedgesBySize(min: number, max: number = Infinity, type?: string): Hyperedge[] {
+    const result: Hyperedge[] = [];
+
+    for (const hyperedge of this.hyperedges.values()) {
+      if (type && hyperedge.type !== type) continue;
+
+      const size = hyperedge.nodes.length;
+      if (size >= min && size <= max) {
+        result.push(hyperedge);
+      }
+    }
+
+    return result;
+  }
+
+  // Phase 3: Hypergraph Traversal
+
+  /**
+   * Hypergraph BFS: Traverse via hyperedges
+   * Expansion rule: From node A, visit ALL nodes in hyperedges containing A
+   */
+  hypergraphBFS(startNodeId: string, maxDepth: number = Infinity, options?: {
+    hyperedgeTypes?: string[];
+    edgeTypes?: string[];
+  }): Node[] {
+    const startNode = this.nodes.get(startNodeId);
+    if (!startNode) return [];
+
+    const visited = new Set<string>();
+    const queue: Array<{ node: Node; depth: number }> = [{ node: startNode, depth: 0 }];
+    const result: Node[] = [];
+
+    while (queue.length > 0) {
+      const { node, depth } = queue.shift()!;
+
+      if (visited.has(node.id) || depth > maxDepth) continue;
+
+      visited.add(node.id);
+      result.push(node);
+
+      // Expand via hyperedges
+      const hyperedges = this.getNodeHyperedges(node.id);
+      for (const hyperedge of hyperedges) {
+        // Filter by type if specified
+        if (options?.hyperedgeTypes && !options.hyperedgeTypes.includes(hyperedge.type)) {
+          continue;
+        }
+
+        // Add all nodes in this hyperedge
+        for (const neighborId of hyperedge.nodes) {
+          if (!visited.has(neighborId)) {
+            const neighbor = this.nodes.get(neighborId);
+            if (neighbor) {
+              queue.push({ node: neighbor, depth: depth + 1 });
+            }
+          }
+        }
+      }
+
+      // Also expand via regular edges if requested
+      if (options?.edgeTypes) {
+        const edges = this.getNodeEdges(node.id);
+        for (const edge of edges) {
+          if (!options.edgeTypes.includes(edge.type)) continue;
+
+          const neighborId = edge.source === node.id ? edge.target : edge.source;
+          if (!visited.has(neighborId)) {
+            const neighbor = this.nodes.get(neighborId);
+            if (neighbor) {
+              queue.push({ node: neighbor, depth: depth + 1 });
+            }
+          }
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Hypergraph DFS: Traverse via hyperedges
+   */
+  hypergraphDFS(startNodeId: string, maxDepth: number = Infinity, options?: {
+    hyperedgeTypes?: string[];
+    edgeTypes?: string[];
+  }): Node[] {
+    const startNode = this.nodes.get(startNodeId);
+    if (!startNode) return [];
+
+    const visited = new Set<string>();
+    const result: Node[] = [];
+
+    const dfsRecursive = (node: Node, depth: number) => {
+      if (visited.has(node.id) || depth > maxDepth) return;
+
+      visited.add(node.id);
+      result.push(node);
+
+      // Expand via hyperedges
+      const hyperedges = this.getNodeHyperedges(node.id);
+      for (const hyperedge of hyperedges) {
+        if (options?.hyperedgeTypes && !options.hyperedgeTypes.includes(hyperedge.type)) {
+          continue;
+        }
+
+        for (const neighborId of hyperedge.nodes) {
+          if (!visited.has(neighborId)) {
+            const neighbor = this.nodes.get(neighborId);
+            if (neighbor) {
+              dfsRecursive(neighbor, depth + 1);
+            }
+          }
+        }
+      }
+
+      // Also expand via regular edges if requested
+      if (options?.edgeTypes) {
+        const edges = this.getNodeEdges(node.id);
+        for (const edge of edges) {
+          if (!options.edgeTypes.includes(edge.type)) continue;
+
+          const neighborId = edge.source === node.id ? edge.target : edge.source;
+          if (!visited.has(neighborId)) {
+            const neighbor = this.nodes.get(neighborId);
+            if (neighbor) {
+              dfsRecursive(neighbor, depth + 1);
+            }
+          }
+        }
+      }
+    };
+
+    dfsRecursive(startNode, 0);
+    return result;
+  }
+
+  // Phase 4: Clustering & Analysis
+
+  /**
+   * Find clusters of nodes that share many hyperedges
+   * Uses Jaccard similarity on hyperedge membership
+   */
+  findHypergraphClusters(minSimilarity: number = 0.5): Array<{
+    nodes: string[];
+    sharedHyperedges: string[];
+    similarity: number;
+  }> {
+    const clusters: Array<{ nodes: string[]; sharedHyperedges: string[]; similarity: number }> = [];
+    const processed = new Set<string>();
+
+    for (const nodeId of this.nodes.keys()) {
+      if (processed.has(nodeId)) continue;
+
+      const nodeHyperedges = new Set(this.getNodeHyperedges(nodeId).map(h => h.id));
+      const clusterNodes: string[] = [nodeId];
+      const clusterHyperedges = new Set(nodeHyperedges);
+
+      // Find similar nodes
+      for (const otherId of this.nodes.keys()) {
+        if (otherId === nodeId || processed.has(otherId)) continue;
+
+        const otherHyperedges = new Set(this.getNodeHyperedges(otherId).map(h => h.id));
+
+        // Jaccard similarity: |A ∩ B| / |A ∪ B|
+        const intersection = new Set([...nodeHyperedges].filter(x => otherHyperedges.has(x)));
+        const union = new Set([...nodeHyperedges, ...otherHyperedges]);
+        const similarity = union.size > 0 ? intersection.size / union.size : 0;
+
+        if (similarity >= minSimilarity) {
+          clusterNodes.push(otherId);
+          processed.add(otherId);
+
+          // Add to cluster hyperedges
+          for (const h of intersection) {
+            clusterHyperedges.add(h);
+          }
+        }
+      }
+
+      if (clusterNodes.length > 1) {
+        clusters.push({
+          nodes: clusterNodes,
+          sharedHyperedges: Array.from(clusterHyperedges),
+          similarity: clusterHyperedges.size / Math.max(nodeHyperedges.size, 1)
+        });
+      }
+
+      processed.add(nodeId);
+    }
+
+    return clusters.sort((a, b) => b.similarity - a.similarity);
+  }
+
+  /**
+   * Calculate hypergraph degree: number of hyperedges a node participates in
+   */
+  getHypergraphDegree(nodeId: string, type?: string): number {
+    return this.getNodeHyperedges(nodeId, type).length;
+  }
+
+  /**
+   * Find nodes with highest hypergraph centrality
+   * (Nodes that participate in the most hyperedges)
+   */
+  getHypergraphCentralNodes(limit: number = 10, type?: string): Array<{
+    nodeId: string;
+    degree: number;
+    hyperedges: string[];
+  }> {
+    const centrality: Array<{ nodeId: string; degree: number; hyperedges: string[] }> = [];
+
+    for (const nodeId of this.nodes.keys()) {
+      const hyperedges = this.getNodeHyperedges(nodeId, type);
+      centrality.push({
+        nodeId,
+        degree: hyperedges.length,
+        hyperedges: hyperedges.map(h => h.id)
+      });
+    }
+
+    return centrality
+      .sort((a, b) => b.degree - a.degree)
+      .slice(0, limit);
+  }
+
+  /**
+   * Calculate betweenness centrality for hypergraphs
+   * Measures how often a node appears on shortest hyperpaths between other nodes
+   */
+  getHypergraphBetweennessCentrality(nodeId: string, sampleSize: number = 100): number {
+    let betweenness = 0;
+    const nodeIds = Array.from(this.nodes.keys()).filter(id => id !== nodeId);
+
+    // Sample random pairs of nodes
+    const pairs = Math.min(sampleSize, nodeIds.length * (nodeIds.length - 1) / 2);
+
+    for (let i = 0; i < pairs; i++) {
+      const source = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+      const target = nodeIds[Math.floor(Math.random() * nodeIds.length)];
+
+      if (source === target) continue;
+
+      // Find if nodeId is on the hypergraph path between source and target
+      const pathNodes = this.hypergraphBFS(source, Infinity);
+      if (pathNodes.some(n => n.id === nodeId) && pathNodes.some(n => n.id === target)) {
+        betweenness++;
+      }
+    }
+
+    return betweenness / pairs;
+  }
+
+  // Phase 5: Graph Projection
+
+  /**
+   * Project hypergraph onto a regular graph
+   * Creates edges between all pairs of nodes that share a hyperedge
+   *
+   * Use case: Use standard graph algorithms (PageRank, community detection)
+   * after projecting the hypergraph
+   */
+  projectToGraph(options?: {
+    hyperedgeTypes?: string[];
+    weighted?: boolean;
+  }): { nodes: Node[]; edges: Edge[] } {
+    const edges: Edge[] = [];
+    const edgeMap = new Map<string, { source: string; target: string; weight: number }>();
+
+    for (const hyperedge of this.hyperedges.values()) {
+      // Filter by type
+      if (options?.hyperedgeTypes && !options.hyperedgeTypes.includes(hyperedge.type)) {
+        continue;
+      }
+
+      // Create edges for all pairs in this hyperedge
+      for (let i = 0; i < hyperedge.nodes.length; i++) {
+        for (let j = i + 1; j < hyperedge.nodes.length; j++) {
+          const source = hyperedge.nodes[i];
+          const target = hyperedge.nodes[j];
+          const key = [source, target].sort().join('::');
+
+          if (!edgeMap.has(key)) {
+            edgeMap.set(key, { source, target, weight: 0 });
+          }
+          edgeMap.get(key)!.weight++;
+        }
+      }
+    }
+
+    // Convert to Edge objects
+    for (const [key, data] of edgeMap.entries()) {
+      edges.push({
+        id: `projected::${key}`,
+        source: data.source,
+        target: data.target,
+        type: 'hypergraph_projection',
+        metadata: options?.weighted ? { weight: data.weight } : undefined
+      });
+    }
+
+    return {
+      nodes: Array.from(this.nodes.values()),
+      edges
+    };
+  }
+
+  /**
+   * Advanced: Find maximal cliques in the projected graph
+   * A clique represents a set of nodes that all share the same hyperedge(s)
+   */
+  findMaximalCliques(minSize: number = 3): Array<{
+    nodes: string[];
+    hyperedges: string[];
+  }> {
+    const cliques: Array<{ nodes: string[]; hyperedges: string[] }> = [];
+
+    // Each hyperedge is a natural clique
+    for (const hyperedge of this.hyperedges.values()) {
+      if (hyperedge.nodes.length >= minSize) {
+        cliques.push({
+          nodes: [...hyperedge.nodes],
+          hyperedges: [hyperedge.id]
+        });
+      }
+    }
+
+    return cliques.sort((a, b) => b.nodes.length - a.nodes.length);
+  }
+
+  /**
+   * Calculate hypergraph density: ratio of actual hyperedges to possible hyperedges
+   */
+  getHypergraphDensity(): number {
+    const n = this.nodes.size;
+    if (n < 2) return 0;
+
+    // For simplicity, consider all possible 2-subsets (could extend to k-subsets)
+    const maxPossibleEdges = (n * (n - 1)) / 2;
+    const actualEdges = this.hyperedges.size;
+
+    return actualEdges / maxPossibleEdges;
+  }
+
+  /**
+   * Find strongly connected components in hypergraph
+   * Returns groups of nodes that are mutually reachable via hyperedges
+   */
+  findStronglyConnectedComponents(): Array<string[]> {
+    const components: Array<string[]> = [];
+    const visited = new Set<string>();
+
+    for (const nodeId of this.nodes.keys()) {
+      if (visited.has(nodeId)) continue;
+
+      const component = this.hypergraphBFS(nodeId, Infinity).map(n => n.id);
+      component.forEach(id => visited.add(id));
+
+      if (component.length > 1) {
+        components.push(component);
+      }
+    }
+
+    return components.sort((a, b) => b.length - a.length);
+  }
 }
 
 export default MemoryGraph;

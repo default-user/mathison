@@ -139,11 +139,11 @@ export class MathisonClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: response.statusText }));
+        const error = await response.json().catch(() => ({ error: response.statusText })) as { error?: string };
         throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return await response.json();
+      return await response.json() as T;
     } catch (error) {
       clearTimeout(timeoutId);
       throw error;

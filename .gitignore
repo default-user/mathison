@@ -80,6 +80,9 @@ Cargo.lock
 *.log
 logs/
 
+# Demo/test data
+data/
+
 # OS
 .DS_Store
 Thumbs.db

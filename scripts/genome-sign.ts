@@ -1,15 +1,16 @@
 #!/usr/bin/env tsx
 /**
  * Genome signing script
- * Usage: tsx scripts/genome-sign.ts <unsigned-genome.json> <output-genome.json>
+ * Usage: tsx scripts/genome-sign.ts <genome.json> [output.json] [signer-key-id]
  *
- * Requires GENOME_SIGNING_PRIVATE_KEY environment variable (base64-encoded raw ed25519 private key)
+ * Requires GENOME_SIGNING_PRIVATE_KEY environment variable (base64-encoded PKCS8 ed25519 private key)
  *
  * WARNING: NEVER commit private keys to the repository!
+ *
+ * Note: Uses deep canonicalization from @mathison/genome package
  */
 
 import { readFileSync, writeFileSync } from 'fs';
-import { sign } from 'crypto';
 
 interface UnsignedGenome {
   schema_version: string;
@@ -36,10 +37,6 @@ interface SignedGenome extends UnsignedGenome {
     signer_key_id: string;
     sig_base64: string;
   };
-}
-
-function canonicalizeGenome(genome: UnsignedGenome): string {
-  return JSON.stringify(genome, Object.keys(genome).sort(), 2);
 }
 
 async function signGenome(inputPath: string, outputPath: string, signerKeyId: string): Promise<void> {
@@ -69,8 +66,9 @@ async function signGenome(inputPath: string, outputPath: string, signerKeyId: st
     ['sign']
   );
 
-  // Canonicalize genome
-  const canonical = canonicalizeGenome(genome);
+  // Canonicalize genome using deep canonicalization from package
+  const { canonicalizeGenome } = await import('../packages/mathison-genome/src/canonicalization.js');
+  const canonical = canonicalizeGenome(genome as any);
   const canonicalBytes = Buffer.from(canonical, 'utf8');
 
   // Sign using Web Crypto API
@@ -102,13 +100,14 @@ async function signGenome(inputPath: string, outputPath: string, signerKeyId: st
 // CLI entry point
 if (require.main === module) {
   const args = process.argv.slice(2);
-  if (args.length < 2) {
-    console.error('Usage: tsx scripts/genome-sign.ts <unsigned-genome.json> <output-genome.json> [signer-key-id]');
+  if (args.length < 1) {
+    console.error('Usage: tsx scripts/genome-sign.ts <genome.json> [output.json] [signer-key-id]');
+    console.error('Example: tsx scripts/genome-sign.ts genomes/TOTK_ROOT_v1.0.0/genome.json');
     process.exit(1);
   }
 
   const inputPath = args[0];
-  const outputPath = args[1];
+  const outputPath = args[1] || inputPath; // Default: overwrite input
   const signerKeyId = args[2] || 'dev-key-001';
 
   signGenome(inputPath, outputPath, signerKeyId)

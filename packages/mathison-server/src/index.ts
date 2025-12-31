@@ -135,16 +135,28 @@ export class MathisonServer {
 
   private async loadGenome(): Promise<void> {
     const genomePath = process.env.MATHISON_GENOME_PATH || './genomes/TOTK_ROOT_v1.0.0/genome.json';
+    const isProduction = process.env.MATHISON_ENV === 'production';
+    const verifyManifest = process.env.MATHISON_VERIFY_MANIFEST === 'true' || isProduction;
+
     console.log(`🧬 Loading Memetic Genome: ${genomePath}`);
+    console.log(`   Mode: ${isProduction ? 'production' : 'development'}`);
+    console.log(`   Manifest verification: ${verifyManifest ? 'ON' : 'OFF'}`);
 
     try {
-      const { genome, genome_id } = await loadAndVerifyGenome(genomePath);
+      const repoRoot = process.env.MATHISON_REPO_ROOT || process.cwd();
+      const { genome, genome_id } = await loadAndVerifyGenome(genomePath, {
+        verifyManifest,
+        repoRoot
+      });
       this.genome = genome;
       this.genomeId = genome_id;
       console.log(`✓ Genome loaded and verified: ${genome.name} v${genome.version}`);
       console.log(`  Genome ID: ${genome_id.substring(0, 16)}...`);
       console.log(`  Invariants: ${genome.invariants.length}`);
       console.log(`  Capabilities: ${genome.capabilities.length}`);
+      if (verifyManifest) {
+        console.log(`  Build manifest: ${genome.build_manifest.files.length} files verified`);
+      }
     } catch (error) {
       console.error('❌ Genome verification failed (FAIL-CLOSED)');
       throw new Error(`GENOME_INVALID: ${error instanceof Error ? error.message : String(error)}`);
@@ -286,6 +298,9 @@ export class MathisonServer {
         });
       }
 
+      const isProduction = process.env.MATHISON_ENV === 'production';
+      const manifestVerified = process.env.MATHISON_VERIFY_MANIFEST === 'true' || isProduction;
+
       return {
         status: 'healthy',
         bootStatus: this.bootStatus,
@@ -298,7 +313,10 @@ export class MathisonServer {
             name: this.genome?.name,
             version: this.genome?.version,
             genome_id: this.genomeId?.substring(0, 16) + '...',
-            initialized: this.genome !== null
+            initialized: this.genome !== null,
+            verified: this.genome !== null,
+            manifestVerified: manifestVerified && this.genome !== null,
+            manifestFiles: this.genome?.build_manifest.files.length || 0
           },
           cdi: {
             strictMode: this.config.cdiStrictMode,

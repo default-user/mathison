@@ -6,15 +6,46 @@ import { createHash } from 'crypto';
 import { Genome } from './types';
 
 /**
+ * Deep sort object keys recursively for stable canonicalization
+ * Preserves array order (arrays are ordered sequences)
+ */
+function deepSortKeys(obj: any): any {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    // Preserve array order, but recursively sort keys in array elements
+    return obj.map(deepSortKeys);
+  }
+
+  // Sort object keys and recursively process values
+  const sorted: Record<string, any> = {};
+  const keys = Object.keys(obj).sort();
+  for (const key of keys) {
+    sorted[key] = deepSortKeys(obj[key]);
+  }
+  return sorted;
+}
+
+/**
  * Canonicalize genome JSON for signature verification
- * Removes signature field and produces stable JSON representation
+ * Removes signature/signatures fields and produces stable JSON representation
+ * Rules:
+ * - Recursively sorts all object keys lexicographically
+ * - Preserves array order
+ * - No whitespace (compact JSON)
+ * - UTF-8 encoding
  */
 export function canonicalizeGenome(genome: Genome): string {
-  // Remove signature field for canonicalization
-  const { signature, ...canonicalGenome } = genome;
+  // Remove signature and signatures fields for canonicalization
+  const { signature, signatures, ...canonicalGenome } = genome as any;
 
-  // Stable JSON representation with sorted keys
-  return JSON.stringify(canonicalGenome, Object.keys(canonicalGenome).sort(), 2);
+  // Deep sort all keys recursively
+  const sorted = deepSortKeys(canonicalGenome);
+
+  // Stable JSON representation with no whitespace
+  return JSON.stringify(sorted);
 }
 
 /**

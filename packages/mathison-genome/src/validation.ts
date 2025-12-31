@@ -47,6 +47,9 @@ export function validateGenomeSchema(genome: unknown): GenomeValidationResult {
     if (!Array.isArray(g.authority.signers)) {
       errors.push('authority.signers must be an array');
     } else {
+      if (g.authority.signers.length === 0) {
+        errors.push('authority.signers must contain at least one signer');
+      }
       for (let i = 0; i < g.authority.signers.length; i++) {
         const signer = g.authority.signers[i];
         if (typeof signer.key_id !== 'string' || signer.key_id.trim() === '') {
@@ -62,6 +65,8 @@ export function validateGenomeSchema(genome: unknown): GenomeValidationResult {
     }
     if (typeof g.authority.threshold !== 'number' || g.authority.threshold < 1) {
       errors.push('authority.threshold must be a number >= 1');
+    } else if (Array.isArray(g.authority.signers) && g.authority.threshold > g.authority.signers.length) {
+      errors.push(`authority.threshold (${g.authority.threshold}) cannot exceed number of signers (${g.authority.signers.length})`);
     }
   }
 
@@ -139,6 +144,30 @@ export function validateGenomeSchema(genome: unknown): GenomeValidationResult {
       }
       if (typeof g.signature.sig_base64 !== 'string' || g.signature.sig_base64.trim() === '') {
         errors.push('signature.sig_base64 is required');
+      }
+    }
+  }
+
+  // Signatures (optional, multi-signature support)
+  if (g.signatures !== undefined) {
+    if (!Array.isArray(g.signatures)) {
+      errors.push('Field "signatures" must be an array if present');
+    } else {
+      for (let i = 0; i < g.signatures.length; i++) {
+        const sig = g.signatures[i];
+        if (typeof sig !== 'object' || sig === null) {
+          errors.push(`signatures[${i}] must be an object`);
+        } else {
+          if (sig.alg !== 'ed25519') {
+            errors.push(`signatures[${i}].alg must be "ed25519"`);
+          }
+          if (typeof sig.signer_key_id !== 'string' || sig.signer_key_id.trim() === '') {
+            errors.push(`signatures[${i}].signer_key_id is required`);
+          }
+          if (typeof sig.sig_base64 !== 'string' || sig.sig_base64.trim() === '') {
+            errors.push(`signatures[${i}].sig_base64 is required`);
+          }
+        }
       }
     }
   }

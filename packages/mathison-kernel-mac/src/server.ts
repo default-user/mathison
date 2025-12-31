@@ -646,14 +646,57 @@ export class MathisonServer {
 
   private async handleInstallModel(req: Request, res: Response): Promise<void> {
     try {
-      // TODO: Implement progress streaming via WebSocket
-      const modelPath = await installDefaultModel();
+      // Stream progress to all connected WebSocket clients
+      const onProgress = (downloaded: number, total: number) => {
+        const percent = total > 0 ? ((downloaded / total) * 100).toFixed(1) : '0.0';
+        const mb_downloaded = (downloaded / 1e6).toFixed(1);
+        const mb_total = (total / 1e6).toFixed(1);
+
+        const progressMessage = {
+          type: 'model_install_progress',
+          downloaded,
+          total,
+          percent: parseFloat(percent),
+          message: `Downloading: ${mb_downloaded}MB / ${mb_total}MB (${percent}%)`,
+        };
+
+        // Broadcast to all connected WebSocket clients
+        this.wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(progressMessage));
+          }
+        });
+      };
+
+      const modelPath = await installDefaultModel(onProgress);
       const cfg = loadConfig();
       cfg.model_path = modelPath;
       saveConfig(cfg);
 
+      // Send completion message via WebSocket
+      const completeMessage = {
+        type: 'model_install_complete',
+        path: modelPath,
+      };
+      this.wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(completeMessage));
+        }
+      });
+
       res.json({ path: modelPath });
     } catch (e: any) {
+      // Send error message via WebSocket
+      const errorMessage = {
+        type: 'model_install_error',
+        error: e.message,
+      };
+      this.wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(errorMessage));
+        }
+      });
+
       res.status(500).json({ error: e.message });
     }
   }

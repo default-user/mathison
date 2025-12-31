@@ -1,6 +1,6 @@
 {
   "name": "mathison-kernel-mac",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mathison OI Kernel for macOS (Intel/Apple Silicon) with local LLM",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

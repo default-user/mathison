@@ -19,7 +19,7 @@ Mathison is a governance-first OI (Ongoing Intelligence) system built on treaty-
 
 ## Governance Root
 
-All system behavior flows from **Tiriti o te Kai** ([docs/tiriti.md](./docs/tiriti.md)), which establishes:
+All system behavior flows from **Tiriti o te Kai** ([docs/31-governance/tiriti.md](./docs/31-governance/tiriti.md)), which establishes:
 
 1. **People first; tools serve** — Human authority and dignity lead
 2. **Consent and stop always win** — Immediate de-escalation on request
@@ -49,20 +49,20 @@ pnpm install && pnpm demo
 - Server fails-closed on missing/invalid genome (signature verification on boot)
 
 **Where Governance Lives:**
-- Treaty: `docs/tiriti.md` (human-readable governance rules)
+- Treaty: `docs/31-governance/tiriti.md` (human-readable governance rules)
 - Root: `genomes/TOTK_ROOT_v1.0.0/genome.json` (cryptographically signed with Ed25519)
 - Enforcement: `packages/mathison-governance/` (CDI + CIF + ActionGate implementation)
-- Verification: See `GOVERNANCE_CLAIMS.md` for strict implementation status table
+- Verification: See `docs/31-governance/governance-claims.md` for strict implementation status table
 
 **Buyer Trust Pack:**
 - `LICENSE` — Apache-2.0 (full text)
-- `PROVENANCE.md` — Chain-of-title, AI disclosure, dependency verification
-- `CONTRIBUTOR_CERTIFICATE.md` — Attestation template for contributors
-- `SECURITY.md` — Vulnerability reporting + security-critical components
-- `THREAT_MODEL.md` — Assets, trust boundaries, mitigations (honest about gaps)
-- `ARCHITECTURE.md` — Monorepo map + governance pipeline diagrams
-- `GOVERNANCE_CLAIMS.md` — Truth table (only marks implemented if code + tests exist)
-- `DEMO.md` — 2-minute quickstart with troubleshooting
+- `docs/61-operations/provenance.md` — Chain-of-title, AI disclosure, dependency verification
+- `docs/70-dev/contributor-certificate.md` — Attestation template for contributors
+- `docs/61-operations/security.md` — Vulnerability reporting + security-critical components
+- `docs/61-operations/threat-model.md` — Assets, trust boundaries, mitigations (honest about gaps)
+- `docs/20-architecture/system-architecture.md` — Monorepo map + governance pipeline diagrams
+- `docs/31-governance/governance-claims.md` — Truth table (only marks implemented if code + tests exist)
+- `docs/00-start-here/demo.md` — 2-minute quickstart with troubleshooting
 - `SBOM.cdx.json` — Software Bill of Materials (CycloneDX format)
 
 **What this is NOT:**
@@ -70,7 +70,7 @@ pnpm install && pnpm demo
 - Not production-ready (test genome keys in repo, no rate limiting, single-process only)
 - Not feature-complete (see README for roadmap)
 
-**For full evaluation:** See `DEMO.md` for step-by-step walkthrough.
+**For full evaluation:** See `docs/00-start-here/demo.md` for step-by-step walkthrough.
 
 ## Architecture
 
@@ -92,19 +92,26 @@ pnpm install && pnpm demo
 └─────────────────────────────────────────┘
 ```
 
-See [docs/architecture.md](./docs/architecture.md) for details.
+See [docs/20-architecture/system-architecture.md](./docs/20-architecture/system-architecture.md) for details.
 
 ## Monorepo Structure
 
 ```
 mathison/
 ├── docs/
-│   ├── tiriti.md                  # Governance treaty v1.0
-│   ├── architecture.md            # System architecture
-│   ├── cdi-spec.md                # CDI specification
-│   ├── cif-spec.md                # CIF specification
-│   ├── mobile-deployment.md       # Mobile deployment strategy
-│   └── react-native-app-guide.md  # React Native implementation guide
+│   ├── 00-start-here/             # Getting started guides
+│   ├── 10-vision/                 # Vision and roadmap
+│   ├── 20-architecture/           # System architecture
+│   ├── 31-governance/             # Governance specs (tiriti, CDI, CIF)
+│   ├── 40-apis/                   # API documentation
+│   ├── 45-integrations/           # Third-party integrations
+│   ├── 50-mesh/                   # Mesh networking
+│   ├── 60-mobile/                 # Mobile deployment
+│   ├── 61-operations/             # Operations and security
+│   ├── 70-dev/                    # Development workflows
+│   ├── 80-reference/              # Reference materials
+│   ├── 90-proposals/              # Feature proposals
+│   └── 95-adr/                    # Architecture Decision Records
 ├── packages/
 │   ├── mathison-server/       # Main server orchestration
 │   ├── mathison-governance/   # CDI + treaty enforcement
@@ -168,7 +175,7 @@ export GITHUB_TOKEN=ghp_your_token_here  # For free LLM access
 
 **LLM Provider Priority:** GitHub Models → Anthropic → Local Fallback
 
-See [GITHUB_MODELS_SETUP.md](./GITHUB_MODELS_SETUP.md) for complete setup guide.
+See [docs/45-integrations/github-models-setup.md](./docs/45-integrations/github-models-setup.md) for complete setup guide.
 
 ### Start Server
 
@@ -324,8 +331,8 @@ const response = await modelBus.inference('Explain quantum computing', {
 
 ### Documentation
 
-- **Architecture & Strategy:** [docs/mobile-deployment.md](./docs/mobile-deployment.md)
-- **React Native Implementation:** [docs/react-native-app-guide.md](./docs/react-native-app-guide.md)
+- **Architecture & Strategy:** [docs/60-mobile/mobile-deployment.md](./docs/60-mobile/mobile-deployment.md)
+- **React Native Implementation:** [docs/60-mobile/react-native-app-guide.md](./docs/60-mobile/react-native-app-guide.md)
 - **Mobile Package README:** [packages/mathison-mobile/README.md](./packages/mathison-mobile/README.md)
 
 ### Privacy-First Mobile Design
@@ -419,5 +426,5 @@ Following the treaty:
 
 ## Governance
 
-This system is governed by **Tiriti o te Kai v1.0** ([docs/tiriti.md](./docs/tiriti.md)).
+This system is governed by **Tiriti o te Kai v1.0** ([docs/31-governance/tiriti.md](./docs/31-governance/tiriti.md)).
 **Kaitiaki:** Ande (root veto authority)

@@ -209,3 +209,7 @@ export class OIEngine {
 }
 
 export default OIEngine;
+
+// Phase 2: Interpreter
+export { Interpreter } from './interpreter';
+export type { InterpretRequest, InterpretResponse, Citation } from './interpreter';

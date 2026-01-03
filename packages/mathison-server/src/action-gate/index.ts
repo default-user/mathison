@@ -27,7 +27,7 @@ export interface SideEffectResult {
 export class ActionGate {
   private cdi: CDI;
   private cif: CIF;
-  private stores: Stores;
+  public stores: Stores; // Public for JobExecutor access to list()
 
   constructor(cdi: CDI, cif: CIF, stores: Stores) {
     this.cdi = cdi;

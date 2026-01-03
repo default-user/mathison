@@ -1,66 +1,30 @@
 {
   "policy": "patch-only",
-  "notes": "Track patch bumps internally during work; apply all at end; single final commit.",
   "root": {
-    "current": "1.0.0",
-    "patch_bumps": 1
+    "current": "1.0.1",
+    "patch_bumps": 2
   },
   "packages": {
-    "packages/mathison-genome": {
-      "current": "0.0.0",
-      "patch_bumps": 1
-    },
-    "packages/mathison-governance": {
-      "current": "1.0.0",
-      "patch_bumps": 1
-    },
-    "packages/mathison-server": {
-      "current": "1.0.0",
-      "patch_bumps": 1
-    },
-    "packages/mathison-storage": {
-      "current": "1.0.0",
-      "patch_bumps": 1
-    }
+    "packages/mathison-genome": { "current": "0.0.1", "patch_bumps": 1 },
+    "packages/mathison-governance": { "current": "1.0.1", "patch_bumps": 0 },
+    "packages/mathison-kernel-mac": { "current": "1.2.0", "patch_bumps": 0 },
+    "packages/mathison-memory": { "current": "1.1.1", "patch_bumps": 0 },
+    "packages/mathison-mesh": { "current": "1.1.0", "patch_bumps": 0 },
+    "packages/mathison-mobile": { "current": "1.0.0", "patch_bumps": 0 },
+    "packages/mathison-oi": { "current": "1.0.0", "patch_bumps": 1 },
+    "packages/mathison-quadratic": { "current": "1.0.0", "patch_bumps": 0 },
+    "packages/mathison-sdk-generator": { "current": "1.1.0", "patch_bumps": 0 },
+    "packages/mathison-server": { "current": "1.0.1", "patch_bumps": 3 },
+    "packages/mathison-storage": { "current": "1.0.1", "patch_bumps": 1 },
+    "packages/mathison-ui": { "current": "1.0.0", "patch_bumps": 0 },
+    "sdks/typescript": { "current": "1.0.0", "patch_bumps": 0 }
   },
   "events": [
-    {
-      "when": "2025-12-31T00:00:00Z",
-      "scope": "packages/mathison-genome",
-      "reason": "created new package with genome types, validation, canonicalization, and loader",
-      "bump": 1
-    },
-    {
-      "when": "2025-12-31T00:01:00Z",
-      "scope": "root",
-      "reason": "added genomes/ directory, scripts/genome-sign.ts, scripts/genome-keygen.ts",
-      "bump": 1
-    },
-    {
-      "when": "2025-12-31T00:02:00Z",
-      "scope": "packages/mathison-governance",
-      "reason": "added GenomeCapability interface, setGenomeCapabilities method, checkCapability enforcement in CDI",
-      "bump": 1
-    },
-    {
-      "when": "2025-12-31T00:03:00Z",
-      "scope": "packages/mathison-server",
-      "reason": "integrated genome loading at boot (fail-closed), added GET /genome endpoint, updated health endpoint",
-      "bump": 1
-    },
-    {
-      "when": "2025-12-31T00:04:00Z",
-      "scope": "packages/mathison-storage",
-      "reason": "added genome_id and genome_version fields to Receipt interface",
-      "bump": 1
-    }
-  ],
-  "applied_versions": {
-    "applied_at": "2025-12-31T00:05:00Z",
-    "root": "1.0.1",
-    "packages/mathison-genome": "0.0.1",
-    "packages/mathison-governance": "1.0.1",
-    "packages/mathison-server": "1.0.1",
-    "packages/mathison-storage": "1.0.1"
-  }
+    "Phase 0: Repo hygiene + genome tooling + real signature tests + JSON contract + StorageAdapter",
+    "Phase 1: Memory API complete (already implemented, docs added)",
+    "Phase 2: OI Interpretation complete (already implemented, docs added)",
+    "Phase 3: Job API complete (already implemented, docs added)",
+    "Phase 4: OpenAPI endpoint added (/openapi.json)",
+    "Phases 5-8: READY_FOR_HUMAN docs created (gRPC, Mesh Discovery, Mesh E2EE, Play Store)"
+  ]
 }

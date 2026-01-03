@@ -420,6 +420,130 @@ describe('Genome Conformance Tests', () => {
     });
   });
 
+  describe('Real Signature Verification (No Dummy Signatures)', () => {
+    const {
+      generateTestKeypair,
+      signGenome,
+      multiSignGenome
+    } = require('./test-utils');
+
+    test('verifies genome with real Ed25519 signature', async () => {
+      const keypair = await generateTestKeypair('real-test-key');
+
+      const unsignedGenome: Genome = {
+        ...testGenome,
+        authority: {
+          signers: [
+            {
+              key_id: keypair.keyId,
+              alg: 'ed25519',
+              public_key: keypair.publicKeyBase64
+            }
+          ],
+          threshold: 1
+        }
+      };
+
+      const signedGenome = await signGenome(unsignedGenome, keypair);
+
+      const result = await verifyGenomeSignature(signedGenome);
+      expect(result.verified).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      expect(result.genome_id).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    test('rejects genome with real signature but tampered content', async () => {
+      const keypair = await generateTestKeypair('tamper-test-key');
+
+      const unsignedGenome: Genome = {
+        ...testGenome,
+        authority: {
+          signers: [
+            {
+              key_id: keypair.keyId,
+              alg: 'ed25519',
+              public_key: keypair.publicKeyBase64
+            }
+          ],
+          threshold: 1
+        }
+      };
+
+      const signedGenome = await signGenome(unsignedGenome, keypair);
+
+      // Tamper with the genome after signing
+      const tamperedGenome = {
+        ...signedGenome,
+        name: 'TAMPERED_NAME'
+      };
+
+      const result = await verifyGenomeSignature(tamperedGenome);
+      expect(result.verified).toBe(false);
+      expect(result.errors.some(e => e.includes('Signature verification failed'))).toBe(true);
+    });
+
+    test('verifies genome with multiple real signatures meeting threshold', async () => {
+      const keypair1 = await generateTestKeypair('multi-key-1');
+      const keypair2 = await generateTestKeypair('multi-key-2');
+
+      const unsignedGenome: Genome = {
+        ...testGenome,
+        authority: {
+          signers: [
+            {
+              key_id: keypair1.keyId,
+              alg: 'ed25519',
+              public_key: keypair1.publicKeyBase64
+            },
+            {
+              key_id: keypair2.keyId,
+              alg: 'ed25519',
+              public_key: keypair2.publicKeyBase64
+            }
+          ],
+          threshold: 2
+        }
+      };
+
+      const signedGenome = await multiSignGenome(unsignedGenome, [keypair1, keypair2]);
+
+      const result = await verifyGenomeSignature(signedGenome);
+      expect(result.verified).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    test('rejects when threshold not met even with one real valid signature', async () => {
+      const keypair1 = await generateTestKeypair('threshold-key-1');
+      const keypair2 = await generateTestKeypair('threshold-key-2');
+
+      const unsignedGenome: Genome = {
+        ...testGenome,
+        authority: {
+          signers: [
+            {
+              key_id: keypair1.keyId,
+              alg: 'ed25519',
+              public_key: keypair1.publicKeyBase64
+            },
+            {
+              key_id: keypair2.keyId,
+              alg: 'ed25519',
+              public_key: keypair2.publicKeyBase64
+            }
+          ],
+          threshold: 2
+        }
+      };
+
+      // Sign with only one keypair (threshold requires 2)
+      const signedGenome = await multiSignGenome(unsignedGenome, [keypair1]);
+
+      const result = await verifyGenomeSignature(signedGenome);
+      expect(result.verified).toBe(false);
+      expect(result.errors.some(e => e.includes('Threshold not met'))).toBe(true);
+    });
+  });
+
   describe('Build Manifest Verification', () => {
     const testDir = join(__dirname, '__test_manifest__');
     const testFile1 = join(testDir, 'file1.ts');

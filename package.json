@@ -1,6 +1,6 @@
 {
   "name": "mathison-monorepo",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "description": "Mathison: OI + graph/hypergraph memory with multi-language SDKs",
   "scripts": {
@@ -13,7 +13,12 @@
     "generate-sdks": "pnpm --filter mathison-sdk-generator generate",
     "quad:node": "pnpm --filter mathison-quadratic dev",
     "quad:selftest": "pnpm --filter mathison-quadratic selftest",
-    "quad:build": "pnpm --filter mathison-quadratic build"
+    "quad:build": "pnpm --filter mathison-quadratic build",
+    "genome:keygen": "tsx scripts/genome-keygen.ts",
+    "genome:build-manifest": "tsx scripts/genome-build-manifest.ts",
+    "genome:sign": "tsx scripts/genome-sign.ts",
+    "genome:verify": "tsx scripts/genome-verify.ts",
+    "genome:audit": "tsx scripts/genome-audit.ts"
   },
   "keywords": [
     "mathison",
@@ -28,6 +33,7 @@
     "pnpm": ">=8.0.0"
   },
   "devDependencies": {
-    "@cyclonedx/cyclonedx-npm": "^4.1.2"
+    "@cyclonedx/cyclonedx-npm": "^4.1.2",
+    "tsx": "^4.7.0"
   }
 }

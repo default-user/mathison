@@ -1,6 +1,6 @@
 {
   "name": "mathison-storage",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Storage adapters and backends for Mathison (File + SQLite)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,13 @@
     "test": "jest",
     "clean": "rm -rf dist"
   },
-  "keywords": ["mathison", "storage", "persistence", "checkpoint", "receipt"],
+  "keywords": [
+    "mathison",
+    "storage",
+    "persistence",
+    "checkpoint",
+    "receipt"
+  ],
   "dependencies": {
     "better-sqlite3": "^9.2.2"
   },

@@ -256,6 +256,171 @@ describe('Genome Boot Conformance Tests', () => {
     }, 10000);
   });
 
+  describe('Real Signature Boot Tests (No Dummy Signatures)', () => {
+    const { generateTestKeypair, signGenome } = require('./test-utils');
+
+    test('server boots successfully with valid real signature', async () => {
+      const keypair = await generateTestKeypair('boot-valid-key');
+
+      const validGenome = {
+        schema_version: 'genome.v0.1',
+        name: 'VALID_BOOT_GENOME',
+        version: '1.0.0',
+        parents: [],
+        created_at: '2025-12-31T00:00:00Z',
+        authority: {
+          signers: [
+            {
+              key_id: keypair.keyId,
+              alg: 'ed25519',
+              public_key: keypair.publicKeyBase64
+            }
+          ],
+          threshold: 1
+        },
+        invariants: [],
+        capabilities: [],
+        build_manifest: { files: [] }
+      };
+
+      const signedGenome = await signGenome(validGenome, keypair);
+      writeFileSync(testGenomePath, JSON.stringify(signedGenome, null, 2));
+
+      process.env.MATHISON_GENOME_PATH = testGenomePath;
+      process.env.MATHISON_STORE_BACKEND = 'FILE';
+      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-valid-sig';
+
+      const server = new MathisonServer({ port: 3010 });
+
+      // Should boot without throwing
+      await expect(server.start()).resolves.not.toThrow();
+      await server.stop();
+
+      delete process.env.MATHISON_GENOME_PATH;
+    }, 15000);
+
+    test('server fails CLOSED with real signature but tampered content', async () => {
+      const keypair = await generateTestKeypair('boot-tamper-key');
+
+      const validGenome = {
+        schema_version: 'genome.v0.1',
+        name: 'TAMPER_TEST_GENOME',
+        version: '1.0.0',
+        parents: [],
+        created_at: '2025-12-31T00:00:00Z',
+        authority: {
+          signers: [
+            {
+              key_id: keypair.keyId,
+              alg: 'ed25519',
+              public_key: keypair.publicKeyBase64
+            }
+          ],
+          threshold: 1
+        },
+        invariants: [],
+        capabilities: [],
+        build_manifest: { files: [] }
+      };
+
+      const signedGenome = await signGenome(validGenome, keypair);
+
+      // Tamper AFTER signing
+      const tamperedGenome = {
+        ...signedGenome,
+        name: 'TAMPERED_AFTER_SIGNING'
+      };
+
+      writeFileSync(testGenomePath, JSON.stringify(tamperedGenome, null, 2));
+
+      process.env.MATHISON_GENOME_PATH = testGenomePath;
+      process.env.MATHISON_STORE_BACKEND = 'FILE';
+      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-tampered';
+
+      const server = new MathisonServer({ port: 3011 });
+
+      // Should fail CLOSED due to signature mismatch
+      await expect(server.start()).rejects.toThrow(/GENOME_INVALID/);
+      await server.stop().catch(() => {});
+
+      delete process.env.MATHISON_GENOME_PATH;
+    }, 15000);
+
+    test('server fails CLOSED with real signature + tampered manifest in production', async () => {
+      const testFile = join(testGenomeDir, 'manifest_real_test.ts');
+      writeFileSync(testFile, 'export const test = "original";', 'utf8');
+
+      const fileContent = 'export const test = "original";';
+      const correctHash = createHash('sha256').update(fileContent, 'utf8').digest('hex');
+
+      const keypair = await generateTestKeypair('manifest-test-key');
+
+      const genomeWithManifest = {
+        schema_version: 'genome.v0.1',
+        name: 'MANIFEST_REAL_TEST',
+        version: '1.0.0',
+        parents: [],
+        created_at: '2025-12-31T00:00:00Z',
+        authority: {
+          signers: [
+            {
+              key_id: keypair.keyId,
+              alg: 'ed25519',
+              public_key: keypair.publicKeyBase64
+            }
+          ],
+          threshold: 1
+        },
+        invariants: [],
+        capabilities: [],
+        build_manifest: {
+          files: [
+            {
+              path: 'packages/mathison-server/src/__tests__/fixtures/manifest_real_test.ts',
+              sha256: correctHash
+            }
+          ]
+        }
+      };
+
+      const signedGenome = await signGenome(genomeWithManifest, keypair);
+
+      // Tamper manifest AFTER signing (change hash)
+      const tamperedManifest = {
+        ...signedGenome,
+        build_manifest: {
+          files: [
+            {
+              path: 'packages/mathison-server/src/__tests__/fixtures/manifest_real_test.ts',
+              sha256: 'tampered0000000000000000000000000000000000000000000000000000000000'
+            }
+          ]
+        }
+      };
+
+      writeFileSync(testGenomePath, JSON.stringify(tamperedManifest, null, 2));
+
+      process.env.MATHISON_GENOME_PATH = testGenomePath;
+      process.env.MATHISON_ENV = 'production'; // Enable manifest verification
+      process.env.MATHISON_REPO_ROOT = join(__dirname, '../../../..');
+      process.env.MATHISON_STORE_BACKEND = 'FILE';
+      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-manifest-tamper';
+
+      const server = new MathisonServer({ port: 3012 });
+
+      // Should fail CLOSED: signature will be invalid because manifest was tampered
+      await expect(server.start()).rejects.toThrow(/GENOME_INVALID/);
+      await server.stop().catch(() => {});
+
+      delete process.env.MATHISON_GENOME_PATH;
+      delete process.env.MATHISON_ENV;
+      delete process.env.MATHISON_REPO_ROOT;
+
+      // Cleanup
+      rmSync(testFile, { force: true });
+    }, 15000);
+  });
+
   describe('Health Endpoint Genome Status', () => {
     test('NOTE: Health endpoint genome status requires valid signed genome', () => {
       // This test documents that the /health endpoint includes genome verification status

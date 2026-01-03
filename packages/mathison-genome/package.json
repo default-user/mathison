@@ -1,6 +1,6 @@
 {
   "name": "mathison-genome",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Verifiable Memetic Genomes - signed instruction DNA for Mathison governance",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,13 @@
     "build": "tsc",
     "test": "jest"
   },
-  "keywords": ["mathison", "genome", "governance", "memetic", "verification"],
+  "keywords": [
+    "mathison",
+    "genome",
+    "governance",
+    "memetic",
+    "verification"
+  ],
   "devDependencies": {
     "@types/node": "^20.10.0",
     "typescript": "^5.3.0",

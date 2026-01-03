@@ -6,12 +6,14 @@
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
 import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
-import { loadStoreConfigFromEnv, makeStoresFromEnv, Stores } from 'mathison-storage';
+import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
 import { ActionGate } from './action-gate';
 import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
+import { generateOpenAPISpec } from './openapi';
+import { Interpreter } from 'mathison-oi';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -26,7 +28,7 @@ export class MathisonServer {
   private governance: GovernanceEngine;
   private cdi: CDI;
   private cif: CIF;
-  private stores: Stores | null = null;
+  private storageAdapter: StorageAdapter | null = null;
   private actionGate: ActionGate | null = null;
   private jobExecutor: JobExecutor | null = null;
   private memoryGraph: MemoryGraph | null = null;
@@ -37,6 +39,8 @@ export class MathisonServer {
   // Memetic Genome (loaded and verified at boot)
   private genome: Genome | null = null;
   private genomeId: string | null = null;
+  // OI Interpreter (Phase 2)
+  private interpreter: Interpreter | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -103,6 +107,9 @@ export class MathisonServer {
     await this.app.close();
     if (this.memoryGraph) {
       await this.memoryGraph.shutdown();
+    }
+    if (this.storageAdapter) {
+      await this.storageAdapter.close();
     }
     await this.cif.shutdown();
     await this.cdi.shutdown();
@@ -171,21 +178,37 @@ export class MathisonServer {
       const storeConfig = loadStoreConfigFromEnv();
       console.log(`✓ Store config: backend=${storeConfig.backend}, path=${storeConfig.path}`);
 
-      this.stores = makeStoresFromEnv();
-      await this.stores.checkpointStore.init();
-      await this.stores.receiptStore.init();
-      await this.stores.graphStore.initialize();
+      // Phase 0.5: Use StorageAdapter for lifecycle management
+      this.storageAdapter = makeStorageAdapterFromEnv();
+      await this.storageAdapter.init();
       console.log('✓ Storage layer initialized');
 
+      // Create Stores interface for ActionGate compatibility
+      const stores = {
+        checkpointStore: this.storageAdapter.getCheckpointStore(),
+        receiptStore: this.storageAdapter.getReceiptStore(),
+        graphStore: this.storageAdapter.getGraphStore()
+      };
+
       // Initialize ActionGate and JobExecutor
-      this.actionGate = new ActionGate(this.cdi, this.cif, this.stores);
-      this.jobExecutor = new JobExecutor(this.actionGate);
+      this.actionGate = new ActionGate(this.cdi, this.cif, stores);
+      const jobTimeout = process.env.MATHISON_JOB_TIMEOUT ? parseInt(process.env.MATHISON_JOB_TIMEOUT, 10) : 30000;
+      const maxConcurrentJobs = process.env.MATHISON_MAX_CONCURRENT_JOBS ? parseInt(process.env.MATHISON_MAX_CONCURRENT_JOBS, 10) : 100;
+      this.jobExecutor = new JobExecutor(this.actionGate, { jobTimeout, maxConcurrentJobs });
       console.log('✓ ActionGate and JobExecutor initialized');
 
       // P4-C: Initialize MemoryGraph with persistent storage
-      this.memoryGraph = new MemoryGraph(this.stores.graphStore);
+      this.memoryGraph = new MemoryGraph(stores.graphStore);
       await this.memoryGraph.initialize();
       console.log('✓ MemoryGraph initialized with persistence');
+
+      // Phase 2: Initialize OI Interpreter
+      this.interpreter = new Interpreter(
+        this.memoryGraph,
+        this.genomeId ?? undefined,
+        this.genome?.version
+      );
+      console.log('✓ OI Interpreter initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -248,9 +271,30 @@ export class MathisonServer {
       }
     });
 
-    // Pre-serialization: CDI output check + CIF egress
+    // Pre-serialization: JSON contract enforcement + CDI output check + CIF egress
     this.app.addHook('onSend', async (request, reply, payload) => {
       const clientId = request.ip;
+
+      // Phase 0.4: JSON-only contract enforcement (fail-closed)
+      // All responses MUST be JSON-serializable
+      let parsedPayload: any;
+      try {
+        parsedPayload = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        // Ensure we can serialize it back to JSON (validates JSON-serializable)
+        JSON.stringify(parsedPayload);
+      } catch (error) {
+        // FAIL CLOSED: Non-JSON response attempted
+        reply.code(500);
+        reply.header('Content-Type', 'application/json');
+        return JSON.stringify({
+          error: 'JSON_CONTRACT_VIOLATION',
+          message: 'All responses must be valid JSON',
+          details: error instanceof Error ? error.message : String(error)
+        });
+      }
+
+      // Enforce Content-Type: application/json on all responses
+      reply.header('Content-Type', 'application/json');
 
       // CDI output check
       const outputCheck = await this.cdi.checkOutput({
@@ -269,7 +313,7 @@ export class MathisonServer {
       const egressResult = await this.cif.egress({
         clientId,
         endpoint: request.url,
-        payload: typeof payload === 'string' ? JSON.parse(payload) : payload
+        payload: parsedPayload
       });
 
       if (!egressResult.allowed) {
@@ -329,12 +373,19 @@ export class MathisonServer {
           }
         },
         storage: {
-          initialized: this.stores !== null
+          initialized: this.storageAdapter !== null,
+          backend: this.storageAdapter?.getBackend()
         },
         memory: {
           initialized: this.memoryGraph !== null
         }
       };
+    });
+
+    // Phase 4: GET /openapi.json - return OpenAPI 3.0 specification
+    this.app.get('/openapi.json', async (request, reply) => {
+      const spec = generateOpenAPISpec(this.genome?.version);
+      return reply.send(spec);
     });
 
     // GET /genome - read active genome metadata
@@ -388,20 +439,25 @@ export class MathisonServer {
         });
       }
 
-      const result = await this.jobExecutor.runJob(actor, {
-        jobType: body.jobType ?? 'default',
-        inputs: body.inputs,
-        policyId: body.policyId,
-        jobId: body.jobId
-      });
+      const result = await this.jobExecutor.runJob(
+        actor,
+        {
+          jobType: body.jobType ?? 'default',
+          inputs: body.inputs,
+          policyId: body.policyId,
+          jobId: body.jobId
+        },
+        this.genomeId ?? undefined,
+        this.genome?.version
+      );
 
       return result;
     });
 
-    // P3-C: GET /jobs/:job_id/status - get job status
-    this.app.get('/jobs/:job_id/status', async (request, reply) => {
+    // P3-C: GET /jobs/status - get job status (list or by job_id query param)
+    this.app.get('/jobs/status', async (request, reply) => {
       (request as any).action = 'job_status';
-      const { job_id } = request.params as { job_id: string };
+      const { job_id, limit } = request.query as { job_id?: string; limit?: string };
 
       if (!this.jobExecutor) {
         return reply.code(503).send({
@@ -409,23 +465,46 @@ export class MathisonServer {
         });
       }
 
-      const status = await this.jobExecutor.getStatus(job_id);
+      // If job_id provided, get specific job status
+      if (job_id) {
+        const status = await this.jobExecutor.getStatus(
+          job_id,
+          this.genomeId ?? undefined,
+          this.genome?.version
+        );
 
-      if (!status) {
-        return reply.code(404).send({
-          error: 'Job not found',
-          job_id
-        });
+        if (!status) {
+          return reply.code(404).send({
+            error: 'Job not found',
+            job_id
+          });
+        }
+
+        return status;
       }
 
-      return status;
+      // Otherwise, list all jobs
+      const jobs = await this.jobExecutor.listJobs(
+        limit ? parseInt(limit, 10) : undefined
+      );
+
+      return {
+        count: jobs.length,
+        jobs
+      };
     });
 
-    // P3-C: POST /jobs/:job_id/resume - resume job
-    this.app.post('/jobs/:job_id/resume', async (request, reply) => {
+    // P3-C: POST /jobs/resume - resume job by job_id in body
+    this.app.post('/jobs/resume', async (request, reply) => {
       (request as any).action = 'job_resume';
       const actor = request.ip;
-      const { job_id } = request.params as { job_id: string };
+      const body = (request as any).sanitizedBody as any;
+
+      if (!body.job_id || typeof body.job_id !== 'string') {
+        return reply.code(400).send({
+          error: 'Missing required field: job_id'
+        });
+      }
 
       if (!this.jobExecutor) {
         return reply.code(503).send({
@@ -433,16 +512,20 @@ export class MathisonServer {
         });
       }
 
-      const result = await this.jobExecutor.resumeJob(actor, job_id);
+      const result = await this.jobExecutor.resumeJob(
+        actor,
+        body.job_id,
+        this.genomeId ?? undefined,
+        this.genome?.version
+      );
 
       return result;
     });
 
-    // P3-C: GET /receipts/:job_id - get job receipts (optional)
-    this.app.get('/receipts/:job_id', async (request, reply) => {
-      (request as any).action = 'receipts_read';
-      const { job_id } = request.params as { job_id: string };
-      const { limit } = request.query as { limit?: string };
+    // P3-C: GET /jobs/logs - get job logs/receipts (all or by job_id query param)
+    this.app.get('/jobs/logs', async (request, reply) => {
+      (request as any).action = 'job_logs';
+      const { job_id, limit } = request.query as { job_id?: string; limit?: string };
 
       if (!this.actionGate) {
         return reply.code(503).send({
@@ -450,16 +533,25 @@ export class MathisonServer {
         });
       }
 
-      const receipts = await this.actionGate.readReceipts(
-        job_id,
-        limit ? parseInt(limit, 10) : undefined
-      );
+      // If job_id provided, get receipts for that job
+      if (job_id) {
+        const receipts = await this.actionGate.readReceipts(
+          job_id,
+          limit ? parseInt(limit, 10) : undefined
+        );
 
-      return {
-        job_id,
-        count: receipts.length,
-        receipts
-      };
+        return {
+          job_id,
+          count: receipts.length,
+          receipts
+        };
+      }
+
+      // Otherwise return error - must specify job_id for now
+      // (Future: could list all receipts with pagination)
+      return reply.code(400).send({
+        error: 'Missing required query parameter: job_id'
+      });
     });
 
     // P4-A: GET /memory/nodes/:id - retrieve node by ID (read-only)
@@ -511,6 +603,83 @@ export class MathisonServer {
         node_id: id,
         count: edges.length,
         edges
+      };
+    });
+
+    // P4-A: GET /memory/edges/:id - retrieve edge by ID (read-only)
+    this.app.get('/memory/edges/:id', async (request, reply) => {
+      (request as any).action = 'memory_read_edge';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Find edge by ID
+      const edge = (this.memoryGraph as any).edges?.get(id);
+      if (!edge) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Edge not found: ${id}`
+        });
+      }
+
+      return edge;
+    });
+
+    // P4-A: GET /memory/hyperedges/:id - retrieve hyperedge by ID (read-only)
+    this.app.get('/memory/hyperedges/:id', async (request, reply) => {
+      (request as any).action = 'memory_read_hyperedge';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Find hyperedge by ID
+      const hyperedge = (this.memoryGraph as any).hyperedges?.get(id);
+      if (!hyperedge) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Hyperedge not found: ${id}`
+        });
+      }
+
+      return hyperedge;
+    });
+
+    // P4-A: GET /memory/nodes/:id/hyperedges - retrieve hyperedges for node (read-only)
+    this.app.get('/memory/nodes/:id/hyperedges', async (request, reply) => {
+      (request as any).action = 'memory_read_hyperedges';
+      const { id } = request.params as { id: string };
+
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph not initialized'
+        });
+      }
+
+      // Check if node exists first
+      const node = this.memoryGraph.getNode(id);
+      if (!node) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Node not found: ${id}`
+        });
+      }
+
+      const hyperedges = this.memoryGraph.getNodeHyperedges(id);
+      return {
+        node_id: id,
+        count: hyperedges.length,
+        hyperedges
       };
     });
 
@@ -808,6 +977,291 @@ export class MathisonServer {
       };
       this.idempotencyLedger.set(requestHash, successResponse);
       return reply.code(201).send(successResponse.body);
+    });
+
+    // P4-B: POST /memory/hyperedges - create hyperedge (write with ActionGate + idempotency)
+    this.app.post('/memory/hyperedges', async (request, reply) => {
+      (request as any).action = 'memory_create_hyperedge';
+      const actor = request.ip;
+      const body = (request as any).sanitizedBody as any;
+
+      // Validate required fields
+      if (!body.idempotency_key || typeof body.idempotency_key !== 'string' || body.idempotency_key.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required field: idempotency_key'
+        });
+      }
+
+      if (!body.nodes || !Array.isArray(body.nodes) || body.nodes.length === 0) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: nodes (must be non-empty array)'
+        });
+      }
+
+      if (!body.type || typeof body.type !== 'string') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or invalid required field: type'
+        });
+      }
+
+      if (!this.memoryGraph || !this.actionGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph or ActionGate not initialized'
+        });
+      }
+
+      // Verify all nodes exist
+      for (const nodeId of body.nodes) {
+        if (typeof nodeId !== 'string') {
+          return reply.code(400).send({
+            reason_code: 'MALFORMED_REQUEST',
+            message: 'All node IDs must be strings'
+          });
+        }
+        const node = this.memoryGraph.getNode(nodeId);
+        if (!node) {
+          return reply.code(404).send({
+            reason_code: 'ROUTE_NOT_FOUND',
+            message: `Node not found: ${nodeId}`
+          });
+        }
+      }
+
+      // Generate request hash for idempotency
+      const requestHash = IdempotencyLedger.generateRequestHash(
+        '/memory/hyperedges',
+        body,
+        body.idempotency_key
+      );
+
+      // Check if request already processed
+      const cachedResponse = this.idempotencyLedger.get(requestHash);
+      if (cachedResponse) {
+        return reply.code(cachedResponse.statusCode).send(cachedResponse.body);
+      }
+
+      // Generate hyperedge ID
+      const hyperedgeId = body.id || `hyperedge-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Execute hyperedge creation through ActionGate
+      const hyperedge = {
+        id: hyperedgeId,
+        nodes: body.nodes,
+        type: body.type,
+        metadata: body.metadata
+      };
+
+      const result = await this.actionGate.executeSideEffect(
+        {
+          actor,
+          action: 'MEMORY_HYPEREDGE_CREATE',
+          payload: hyperedge,
+          metadata: {
+            job_id: 'memory',
+            stage: 'memory_write',
+            policy_id: 'default',
+            idempotency_key: body.idempotency_key,
+            request_hash: requestHash
+          },
+          genome_id: this.genomeId ?? undefined,
+          genome_version: this.genome?.version
+        },
+        async () => {
+          this.memoryGraph!.addHyperedge(hyperedge);
+          return hyperedge;
+        }
+      );
+
+      if (!result.success) {
+        const errorResponse = {
+          statusCode: 403,
+          body: {
+            reason_code: result.governance.reasonCode,
+            message: result.governance.message
+          }
+        };
+        this.idempotencyLedger.set(requestHash, errorResponse);
+        return reply.code(403).send(errorResponse.body);
+      }
+
+      const successResponse = {
+        statusCode: 201,
+        body: {
+          hyperedge: result.data,
+          created: true,
+          receipt: result.receipt
+        }
+      };
+      this.idempotencyLedger.set(requestHash, successResponse);
+      return reply.code(201).send(successResponse.body);
+    });
+
+    // P4-B: POST /memory/nodes/:id - update node (write with ActionGate + idempotency)
+    this.app.post('/memory/nodes/:id', async (request, reply) => {
+      (request as any).action = 'memory_update_node';
+      const actor = request.ip;
+      const { id } = request.params as { id: string };
+      const body = (request as any).sanitizedBody as any;
+
+      // Validate required fields
+      if (!body.idempotency_key || typeof body.idempotency_key !== 'string' || body.idempotency_key.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required field: idempotency_key'
+        });
+      }
+
+      if (!this.memoryGraph || !this.actionGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'MemoryGraph or ActionGate not initialized'
+        });
+      }
+
+      // Check if node exists
+      const existingNode = this.memoryGraph.getNode(id);
+      if (!existingNode) {
+        return reply.code(404).send({
+          reason_code: 'ROUTE_NOT_FOUND',
+          message: `Node not found: ${id}`
+        });
+      }
+
+      // Generate request hash for idempotency
+      const requestHash = IdempotencyLedger.generateRequestHash(
+        `/memory/nodes/${id}`,
+        body,
+        body.idempotency_key
+      );
+
+      // Check if request already processed
+      const cachedResponse = this.idempotencyLedger.get(requestHash);
+      if (cachedResponse) {
+        return reply.code(cachedResponse.statusCode).send(cachedResponse.body);
+      }
+
+      // Create updated node (merge with existing)
+      const updatedNode = {
+        id,
+        type: body.type ?? existingNode.type,
+        data: body.data ?? existingNode.data,
+        metadata: body.metadata ?? existingNode.metadata
+      };
+
+      // Execute node update through ActionGate
+      const result = await this.actionGate.executeSideEffect(
+        {
+          actor,
+          action: 'MEMORY_NODE_UPDATE',
+          payload: updatedNode,
+          metadata: {
+            job_id: 'memory',
+            stage: 'memory_write',
+            policy_id: 'default',
+            idempotency_key: body.idempotency_key,
+            request_hash: requestHash
+          },
+          genome_id: this.genomeId ?? undefined,
+          genome_version: this.genome?.version
+        },
+        async () => {
+          this.memoryGraph!.addNode(updatedNode);
+          return updatedNode;
+        }
+      );
+
+      if (!result.success) {
+        const errorResponse = {
+          statusCode: 403,
+          body: {
+            reason_code: result.governance.reasonCode,
+            message: result.governance.message
+          }
+        };
+        this.idempotencyLedger.set(requestHash, errorResponse);
+        return reply.code(403).send(errorResponse.body);
+      }
+
+      const successResponse = {
+        statusCode: 200,
+        body: {
+          node: result.data,
+          updated: true,
+          receipt: result.receipt
+        }
+      };
+      this.idempotencyLedger.set(requestHash, successResponse);
+      return reply.code(200).send(successResponse.body);
+    });
+
+    // Phase 2: POST /oi/interpret - OI interpretation endpoint
+    this.app.post('/oi/interpret', async (request, reply) => {
+      (request as any).action = 'oi_interpret';
+      const body = (request as any).sanitizedBody as any;
+
+      // Fail-closed: require interpreter
+      if (!this.interpreter) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'OI Interpreter not initialized'
+        });
+      }
+
+      // Fail-closed: require memory graph
+      if (!this.memoryGraph) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'Memory backend unavailable'
+        });
+      }
+
+      // Fail-closed: require genome metadata
+      if (!this.genome || !this.genomeId) {
+        return reply.code(503).send({
+          reason_code: 'GENOME_MISSING',
+          message: 'Genome metadata missing'
+        });
+      }
+
+      // Validate required fields
+      if (!body.text || typeof body.text !== 'string' || body.text.trim() === '') {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing or empty required field: text'
+        });
+      }
+
+      // Validate optional limit parameter
+      let limit: number | undefined;
+      if (body.limit !== undefined) {
+        if (typeof body.limit !== 'number' || body.limit < 1 || body.limit > 100) {
+          return reply.code(400).send({
+            reason_code: 'MALFORMED_REQUEST',
+            message: 'Invalid limit parameter (must be number between 1 and 100)'
+          });
+        }
+        limit = body.limit;
+      }
+
+      try {
+        // Execute interpretation
+        const result = await this.interpreter.interpret({
+          text: body.text,
+          limit
+        });
+
+        return result;
+      } catch (error) {
+        // Handle interpreter errors (fail-closed)
+        return reply.code(500).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: error instanceof Error ? error.message : 'Interpretation failed'
+        });
+      }
     });
 
     // Catch-all for unknown routes (fail-closed)

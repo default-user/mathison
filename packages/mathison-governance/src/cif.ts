@@ -84,9 +84,26 @@ export class CIF {
     console.log('🔥 Shutting down CIF...');
   }
 
+  /**
+   * Ingress processing - HARDENED to never throw
+   * Returns deterministic deny response on any error
+   */
   async ingress(context: IngressContext): Promise<IngressResult> {
     const violations: string[] = [];
-    const payloadStr = JSON.stringify(context.payload);
+
+    // HARDENED: Safely stringify payload (never throws)
+    let payloadStr: string;
+    try {
+      payloadStr = JSON.stringify(context.payload);
+    } catch (e) {
+      // FAIL-CLOSED: Cannot stringify payload
+      return {
+        allowed: false,
+        quarantined: true,
+        violations: ['MALFORMED_REQUEST: Payload cannot be serialized to JSON'],
+        rateLimitRemaining: 0
+      };
+    }
 
     // Check size limits
     if (payloadStr.length > this.config.maxRequestSize) {
@@ -112,6 +129,20 @@ export class CIF {
     // Sanitize input (basic XSS/injection protection)
     const sanitized = this.sanitizeInput(payloadStr);
 
+    // HARDENED: Safely parse sanitized payload (never throws)
+    let sanitizedPayload: unknown;
+    try {
+      sanitizedPayload = JSON.parse(sanitized);
+    } catch (e) {
+      // FAIL-CLOSED: Sanitization produced invalid JSON
+      return {
+        allowed: false,
+        quarantined: true,
+        violations: ['MALFORMED_REQUEST: Sanitization produced invalid JSON'],
+        rateLimitRemaining: 0
+      };
+    }
+
     // Check for quarantine patterns
     const quarantined = this.shouldQuarantine(sanitized);
     if (quarantined) {
@@ -122,17 +153,33 @@ export class CIF {
 
     return {
       allowed: !quarantined,
-      sanitizedPayload: JSON.parse(sanitized),
+      sanitizedPayload,
       quarantined,
       violations,
       rateLimitRemaining: bucket?.tokens ?? this.config.rateLimit.maxRequests
     };
   }
 
+  /**
+   * Egress processing - HARDENED to never throw
+   * Returns deterministic deny response on any error
+   */
   async egress(context: EgressContext): Promise<EgressResult> {
     const violations: string[] = [];
     const leaksDetected: string[] = [];
-    const payloadStr = JSON.stringify(context.payload);
+
+    // HARDENED: Safely stringify payload (never throws)
+    let payloadStr: string;
+    try {
+      payloadStr = JSON.stringify(context.payload);
+    } catch (e) {
+      // FAIL-CLOSED: Cannot stringify response payload
+      return {
+        allowed: false,
+        violations: ['EGRESS_SERIALIZATION_FAILED: Response cannot be serialized to JSON'],
+        leaksDetected: []
+      };
+    }
 
     // Check size limits
     if (payloadStr.length > this.config.maxResponseSize) {
@@ -162,13 +209,26 @@ export class CIF {
       sanitized = this.sanitizeOutput(payloadStr);
     }
 
+    // HARDENED: Safely parse sanitized output (never throws)
+    let sanitizedPayload: unknown;
+    try {
+      sanitizedPayload = JSON.parse(sanitized);
+    } catch (e) {
+      // FAIL-CLOSED: Sanitization produced invalid JSON
+      return {
+        allowed: false,
+        violations: ['EGRESS_PARSE_FAILED: Output sanitization produced invalid JSON'],
+        leaksDetected
+      };
+    }
+
     if (this.config.auditLog && violations.length > 0) {
       console.log(`⚠️  CIF egress violations: ${violations.join(', ')}`);
     }
 
     return {
       allowed: violations.length === 0,
-      sanitizedPayload: JSON.parse(sanitized),
+      sanitizedPayload,
       violations,
       leaksDetected
     };

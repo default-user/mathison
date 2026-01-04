@@ -168,6 +168,9 @@ export async function verifyGenomeSignature(genome: Genome): Promise<GenomeVerif
 /**
  * Verify build manifest file hashes
  * Computes SHA-256 for each file and compares to declared hash
+ *
+ * IMPORTANT: Uses raw bytes (Buffer) not utf8 string for stable cross-platform hashing
+ * This ensures consistent hashes regardless of line endings or encoding
  */
 export function verifyBuildManifest(genome: Genome, repoRoot: string): { verified: boolean; errors: string[] } {
   const errors: string[] = [];
@@ -181,11 +184,13 @@ export function verifyBuildManifest(genome: Genome, repoRoot: string): { verifie
       continue;
     }
 
-    // Compute SHA-256 hash
+    // Compute SHA-256 hash using RAW BYTES for stable cross-platform hashing
     try {
-      const fileContent = readFileSync(filePath, 'utf8');
+      // Read as raw Buffer, not string - this ensures consistent hashing
+      // regardless of line endings (CRLF vs LF) or text encoding
+      const fileBytes = readFileSync(filePath);
       const hash = createHash('sha256');
-      hash.update(fileContent, 'utf8');
+      hash.update(fileBytes);
       const computedHash = hash.digest('hex');
 
       // Compare to declared hash

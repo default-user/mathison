@@ -243,12 +243,29 @@ export class MathisonServer {
       (request as any).sanitizedBody = ingressResult.sanitizedPayload;
     });
 
-    // Pre-handler: CDI action check
-    // Note: Routes must set request.action BEFORE this runs, using route-specific preHandler
+    // Pre-handler: CDI action check (FAIL-CLOSED)
+    // All routes MUST declare an action unless in allowlist
     this.app.addHook('preHandler', async (request, reply) => {
       const action = (request as any).action;
 
-      // Skip CDI check if action not set (route doesn't require it)
+      // Allowlist: only health and OpenAPI endpoints bypass action requirement
+      const ALLOWLIST = ['/health', '/openapi.json'];
+      const isAllowlisted = ALLOWLIST.includes(request.url.split('?')[0]);
+
+      // FAIL-CLOSED: If no action and not allowlisted, deny
+      if (!action && !isAllowlisted) {
+        reply.code(403).send({
+          reason_code: 'GOV_ACTION_REQUIRED',
+          message: 'Route does not declare an action - denied by fail-closed governance policy',
+          details: {
+            url: request.url,
+            method: request.method
+          }
+        });
+        return reply;
+      }
+
+      // Skip CDI check for allowlisted routes (they have no action)
       if (!action) {
         return;
       }

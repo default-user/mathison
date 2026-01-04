@@ -27,8 +27,13 @@ export type ServerConfig = {
   cors_origin: string;
 };
 
+/**
+ * DEPRECATED: kernel-mac is legacy/dev tooling only.
+ * The canonical product API is mathison-server (port 3000).
+ * kernel-mac uses port 3001 to avoid conflicts.
+ */
 export const DEFAULT_SERVER_CONFIG: ServerConfig = {
-  port: 3000,
+  port: 3001,
   host: '0.0.0.0',
   cors_origin: '*',
 };

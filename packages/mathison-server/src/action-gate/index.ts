@@ -7,9 +7,18 @@
  * - Default: 1 in production (MATHISON_ENV=production), 0 in development
  */
 
+import { createHash } from 'crypto';
 import { CDI, CIF, ActionContext, ActionResult } from 'mathison-governance';
 import { Stores, Receipt, JobCheckpoint } from 'mathison-storage';
 import { GovernanceReasonCode, GovernanceResult, GovernanceDecision } from './reason-codes';
+
+/**
+ * Compute SHA256 hash of content for audit trail
+ */
+function computeContentHash(payload: unknown): string {
+  const content = JSON.stringify(payload ?? {});
+  return createHash('sha256').update(content).digest('hex');
+}
 
 /**
  * Check if strict persistence mode is enabled
@@ -112,6 +121,8 @@ export class ActionGate {
       store_backend: process.env.MATHISON_STORE_BACKEND as 'FILE' | 'SQLITE',
       genome_id: context.genome_id,
       genome_version: context.genome_version,
+      reason_code: 'GOVERNANCE_PASSED',
+      content_hash: computeContentHash(context.payload),
       notes: `ActionGate: ${context.action}`
     };
 
@@ -149,13 +160,15 @@ export class ActionGate {
   /**
    * Create job checkpoint (side effect)
    */
-  async createCheckpoint(actor: string, checkpoint: JobCheckpoint): Promise<SideEffectResult> {
+  async createCheckpoint(actor: string, checkpoint: JobCheckpoint, genomeId?: string, genomeVersion?: string): Promise<SideEffectResult> {
     return this.executeSideEffect(
       {
         actor,
         action: 'create_checkpoint',
         payload: checkpoint,
-        metadata: { job_id: checkpoint.job_id }
+        metadata: { job_id: checkpoint.job_id },
+        genome_id: genomeId,
+        genome_version: genomeVersion
       },
       async () => {
         await this.stores.checkpointStore.create(checkpoint);
@@ -167,13 +180,15 @@ export class ActionGate {
   /**
    * Update job checkpoint (side effect)
    */
-  async saveCheckpoint(actor: string, checkpoint: JobCheckpoint): Promise<SideEffectResult> {
+  async saveCheckpoint(actor: string, checkpoint: JobCheckpoint, genomeId?: string, genomeVersion?: string): Promise<SideEffectResult> {
     return this.executeSideEffect(
       {
         actor,
         action: 'save_checkpoint',
         payload: checkpoint,
-        metadata: { job_id: checkpoint.job_id }
+        metadata: { job_id: checkpoint.job_id },
+        genome_id: genomeId,
+        genome_version: genomeVersion
       },
       async () => {
         await this.stores.checkpointStore.save(checkpoint);
@@ -185,13 +200,15 @@ export class ActionGate {
   /**
    * Append receipt (side effect)
    */
-  async appendReceipt(actor: string, receipt: Receipt): Promise<SideEffectResult> {
+  async appendReceipt(actor: string, receipt: Receipt, genomeId?: string, genomeVersion?: string): Promise<SideEffectResult> {
     return this.executeSideEffect(
       {
         actor,
         action: 'append_receipt',
         payload: receipt,
-        metadata: { job_id: receipt.job_id }
+        metadata: { job_id: receipt.job_id },
+        genome_id: genomeId,
+        genome_version: genomeVersion
       },
       async () => {
         await this.stores.receiptStore.append(receipt);

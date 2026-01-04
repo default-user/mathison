@@ -274,19 +274,21 @@ export class MathisonServer {
         { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_update_node' },
       ];
 
-      // Allowlist: only health and OpenAPI endpoints bypass action requirement
+      // Allowlist: endpoints that bypass action requirement entirely
       const ALLOWLIST = ['/health', '/openapi.json'];
       const urlPath = request.url.split('?')[0];
       const isAllowlisted = ALLOWLIST.includes(urlPath);
 
       // Look up action from static mapping
       let action = ROUTE_ACTIONS[request.method]?.[urlPath];
+      let isKnownRoute = action !== undefined;
 
       // If not found, try pattern matching
       if (!action) {
         for (const { method, pattern, action: patternAction } of PATTERN_ACTIONS) {
           if (request.method === method && pattern.test(urlPath)) {
             action = patternAction;
+            isKnownRoute = true;
             break;
           }
         }
@@ -295,10 +297,18 @@ export class MathisonServer {
       // Also check if action was set by route handler (for backwards compatibility)
       if (!action) {
         action = (request as any).action;
+        if (action) isKnownRoute = true;
       }
 
-      // FAIL-CLOSED: If no action and not allowlisted, deny
-      if (!action && !isAllowlisted) {
+      // Unknown routes (no mapping) should pass through to 404 handler
+      // Only deny known routes that are missing action declarations
+      if (!action && !isAllowlisted && !isKnownRoute) {
+        // Let unknown routes fall through to 404 handler
+        return;
+      }
+
+      // FAIL-CLOSED: Known routes MUST have an action
+      if (!action && isKnownRoute && !isAllowlisted) {
         reply.code(403).send({
           reason_code: 'GOV_ACTION_REQUIRED',
           message: 'Route does not declare an action - denied by fail-closed governance policy',

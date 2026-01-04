@@ -85,7 +85,7 @@ export class JobExecutor {
       }
     };
 
-    const createResult = await this.actionGate.createCheckpoint(actor, checkpoint);
+    const createResult = await this.actionGate.createCheckpoint(actor, checkpoint, genomeId, genomeVersion);
 
     if (!createResult.success) {
       return {
@@ -104,7 +104,7 @@ export class JobExecutor {
         // Stage 1: Process inputs
         checkpoint.current_stage = 'process';
         checkpoint.completed_stages = ['init'];
-        await this.actionGate.saveCheckpoint(actor, checkpoint);
+        await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
 
         // Simulate processing
         const outputs = {
@@ -120,7 +120,7 @@ export class JobExecutor {
         checkpoint.stage_outputs = { final: outputs };
         checkpoint.timestamps!.completed = new Date().toISOString();
 
-        await this.actionGate.saveCheckpoint(actor, checkpoint);
+        await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
       })(), this.jobTimeout);
 
       return {
@@ -141,7 +141,7 @@ export class JobExecutor {
       };
       checkpoint.timestamps!.failed = new Date().toISOString();
 
-      await this.actionGate.saveCheckpoint(actor, checkpoint);
+      await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
 
       return {
         job_id: jobId,
@@ -207,7 +207,7 @@ export class JobExecutor {
           if (!checkpoint.completed_stages.includes('init')) {
             checkpoint.completed_stages.push('init');
           }
-          await this.actionGate.saveCheckpoint(actor, checkpoint);
+          await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
 
           // Process
           const outputs = {
@@ -224,13 +224,13 @@ export class JobExecutor {
           checkpoint.timestamps!.completed = new Date().toISOString();
           checkpoint.error = null;
 
-          await this.actionGate.saveCheckpoint(actor, checkpoint);
+          await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
         } else {
           // Already past all stages - just complete
           checkpoint.status = 'completed';
           checkpoint.current_stage = null;
           checkpoint.timestamps!.completed = new Date().toISOString();
-          await this.actionGate.saveCheckpoint(actor, checkpoint);
+          await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
         }
       })(), this.jobTimeout);
 
@@ -250,7 +250,7 @@ export class JobExecutor {
         code: error instanceof Error && error.message === 'Job execution timeout' ? 'TIMEOUT' : 'RESUME_ERROR'
       };
 
-      await this.actionGate.saveCheckpoint(actor, checkpoint);
+      await this.actionGate.saveCheckpoint(actor, checkpoint, genomeId, genomeVersion);
 
       return {
         job_id: jobId,

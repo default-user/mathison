@@ -13,6 +13,10 @@ export interface Receipt {
   notes?: string;
   extensible?: Record<string, unknown>;
 
+  // Governance audit fields
+  reason_code?: string; // Why the action was allowed/denied
+  content_hash?: string; // Hash of the content operated on
+
   // REQUIRED for P2-B wiring:
   store_backend?: "FILE" | "SQLITE";
 

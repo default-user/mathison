@@ -246,11 +246,56 @@ export class MathisonServer {
     // Pre-handler: CDI action check (FAIL-CLOSED)
     // All routes MUST declare an action unless in allowlist
     this.app.addHook('preHandler', async (request, reply) => {
-      const action = (request as any).action;
+      // Route-to-action mapping (static, declared at route definition time)
+      const ROUTE_ACTIONS: Record<string, Record<string, string>> = {
+        'GET': {
+          '/genome': 'genome_read',
+          '/jobs/status': 'job_status',
+          '/jobs/logs': 'receipts_read',
+          '/memory/search': 'memory_search',
+        },
+        'POST': {
+          '/jobs/run': 'job_run',
+          '/jobs/resume': 'job_resume',
+          '/memory/nodes': 'memory_create_node',
+          '/memory/edges': 'memory_create_edge',
+          '/memory/hyperedges': 'memory_create_hyperedge',
+          '/oi/interpret': 'oi_interpret',
+        },
+      };
+
+      // Pattern-based route-to-action mapping for parameterized routes
+      const PATTERN_ACTIONS: Array<{ method: string; pattern: RegExp; action: string }> = [
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_read_node' },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: 'memory_read_edges' },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: 'memory_read_hyperedges' },
+        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: 'memory_read_edge' },
+        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: 'memory_read_hyperedge' },
+        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_update_node' },
+      ];
 
       // Allowlist: only health and OpenAPI endpoints bypass action requirement
       const ALLOWLIST = ['/health', '/openapi.json'];
-      const isAllowlisted = ALLOWLIST.includes(request.url.split('?')[0]);
+      const urlPath = request.url.split('?')[0];
+      const isAllowlisted = ALLOWLIST.includes(urlPath);
+
+      // Look up action from static mapping
+      let action = ROUTE_ACTIONS[request.method]?.[urlPath];
+
+      // If not found, try pattern matching
+      if (!action) {
+        for (const { method, pattern, action: patternAction } of PATTERN_ACTIONS) {
+          if (request.method === method && pattern.test(urlPath)) {
+            action = patternAction;
+            break;
+          }
+        }
+      }
+
+      // Also check if action was set by route handler (for backwards compatibility)
+      if (!action) {
+        action = (request as any).action;
+      }
 
       // FAIL-CLOSED: If no action and not allowlisted, deny
       if (!action && !isAllowlisted) {

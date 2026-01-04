@@ -1,5 +1,17 @@
 # Mathison OI Kernel for macOS
 
+> ⚠️ **DEPRECATION NOTICE**
+>
+> kernel-mac is **legacy/development tooling only**. The canonical product API is
+> **mathison-server** (port 3000).
+>
+> - **mathison-server** (port 3000): Production API - jobs, memory, governance, OI interpret
+> - **kernel-mac** (port 3001): Desktop/dev UI backend - beams, chat, llama model management
+>
+> For new integrations, use mathison-server. The SDK generator produces clients for
+> mathison-server, not kernel-mac. See `packages/mathison-server/src/openapi.ts` for
+> the canonical API specification.
+
 Local, Mac-executable Mathison OI Kernel with BeamStore identity substrate and local LLM inference.
 
 ## Features

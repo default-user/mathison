@@ -1,8 +1,15 @@
 import type * as API from '../types/api';
 
 /**
- * Type-safe API client for Mathison kernel
- * All methods return properly typed responses with error handling
+ * Type-safe API client for Mathison kernel-mac
+ *
+ * NOTE: This client targets kernel-mac (port 3001), NOT mathison-server.
+ * These endpoints (beams, chat, models, identity) are kernel-mac specific.
+ *
+ * For the canonical product API (jobs, memory, governance), use
+ * mathison-server (port 3000) via the SDK generator.
+ *
+ * All methods return properly typed responses with error handling.
  */
 
 const API_BASE = '/api';

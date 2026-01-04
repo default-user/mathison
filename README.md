@@ -94,6 +94,42 @@ pnpm install && pnpm demo
 
 See [docs/20-architecture/system-architecture.md](./docs/20-architecture/system-architecture.md) for details.
 
+## Canonical Product API
+
+The canonical product API is **mathison-server** (port 3000). All SDKs, integrations, and production deployments MUST target this server.
+
+### Server Architecture
+
+| Server | Port | Purpose | Status |
+|--------|------|---------|--------|
+| **mathison-server** | 3000 | Canonical product API - jobs, memory, governance | **PRODUCTION** |
+| kernel-mac | 3001 | Desktop/dev UI backend - beams, chat, llama | DEPRECATED |
+
+### API Specification
+
+The OpenAPI 3.0 specification is the source of truth:
+- **Spec file:** `packages/mathison-server/src/openapi.ts`
+- **Live endpoint:** `GET /openapi.json`
+- **Vendor extension:** `x-mathison-action` on all endpoints for governance metadata
+
+### SDK Generation
+
+SDKs are generated from the mathison-server OpenAPI spec:
+
+```bash
+# Generate TypeScript SDK
+pnpm -C packages/mathison-sdk-generator generate --target typescript
+```
+
+### API Drift Prevention
+
+To prevent API drift between servers/SDKs:
+
+1. **Single source of truth:** All routes defined in `mathison-server/src/openapi.ts`
+2. **Governance metadata:** Every route MUST have `x-mathison-action` specifying action type and risk class
+3. **Fail-closed enforcement:** Routes without declared actions are denied at runtime
+4. **SDK regeneration:** Any API change requires SDK regeneration from OpenAPI
+
 ## Monorepo Structure
 
 ```
@@ -113,7 +149,8 @@ mathison/
 │   ├── 90-proposals/              # Feature proposals
 │   └── 95-adr/                    # Architecture Decision Records
 ├── packages/
-│   ├── mathison-server/       # Main server orchestration
+│   ├── mathison-server/       # CANONICAL PRODUCT API (port 3000)
+│   ├── mathison-kernel-mac/   # [DEPRECATED] Desktop UI backend (port 3001)
 │   ├── mathison-governance/   # CDI + treaty enforcement
 │   ├── mathison-memory/       # Graph/hypergraph memory
 │   ├── mathison-storage/      # Persistent storage (FILE/SQLITE)
@@ -121,6 +158,7 @@ mathison/
 │   ├── mathison-mesh/         # Distributed mesh protocol + ModelBus
 │   ├── mathison-mobile/       # Mobile components (React Native)
 │   ├── mathison-quadratic/    # Single-file OI runtime (v0.2.0)
+│   ├── mathison-genome/       # Genome verification + build manifest
 │   └── mathison-sdk-generator/ # Multi-language SDK generation
 ├── quadratic-bridge.mjs       # Secure bridge server (v0.3.0)
 ├── quadratic.html             # Browser bootstrap UI
@@ -161,6 +199,13 @@ Required for server operation:
 - `MATHISON_STORE_BACKEND` — Storage backend: `FILE` or `SQLITE` (fail-closed if missing)
 - `MATHISON_STORE_PATH` — Base path for storage files (fail-closed if missing)
 
+Governance settings:
+
+- `MATHISON_ENV` — Environment: `production` or `development` (affects defaults)
+- `MATHISON_STRICT_PERSISTENCE` — Fail request on persistence errors: `1` (enabled) or `0` (disabled)
+  - Default: enabled in production (`MATHISON_ENV=production`), disabled in development
+- `MATHISON_VERIFY_MANIFEST` — Verify build manifest on startup: `1` (enabled) or `0` (disabled)
+
 Optional for LLM integration:
 
 - `GITHUB_TOKEN` — GitHub token for Models API (free tier: 15 req/min, 150 req/day)
@@ -170,6 +215,7 @@ Example:
 ```bash
 export MATHISON_STORE_BACKEND=FILE
 export MATHISON_STORE_PATH=./data
+export MATHISON_ENV=production          # Enable strict mode defaults
 export GITHUB_TOKEN=ghp_your_token_here  # For free LLM access
 ```
 

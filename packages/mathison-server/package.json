@@ -1,6 +1,7 @@
 {
   "name": "mathison-server",
   "version": "1.0.4",
+  "description": "Canonical Mathison product API (port 3000) - governance-first job execution with fail-closed enforcement",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

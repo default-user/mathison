@@ -523,7 +523,7 @@ pnpm tsx scripts/benchmark-pipeline.ts
 **Debugging receipt chain:**
 - Receipts stored in: `./data/receipts/` (FILE) or `receipts` table (SQLite)
 - Each receipt contains: `genome_id`, `genome_version`, `timestamp`, `action`, `decision`, `policy_id`
-- Verify chain integrity: `curl http://localhost:3000/receipts/verify`
+- Retrieve job receipts: `curl "http://localhost:3000/jobs/logs?job_id=<job_id>"`
 
 **Key source files:**
 - Server bootstrap: `packages/mathison-server/src/index.ts`

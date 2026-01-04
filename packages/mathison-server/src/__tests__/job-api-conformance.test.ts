@@ -4,6 +4,7 @@
  */
 
 import { MathisonServer } from '../index';
+import { generateTestKeypair, signGenome } from './test-utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,9 +14,12 @@ describe('Phase 3: Job API Conformance', () => {
   const originalEnv = { ...process.env };
   const testGenomePath = path.join(os.tmpdir(), 'mathison-test-genome-job-api.json');
 
-  beforeAll(() => {
-    // Create test genome file
-    const testGenome = {
+  beforeAll(async () => {
+    // Generate real test keypair
+    const keypair = await generateTestKeypair('test-job-api-key');
+
+    // Create test genome (unsigned)
+    const testGenomeUnsigned = {
       schema_version: 'genome.v0.1',
       name: 'TEST_JOB_API_GENOME',
       version: '1.0.0',
@@ -25,7 +29,7 @@ describe('Phase 3: Job API Conformance', () => {
         signers: [{
           key_id: 'test-job-api-key',
           alg: 'ed25519',
-          public_key: 'MCowBQYDK2VwAyEAiENVzPT23crQdta+l7RPa+wy5LW8GraUMcP/sAL3mow='
+          public_key: keypair.publicKeyBase64
         }],
         threshold: 1
       },
@@ -40,18 +44,16 @@ describe('Phase 3: Job API Conformance', () => {
         risk_class: 'A',
         allow_actions: [
           'health_check', 'genome_read', 'job_run', 'job_status',
-          'job_resume', 'job_logs', 'create_checkpoint', 'save_checkpoint',
+          'job_resume', 'receipts_read', 'create_checkpoint', 'save_checkpoint',
           'append_receipt'
         ],
         deny_actions: []
       }],
-      build_manifest: { files: [] },
-      signature: {
-        alg: 'ed25519',
-        signer_key_id: 'test-job-api-key',
-        sig_base64: 'VhGd2OaA0YpOqKqV3b9vXfhpW/IwLjdVuJ5ZaFk8HxMXQJw8jR4FZvPzW5qN6xQdA9GbT8rLkJ3Y2Vh5Np4AAw=='
-      }
+      build_manifest: { files: [] }
     };
+
+    // Sign genome with real signature
+    const testGenome = await signGenome(testGenomeUnsigned, keypair);
 
     fs.writeFileSync(testGenomePath, JSON.stringify(testGenome));
   });

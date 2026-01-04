@@ -246,14 +246,69 @@ export class MathisonServer {
     // Pre-handler: CDI action check (FAIL-CLOSED)
     // All routes MUST declare an action unless in allowlist
     this.app.addHook('preHandler', async (request, reply) => {
-      const action = (request as any).action;
+      // Route-to-action mapping (static, declared at route definition time)
+      const ROUTE_ACTIONS: Record<string, Record<string, string>> = {
+        'GET': {
+          '/genome': 'genome_read',
+          '/jobs/status': 'job_status',
+          '/jobs/logs': 'receipts_read',
+          '/memory/search': 'memory_search',
+        },
+        'POST': {
+          '/jobs/run': 'job_run',
+          '/jobs/resume': 'job_resume',
+          '/memory/nodes': 'memory_create_node',
+          '/memory/edges': 'memory_create_edge',
+          '/memory/hyperedges': 'memory_create_hyperedge',
+          '/oi/interpret': 'oi_interpret',
+        },
+      };
 
-      // Allowlist: only health and OpenAPI endpoints bypass action requirement
+      // Pattern-based route-to-action mapping for parameterized routes
+      const PATTERN_ACTIONS: Array<{ method: string; pattern: RegExp; action: string }> = [
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_read_node' },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: 'memory_read_edges' },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: 'memory_read_hyperedges' },
+        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: 'memory_read_edge' },
+        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: 'memory_read_hyperedge' },
+        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_update_node' },
+      ];
+
+      // Allowlist: endpoints that bypass action requirement entirely
       const ALLOWLIST = ['/health', '/openapi.json'];
-      const isAllowlisted = ALLOWLIST.includes(request.url.split('?')[0]);
+      const urlPath = request.url.split('?')[0];
+      const isAllowlisted = ALLOWLIST.includes(urlPath);
 
-      // FAIL-CLOSED: If no action and not allowlisted, deny
-      if (!action && !isAllowlisted) {
+      // Look up action from static mapping
+      let action = ROUTE_ACTIONS[request.method]?.[urlPath];
+      let isKnownRoute = action !== undefined;
+
+      // If not found, try pattern matching
+      if (!action) {
+        for (const { method, pattern, action: patternAction } of PATTERN_ACTIONS) {
+          if (request.method === method && pattern.test(urlPath)) {
+            action = patternAction;
+            isKnownRoute = true;
+            break;
+          }
+        }
+      }
+
+      // Also check if action was set by route handler (for backwards compatibility)
+      if (!action) {
+        action = (request as any).action;
+        if (action) isKnownRoute = true;
+      }
+
+      // Unknown routes (no mapping) should pass through to 404 handler
+      // Only deny known routes that are missing action declarations
+      if (!action && !isAllowlisted && !isKnownRoute) {
+        // Let unknown routes fall through to 404 handler
+        return;
+      }
+
+      // FAIL-CLOSED: Known routes MUST have an action
+      if (!action && isKnownRoute && !isAllowlisted) {
         reply.code(403).send({
           reason_code: 'GOV_ACTION_REQUIRED',
           message: 'Route does not declare an action - denied by fail-closed governance policy',
@@ -541,7 +596,7 @@ export class MathisonServer {
 
     // P3-C: GET /jobs/logs - get job logs/receipts (all or by job_id query param)
     this.app.get('/jobs/logs', async (request, reply) => {
-      (request as any).action = 'job_logs';
+      (request as any).action = 'receipts_read';
       const { job_id, limit } = request.query as { job_id?: string; limit?: string };
 
       if (!this.actionGate) {
@@ -1326,3 +1381,4 @@ export {
   GovernanceResult,
   GovernanceError
 } from './action-gate/reason-codes';
+export { generateOpenAPISpec, OpenAPISpec, ActionMetadata } from './openapi';

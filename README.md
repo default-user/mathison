@@ -117,8 +117,8 @@ The OpenAPI 3.0 specification is the source of truth:
 SDKs are generated from the mathison-server OpenAPI spec:
 
 ```bash
-# Generate TypeScript SDK
-pnpm -C packages/mathison-sdk-generator generate --target typescript
+# Generate all SDKs (TypeScript, Python stubs, Rust stubs)
+pnpm generate-sdks
 ```
 
 ### API Drift Prevention
@@ -267,20 +267,20 @@ Expected `/health` response:
 ### Job Management
 
 - `POST /jobs/run` — Execute a new governed job
-  - Body: `{ input: any, metadata?: any }`
+  - Body: `{ jobType: string, inputs?: any, policyId?: string, jobId?: string }`
   - Returns: `{ job_id, status, result? }`
 
-- `GET /jobs/:job_id/status` — Query job status
+- `GET /jobs/status?job_id=<id>` — Query job status
+  - Query params: `job_id` (optional - omit to list all), `limit` (optional)
   - Returns: `{ job_id, status, result?, stage?, error? }`
 
-- `POST /jobs/:job_id/resume` — Resume a paused/failed job (idempotent)
-  - Body: `{ checkpoint?: any }`
+- `POST /jobs/resume` — Resume a paused/failed job (idempotent)
+  - Body: `{ job_id: string }`
   - Returns: `{ job_id, status, result? }`
 
-### Receipts
-
-- `GET /receipts/:job_id` — Retrieve all governance receipts for a job
-  - Returns: `{ job_id, receipts: [...] }`
+- `GET /jobs/logs?job_id=<id>` — Retrieve governance receipts for a job
+  - Query params: `job_id` (required), `limit` (optional)
+  - Returns: `{ job_id, count, receipts: [...] }`
 
 ### Memory Graph
 

@@ -230,10 +230,10 @@ describe('Phase 0.4: JSON Contract Enforcement', () => {
     it('empty object responses are valid JSON', async () => {
       const app = server.getApp();
 
-      // Create a minimal valid request that returns simple data
+      // Create a minimal valid request that returns simple data via canonical route
       const response = await app.inject({
         method: 'GET',
-        url: '/receipts/nonexistent-job-id'
+        url: '/jobs/logs?job_id=nonexistent-job-id'
       });
 
       expect(response.statusCode).toBe(200);

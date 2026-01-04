@@ -3,12 +3,13 @@
  * Provides real Ed25519 signature generation (no dummy signatures)
  */
 
+import type { webcrypto } from 'crypto';
 import { Genome, canonicalizeGenome } from '../index';
 
 export interface TestKeypair {
   keyId: string;
   publicKeyBase64: string;
-  privateKey: CryptoKey;
+  privateKey: webcrypto.CryptoKey;
 }
 
 /**

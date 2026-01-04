@@ -243,7 +243,7 @@ Each operation includes \`x-mathison-action\` with:
 
       '/jobs/logs': {
         get: createOperation('Get job logs/receipts', {
-          action: 'job_logs',
+          action: 'receipts_read',
           riskClass: 'READ'
         }, {
           tags: ['Jobs'],

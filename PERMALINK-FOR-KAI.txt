@@ -48,16 +48,16 @@ The Quadratic OI runtime is currently running and ready for you to access.
 - Bridge authentication is DISABLED (development mode)
 - No API key required
 - Safe for local network testing
-- See BRIDGE.md for production security configuration
+- See docs/20-architecture/quadratic-bridge.md for production security configuration
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📚 DOCUMENTATION:
 
-- Quick Start: QUICKSTART.md
-- Full Deployment Guide: DEPLOYMENT.md
-- Bridge Documentation: BRIDGE.md
-- Architecture: packages/mathison-quadratic/ARCHITECTURE.md
+- Quick Start: docs/00-start-here/quickstart.md
+- Full Deployment Guide: docs/61-operations/deployment.md
+- Bridge Documentation: docs/20-architecture/quadratic-bridge.md
+- Architecture: packages/mathison-quadratic/docs/20-architecture/system-architecture.md
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

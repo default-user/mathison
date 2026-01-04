@@ -30,17 +30,17 @@ This PR merges the complete v1.0.0 production release into master, updating all 
 
 ### Documentation Updated to v1.0.0
 - README.md
-- VISION.md
-- DEPLOYMENT.md
-- QUICKSTART.md
-- ROOT_CODEC.md
-- docs/architecture.md
-- docs/cdi-spec.md
-- docs/cif-spec.md
+- docs/10-vision/vision.md
+- docs/61-operations/deployment.md
+- docs/00-start-here/quickstart.md
+- docs/80-reference/root-codec.md
+- docs/20-architecture/repo-architecture.md
+- docs/31-governance/cdi-spec.md
+- docs/31-governance/cif-spec.md
 
 ### New Files
 - **RELEASE-NOTES-1.0.md** — Comprehensive release notes
-- **GITHUB_MODELS_SETUP.md** — LLM integration guide
+- **docs/45-integrations/github-models-setup.md** — LLM integration guide
 - **test-github-models.mjs** — API test script
 
 ---

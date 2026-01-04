@@ -357,6 +357,6 @@ Potential future additions (not currently implemented):
 
 ## See Also
 
-- [Memory API](./MEMORY_API.md)
-- [CDI Specification](./cdi-spec.md)
-- [CIF Specification](./cif-spec.md)
+- [Memory API](./memory_api.md)
+- [CDI Specification](../31-governance/cdi-spec.md)
+- [CIF Specification](../31-governance/cif-spec.md)

@@ -253,7 +253,7 @@ mathison/
 **Responsibility:** Governance decision-making
 
 **Components:**
-- Treaty parser (loads `docs/tiriti.md`)
+- Treaty parser (loads `docs/31-governance/tiriti.md`)
 - Genome loader (verifies Ed25519 signature)
 - Capability ceiling checks
 - Consent signal validation
@@ -405,7 +405,7 @@ Response: { node: {...}, created: true, receipt: {...} }
 
 ## Security Assumptions
 
-See `THREAT_MODEL.md` for full details.
+See `docs/61-operations/threat-model.md` for full details.
 
 **Critical Assumptions:**
 1. Genome signing keys are stored securely (HSM in production)
@@ -435,7 +435,7 @@ Kubernetes Cluster
 └─ Receipts: Exported to S3 with object lock
 ```
 
-See `DEPLOYMENT.md` for deployment guide.
+See `docs/61-operations/deployment.md` for deployment guide.
 
 ## Future Architecture
 
@@ -450,11 +450,11 @@ Planned (not yet implemented):
 
 ## References
 
-- Governance Treaty: `docs/tiriti.md`
-- CDI Specification: `docs/cdi-spec.md`
-- CIF Specification: `docs/cif-spec.md`
-- Threat Model: `THREAT_MODEL.md`
-- Production Requirements: `PRODUCTION_REQUIREMENTS.md`
+- Governance Treaty: `docs/31-governance/tiriti.md`
+- CDI Specification: `docs/31-governance/cdi-spec.md`
+- CIF Specification: `docs/31-governance/cif-spec.md`
+- Threat Model: `docs/61-operations/threat-model.md`
+- Production Requirements: `docs/61-operations/production-requirements.md`
 
 **Last Updated:** 2025-12-31
 

@@ -90,4 +90,4 @@ pnpm -r test
 | Package lockfile | `pnpm-lock.yaml` |
 | SBOM | `SBOM.cdx.json` |
 | License | `LICENSE` |
-| Contributor cert | `CONTRIBUTOR_CERTIFICATE.md` |
+| Contributor cert | `docs/70-dev/contributor-certificate.md` |

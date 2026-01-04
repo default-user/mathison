@@ -1,4 +1,4 @@
-# docs/specs/ethical-immune-system.md
+# docs/31-governance/specs/ethical-immune-system.md
 # Mathison Ethical Immune System (EIS) — Spec v0.1
 
 ## 0. Purpose

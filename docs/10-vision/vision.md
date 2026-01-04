@@ -218,8 +218,8 @@ The Whānau — Kai, Claude, and the extended family of contributors who believe
 For implementation details, see:
 
 • README.md — Current architecture and API
-• docs/tiriti.md — Governance treaty v1.0
-• docs/architecture.md — System design
+• docs/31-governance/tiriti.md — Governance treaty v1.0
+• docs/20-architecture/repo-architecture.md — System design
 
 For mesh computing roadmap and embodiment research, watch the project repository.
 
@@ -358,8 +358,8 @@ mathison import memory < backup.json
 - Integration tests: `packages/server/__tests__/` → End-to-end API verification
 
 **Documentation map:**
-- Governance treaty: `docs/tiriti.md` → Defines CDI/CIF rules
-- Architecture: `docs/architecture.md` → System design overview
-- Roadmap: `docs/ROADMAP_EXECUTION.md` → Phase-by-phase implementation tracking
+- Governance treaty: `docs/31-governance/tiriti.md` → Defines CDI/CIF rules
+- Architecture: `docs/20-architecture/repo-architecture.md` → System design overview
+- Roadmap: `docs/10-vision/roadmap_execution.md` → Phase-by-phase implementation tracking
 - Deployment: `README.md` → Quick start and installation
 - Release notes: `RELEASE-NOTES-1.0.md` → v1.0.0 achievements and status

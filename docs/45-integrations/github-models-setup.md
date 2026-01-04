@@ -264,8 +264,8 @@ For production use:
 ## Next Steps
 
 - Run Quadratic: `./bootstrap-oi.sh`
-- Deploy to GitHub Pages: See `DEPLOYMENT.md`
-- Mobile deployment: See `docs/mobile-deployment.md`
+- Deploy to GitHub Pages: See `docs/61-operations/deployment.md`
+- Mobile deployment: See `docs/60-mobile/mobile-deployment.md`
 - Full docs: See `packages/mathison-quadratic/README.md`
 
 ---

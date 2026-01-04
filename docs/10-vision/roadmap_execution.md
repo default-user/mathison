@@ -72,7 +72,7 @@ This document tracks the execution of the Mathison roadmap from manifest 4 to ro
 | 6 Mesh discovery | PENDING | Discovery with consent gates | mesh package | Deterministic discovery tests | - |
 | 7 Mesh E2EE | PENDING | End-to-end encryption | mesh crypto | Roundtrip + tamper tests | - |
 | 8.1 Mobile app | PENDING | RN skeleton with adapters | mobile app | Adapter + storage tests | - |
-| 8.2 Play Store prep | PENDING | READY_FOR_HUMAN artifacts | docs/PLAY_STORE.md | - | Requires credentials |
+| 8.2 Play Store prep | PENDING | READY_FOR_HUMAN artifacts | docs/60-mobile/play_store.md | - | Requires credentials |
 | Finalization | PENDING | Single commit with versions applied | All | All pass | - |
 
 ## Current Focus
@@ -248,8 +248,8 @@ The final phase ("Finalization") requires:
 - This file (`ROADMAP_EXECUTION.md`) tracks execution state
 - `docs/ROADMAP.md` (if exists) defines the phases and rationale
 - `RELEASE-NOTES.md` (if exists) captures user-facing changes
-- `docs/architecture.md` explains system design
-- `docs/tiriti.md` defines governance rules enforced by phases
+- `docs/20-architecture/repo-architecture.md` explains system design
+- `docs/31-governance/tiriti.md` defines governance rules enforced by phases
 
 **Contributing to roadmap execution:**
 

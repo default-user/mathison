@@ -228,5 +228,5 @@ grpcurl -plaintext -d '{"job_id": "job-123"}' \
 
 ## See Also
 
-- [CDI Specification](./cdi-spec.md)
-- [CIF Specification](./cif-spec.md)
+- [CDI Specification](../31-governance/cdi-spec.md)
+- [CIF Specification](../31-governance/cif-spec.md)

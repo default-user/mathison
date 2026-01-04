@@ -40,7 +40,7 @@ pnpm -r test
 
 Use web UI or CLI:
 ```bash
-gh pr create --title "Feature: Description" --body-file PULL_REQUEST.md
+gh pr create --title "Feature: Description" --body-file docs/70-dev/pull-request.md
 ```
 
 ### 4. Review and Merge

@@ -1,4 +1,4 @@
-# docs/specs/system-integrity-and-permissions.md
+# docs/31-governance/specs/system-integrity-and-permissions.md
 # Mathison System Integrity + Permission UX — Spec v0.3
 
 ## 0. Purpose

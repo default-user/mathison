@@ -43,7 +43,7 @@ Add to your PR description:
 
 ```
 I certify that this contribution complies with the Contributor Certificate
-as specified in CONTRIBUTOR_CERTIFICATE.md.
+as specified in docs/70-dev/contributor-certificate.md.
 
 Signed: [Your Name] <your.email@example.com>
 Date: YYYY-MM-DD

@@ -23,60 +23,60 @@ Documentation was reorganized in v1.1 (docs v2) to provide a coherent tree struc
 
 | Old Path | New Path |
 |----------|----------|
-| `QUICKSTART.md` | `docs/00-start-here/quickstart.md` |
-| `DEMO.md` | `docs/00-start-here/demo.md` |
-| `VISION.md` | `docs/10-vision/vision.md` |
-| `ARCHITECTURE.md` | `docs/20-architecture/system-architecture.md` |
-| `BRIDGE.md` | `docs/20-architecture/quadratic-bridge.md` |
-| `DEPLOYMENT.md` | `docs/61-operations/deployment.md` |
-| `CHANGELOG.md` | `docs/70-dev/changelog.md` |
-| `CONTRIBUTOR_CERTIFICATE.md` | `docs/70-dev/contributor-certificate.md` |
-| `GITHUB-PAGES-SETUP.md` | `docs/45-integrations/github-pages-setup.md` |
-| `GITHUB_MODELS_SETUP.md` | `docs/45-integrations/github-models-setup.md` |
-| `GOVERNANCE_CLAIMS.md` | `docs/31-governance/governance-claims.md` |
-| `MERGE-GUIDE.md` | `docs/70-dev/merge-guide.md` |
-| `PRODUCTION_REQUIREMENTS.md` | `docs/61-operations/production-requirements.md` |
-| `PROVENANCE.md` | `docs/61-operations/provenance.md` |
-| `PULL_REQUEST.md` | `docs/70-dev/pull-request.md` |
-| `ROOT_CODEC.md` | `docs/80-reference/root-codec.md` |
-| `SECURITY.md` | `docs/61-operations/security.md` |
-| `THREAT_MODEL.md` | `docs/61-operations/threat-model.md` |
+| `docs/00-start-here/quickstart.md` | `docs/00-start-here/quickstart.md` |
+| `docs/00-start-here/demo.md` | `docs/00-start-here/demo.md` |
+| `docs/10-vision/vision.md` | `docs/10-vision/vision.md` |
+| `docs/20-architecture/system-architecture.md` | `docs/20-architecture/system-architecture.md` |
+| `docs/20-architecture/quadratic-bridge.md` | `docs/20-architecture/quadratic-bridge.md` |
+| `docs/61-operations/deployment.md` | `docs/61-operations/deployment.md` |
+| `docs/70-dev/changelog.md` | `docs/70-dev/changelog.md` |
+| `docs/70-dev/contributor-certificate.md` | `docs/70-dev/contributor-certificate.md` |
+| `docs/45-integrations/github-pages-setup.md` | `docs/45-integrations/github-pages-setup.md` |
+| `docs/45-integrations/github-models-setup.md` | `docs/45-integrations/github-models-setup.md` |
+| `docs/31-governance/governance-claims.md` | `docs/31-governance/governance-claims.md` |
+| `docs/70-dev/merge-guide.md` | `docs/70-dev/merge-guide.md` |
+| `docs/61-operations/production-requirements.md` | `docs/61-operations/production-requirements.md` |
+| `docs/61-operations/provenance.md` | `docs/61-operations/provenance.md` |
+| `docs/70-dev/pull-request.md` | `docs/70-dev/pull-request.md` |
+| `docs/80-reference/root-codec.md` | `docs/80-reference/root-codec.md` |
+| `docs/61-operations/security.md` | `docs/61-operations/security.md` |
+| `docs/61-operations/threat-model.md` | `docs/61-operations/threat-model.md` |
 
 ### docs/ Internal Reorganization
 
 | Old Path | New Path |
 |----------|----------|
-| `docs/architecture.md` | `docs/20-architecture/repo-architecture.md` |
-| `docs/tiriti.md` | `docs/31-governance/tiriti.md` |
-| `docs/cdi-spec.md` | `docs/31-governance/cdi-spec.md` |
-| `docs/cif-spec.md` | `docs/31-governance/cif-spec.md` |
-| `docs/mobile-deployment.md` | `docs/60-mobile/mobile-deployment.md` |
-| `docs/react-native-app-guide.md` | `docs/60-mobile/react-native-app-guide.md` |
-| `docs/FULL_STACK_OVERVIEW.md` | `docs/20-architecture/full_stack_overview.md` |
-| `docs/GENOME_AUDIT.md` | `docs/31-governance/genome_audit.md` |
-| `docs/GRPC.md` | `docs/40-apis/grpc.md` |
-| `docs/JOBS_API.md` | `docs/40-apis/jobs_api.md` |
-| `docs/MEMORY_API.md` | `docs/40-apis/memory_api.md` |
-| `docs/MESH_DISCOVERY.md` | `docs/50-mesh/mesh_discovery.md` |
-| `docs/MESH_E2EE.md` | `docs/50-mesh/mesh_e2ee.md` |
-| `docs/OI_API.md` | `docs/40-apis/oi_api.md` |
-| `docs/OPENAPI.md` | `docs/40-apis/openapi.md` |
-| `docs/PATCHLOG.md` | `docs/80-reference/patchlog.md` |
-| `docs/PLAY_STORE.md` | `docs/60-mobile/play_store.md` |
-| `docs/RECTOR_PACK.md` | `docs/80-reference/rector_pack.md` |
-| `docs/ROADMAP_EXECUTION.md` | `docs/10-vision/roadmap_execution.md` |
+| `docs/20-architecture/repo-architecture.md` | `docs/20-architecture/repo-architecture.md` |
+| `docs/31-governance/tiriti.md` | `docs/31-governance/tiriti.md` |
+| `docs/31-governance/cdi-spec.md` | `docs/31-governance/cdi-spec.md` |
+| `docs/31-governance/cif-spec.md` | `docs/31-governance/cif-spec.md` |
+| `docs/60-mobile/mobile-deployment.md` | `docs/60-mobile/mobile-deployment.md` |
+| `docs/60-mobile/react-native-app-guide.md` | `docs/60-mobile/react-native-app-guide.md` |
+| `docs/20-architecture/full_stack_overview.md` | `docs/20-architecture/full_stack_overview.md` |
+| `docs/31-governance/genome_audit.md` | `docs/31-governance/genome_audit.md` |
+| `docs/40-apis/grpc.md` | `docs/40-apis/grpc.md` |
+| `docs/40-apis/jobs_api.md` | `docs/40-apis/jobs_api.md` |
+| `docs/40-apis/memory_api.md` | `docs/40-apis/memory_api.md` |
+| `docs/50-mesh/mesh_discovery.md` | `docs/50-mesh/mesh_discovery.md` |
+| `docs/50-mesh/mesh_e2ee.md` | `docs/50-mesh/mesh_e2ee.md` |
+| `docs/40-apis/oi_api.md` | `docs/40-apis/oi_api.md` |
+| `docs/40-apis/openapi.md` | `docs/40-apis/openapi.md` |
+| `docs/80-reference/patchlog.md` | `docs/80-reference/patchlog.md` |
+| `docs/60-mobile/play_store.md` | `docs/60-mobile/play_store.md` |
+| `docs/80-reference/rector_pack.md` | `docs/80-reference/rector_pack.md` |
+| `docs/10-vision/roadmap_execution.md` | `docs/10-vision/roadmap_execution.md` |
 
 ### Subdirectory Reorganization
 
 | Old Path | New Path |
 |----------|----------|
-| `docs/governance/GOVERNANCE_DATAFLOW_SPEC.md` | `docs/31-governance/governance_dataflow_spec.md` |
-| `docs/governance/GOVERNANCE_TYPES.md` | `docs/31-governance/governance_types.md` |
-| `docs/specs/ethical-immune-system.md` | `docs/31-governance/specs/ethical-immune-system.md` |
-| `docs/specs/system-integrity-and-permissions.md` | `docs/31-governance/specs/system-integrity-and-permissions.md` |
-| `docs/adr/0001-storage-backends.md` | `docs/95-adr/0001-storage-backends.md` |
-| `proposals/README.md` | `docs/90-proposals/readme.md` |
-| `proposals/0001-example/rationale.md` | `docs/90-proposals/0001-example/rationale.md` |
+| `docs/31-governance/governance_dataflow_spec.md` | `docs/31-governance/governance_dataflow_spec.md` |
+| `docs/31-governance/governance_types.md` | `docs/31-governance/governance_types.md` |
+| `docs/31-governance/specs/ethical-immune-system.md` | `docs/31-governance/specs/ethical-immune-system.md` |
+| `docs/31-governance/specs/system-integrity-and-permissions.md` | `docs/31-governance/specs/system-integrity-and-permissions.md` |
+| `docs/95-adr/0001-storage-backends.md` | `docs/95-adr/0001-storage-backends.md` |
+| `docs/90-proposals/readme.md` | `docs/90-proposals/readme.md` |
+| `docs/90-proposals/0001-example/rationale.md` | `docs/90-docs/90-proposals/0001-example/rationale.md` |
 
 ### Documents Kept at Root
 
@@ -126,10 +126,10 @@ grep -r "docs/architecture\.md\|docs/tiriti\.md" --include="*.md"
 ### Sed Replacement Examples
 
 ```bash
-# Example: Update QUICKSTART.md references
+# Example: Update docs/00-start-here/quickstart.md references
 sed -i 's|QUICKSTART\.md|docs/00-start-here/quickstart.md|g' README.md
 
-# Example: Update docs/architecture.md references
+# Example: Update docs/20-architecture/repo-architecture.md references
 sed -i 's|docs/architecture\.md|docs/20-architecture/repo-architecture.md|g' *.md
 ```
 

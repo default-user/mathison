@@ -172,7 +172,6 @@ This ensures reproducible SDK builds.
 
 ## See Also
 
-- [SDK Documentation](./SDKS.md)
-- [Memory API](./MEMORY_API.md)
-- [OI API](./OI_API.md)
-- [Jobs API](./JOBS_API.md)
+- [Memory API](./memory_api.md)
+- [OI API](./oi_api.md)
+- [Jobs API](./jobs_api.md)

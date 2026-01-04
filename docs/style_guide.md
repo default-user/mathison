@@ -163,7 +163,7 @@ Use GFM tables with alignment:
 
 - **Internal links**: Relative paths from the current file
   ```markdown
-  See [Architecture](../20-architecture/system-architecture.md)
+  See [Architecture](./20-architecture/system-architecture.md)
   ```
 - **External links**: Full URLs with descriptive text
   ```markdown

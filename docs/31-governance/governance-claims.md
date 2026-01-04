@@ -42,7 +42,7 @@ This document provides a truth table for governance claims. Claims are only mark
 
 | Claim | Implemented? | Where in Code? | Notes |
 |-------|--------------|----------------|-------|
-| **Treaty Loading** | ✅ | `packages/mathison-governance/src/index.ts:50-74` | Loads `docs/tiriti.md` on boot, parses version |
+| **Treaty Loading** | ✅ | `packages/mathison-governance/src/index.ts:50-74` | Loads `docs/31-governance/tiriti.md` on boot, parses version |
 | **People First Authority** | ⚠️ | `packages/mathison-governance/src/index.ts:136` | Metadata tracked, no runtime enforcement |
 | **Consent Wins** | ✅ | `packages/mathison-governance/src/index.ts:78-88` | Rule denies actions when `userSignal === 'stop'` |
 | **Fail-Closed by Default** | ✅ | `packages/mathison-governance/src/cdi.ts` | CDI denies uncertain actions in strict mode |

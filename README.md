@@ -163,7 +163,7 @@ mathison/
 ├── quadratic-bridge.mjs       # Secure bridge server (v0.3.0)
 ├── quadratic.html             # Browser bootstrap UI
 ├── quad.js                    # Compiled browser bundle
-├── BRIDGE.md                  # Bridge documentation
+├── docs/20-architecture/quadratic-bridge.md                  # Bridge documentation
 ├── sdks/
 │   ├── typescript/
 │   ├── python/

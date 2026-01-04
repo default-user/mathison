@@ -195,7 +195,7 @@ await meshCoordinator.dissolveMesh(meshRequest.meshId);
 
 ## Complete Example App
 
-See `/docs/mobile-deployment.md` for a complete React Native app implementation guide.
+See `/docs/60-mobile/mobile-deployment.md` for a complete React Native app implementation guide.
 
 ## Architecture
 

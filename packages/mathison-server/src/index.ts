@@ -541,7 +541,7 @@ export class MathisonServer {
 
     // P3-C: GET /jobs/logs - get job logs/receipts (all or by job_id query param)
     this.app.get('/jobs/logs', async (request, reply) => {
-      (request as any).action = 'job_logs';
+      (request as any).action = 'receipts_read';
       const { job_id, limit } = request.query as { job_id?: string; limit?: string };
 
       if (!this.actionGate) {
@@ -1326,3 +1326,4 @@ export {
   GovernanceResult,
   GovernanceError
 } from './action-gate/reason-codes';
+export { generateOpenAPISpec, OpenAPISpec, ActionMetadata } from './openapi';

@@ -298,17 +298,16 @@ curl http://localhost:3000/memory/episodic
 # Should return 403 Forbidden
 ```
 
-**Receipt Chain Integrity:**
+**Receipt Retrieval:**
 ```bash
-# Verify hash chain
-curl http://localhost:3000/receipts/verify
-# Should return {"valid":true,"receipts":N,"errors":[]}
+# Get receipts for a specific job
+curl "http://localhost:3000/jobs/logs?job_id=<job_id>"
+# Returns: {"job_id":"...","count":N,"receipts":[...]}
 
-# Tamper with receipt
-sqlite3 ./data/receipts.db "UPDATE receipts SET decision='DENY' WHERE receipt_id='...'"
-curl http://localhost:3000/receipts/verify
-# Should return {"valid":false,"errors":["Hash mismatch at receipt ..."]}
+# Each receipt contains: genome_id, genome_version, timestamp, action, decision, policy_id
 ```
+
+**Note:** Receipt chain verification endpoint (`/receipts/verify`) is planned but not yet implemented.
 
 **Anti-Hive Enforcement:**
 ```bash

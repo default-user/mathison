@@ -194,10 +194,10 @@ describe('Phase 3 Server Conformance', () => {
       expect(runBody.job_id).toBeDefined();
       expect(runBody.status).toBe('completed');
 
-      // Check receipts were created
+      // Check receipts were created via canonical route
       const receiptsResponse = await app.inject({
         method: 'GET',
-        url: `/receipts/${runBody.job_id}`
+        url: `/jobs/logs?job_id=${runBody.job_id}`
       });
 
       expect(receiptsResponse.statusCode).toBe(200);
@@ -214,12 +214,12 @@ describe('Phase 3 Server Conformance', () => {
       }
     });
 
-    it('GET /receipts/:job_id returns empty array for non-existent job', async () => {
+    it('GET /jobs/logs returns empty array for non-existent job', async () => {
       const app = server.getApp();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/receipts/non-existent-job-id'
+        url: '/jobs/logs?job_id=non-existent-job-id'
       });
 
       expect(response.statusCode).toBe(200);
@@ -264,7 +264,7 @@ describe('Phase 3 Server Conformance', () => {
       expect(body.decision).toBe('ALLOW');
     });
 
-    it('GET /jobs/:job_id/status returns job status', async () => {
+    it('GET /jobs/status?job_id=... returns job status', async () => {
       const app = server.getApp();
 
       // Create job
@@ -276,10 +276,10 @@ describe('Phase 3 Server Conformance', () => {
 
       const { job_id } = JSON.parse(runResponse.body);
 
-      // Get status
+      // Get status via canonical route
       const statusResponse = await app.inject({
         method: 'GET',
-        url: `/jobs/${job_id}/status`
+        url: `/jobs/status?job_id=${job_id}`
       });
 
       expect(statusResponse.statusCode).toBe(200);
@@ -290,12 +290,12 @@ describe('Phase 3 Server Conformance', () => {
       expect(body.resumable).toBe(false);
     });
 
-    it('GET /jobs/:job_id/status returns 404 for non-existent job', async () => {
+    it('GET /jobs/status?job_id=... returns 404 for non-existent job', async () => {
       const app = server.getApp();
 
       const response = await app.inject({
         method: 'GET',
-        url: '/jobs/nonexistent-job/status'
+        url: '/jobs/status?job_id=nonexistent-job'
       });
 
       expect(response.statusCode).toBe(404);
@@ -303,7 +303,7 @@ describe('Phase 3 Server Conformance', () => {
       expect(body.error).toBe('Job not found');
     });
 
-    it('POST /jobs/:job_id/resume is idempotent for completed job', async () => {
+    it('POST /jobs/resume with { job_id } is idempotent for completed job', async () => {
       const app = server.getApp();
 
       // Create job
@@ -315,15 +315,17 @@ describe('Phase 3 Server Conformance', () => {
 
       const { job_id } = JSON.parse(runResponse.body);
 
-      // Resume completed job (should be idempotent)
+      // Resume completed job (should be idempotent) via canonical route
       const resume1 = await app.inject({
         method: 'POST',
-        url: `/jobs/${job_id}/resume`
+        url: '/jobs/resume',
+        payload: { job_id }
       });
 
       const resume2 = await app.inject({
         method: 'POST',
-        url: `/jobs/${job_id}/resume`
+        url: '/jobs/resume',
+        payload: { job_id }
       });
 
       expect(resume1.statusCode).toBe(200);
@@ -356,20 +358,21 @@ describe('Phase 3 Server Conformance', () => {
       expect(jobId).toBeDefined();
       expect(runBody.status).toBe('completed');
 
-      // 2. Check status
+      // 2. Check status via canonical route
       const statusResponse = await app.inject({
         method: 'GET',
-        url: `/jobs/${jobId}/status`
+        url: `/jobs/status?job_id=${jobId}`
       });
 
       expect(statusResponse.statusCode).toBe(200);
       const statusBody = JSON.parse(statusResponse.body);
       expect(statusBody.status).toBe('completed');
 
-      // 3. Resume (should be no-op for completed job)
+      // 3. Resume via canonical route (should be no-op for completed job)
       const resumeResponse = await app.inject({
         method: 'POST',
-        url: `/jobs/${jobId}/resume`
+        url: '/jobs/resume',
+        payload: { job_id: jobId }
       });
 
       expect(resumeResponse.statusCode).toBe(200);

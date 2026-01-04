@@ -17,6 +17,7 @@ export enum GovernanceReasonCode {
   // Storage failures
   STORE_MISCONFIGURED = 'STORE_MISCONFIGURED',
   STORE_INIT_FAILED = 'STORE_INIT_FAILED',
+  PERSISTENCE_FAILED = 'PERSISTENCE_FAILED',
 
   // Consent violations (Tiriti Rule 2)
   CONSENT_STOP_ACTIVE = 'CONSENT_STOP_ACTIVE',

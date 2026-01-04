@@ -1,7 +1,7 @@
 {
   "name": "mathison-kernel-mac",
   "version": "1.2.0",
-  "description": "Mathison OI Kernel for macOS (Intel/Apple Silicon) with local LLM",
+  "description": "[DEPRECATED] Desktop/dev UI backend. For production API, use mathison-server.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

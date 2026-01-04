@@ -3,6 +3,10 @@ import type { WSMessage } from '../types/api';
 
 /**
  * Type-safe WebSocket hook for real-time updates
+ *
+ * NOTE: This connects to kernel-mac (port 3001), NOT mathison-server.
+ * The WebSocket events (stream_start, intent_proposed, etc.) are
+ * kernel-mac specific for the desktop chat interface.
  */
 
 type UseWebSocketOptions = {
@@ -15,7 +19,7 @@ type UseWebSocketOptions = {
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const {
-    url = `ws://${window.location.hostname}:3000`,
+    url = `ws://${window.location.hostname}:3001`,
     onMessage,
     onConnect,
     onDisconnect,

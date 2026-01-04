@@ -1,11 +1,28 @@
 /**
  * P3-B: ActionGate - Single entry point for all side effects
  * All operations that change the world MUST go through ActionGate
+ *
+ * Strict Persistence Mode (MATHISON_STRICT_PERSISTENCE=1):
+ * - Receipt/checkpoint persistence failures FAIL the request
+ * - Default: 1 in production (MATHISON_ENV=production), 0 in development
  */
 
 import { CDI, CIF, ActionContext, ActionResult } from 'mathison-governance';
 import { Stores, Receipt, JobCheckpoint } from 'mathison-storage';
 import { GovernanceReasonCode, GovernanceResult, GovernanceDecision } from './reason-codes';
+
+/**
+ * Check if strict persistence mode is enabled
+ * Default: true in production, false in development
+ */
+function isStrictPersistence(): boolean {
+  const explicit = process.env.MATHISON_STRICT_PERSISTENCE;
+  if (explicit !== undefined) {
+    return explicit === '1' || explicit === 'true';
+  }
+  // Default to strict in production
+  return process.env.MATHISON_ENV === 'production';
+}
 
 export interface ActionGateContext {
   actor: string;
@@ -28,11 +45,17 @@ export class ActionGate {
   private cdi: CDI;
   private cif: CIF;
   public stores: Stores; // Public for JobExecutor access to list()
+  private strictPersistence: boolean;
 
   constructor(cdi: CDI, cif: CIF, stores: Stores) {
     this.cdi = cdi;
     this.cif = cif;
     this.stores = stores;
+    this.strictPersistence = isStrictPersistence();
+
+    if (this.strictPersistence) {
+      console.log('🔒 ActionGate: Strict persistence mode ENABLED (fail-closed on persistence errors)');
+    }
   }
 
   /**
@@ -95,7 +118,21 @@ export class ActionGate {
     try {
       await this.stores.receiptStore.append(receipt);
     } catch (error) {
-      console.warn('⚠️  Receipt append failed (non-fatal):', error);
+      // STRICT PERSISTENCE MODE: Fail the request on persistence errors
+      if (this.strictPersistence) {
+        console.error('❌ Receipt append failed (strict mode - failing request):', error);
+        return {
+          success: false,
+          governance: {
+            decision: 'DENY',
+            reasonCode: GovernanceReasonCode.PERSISTENCE_FAILED,
+            message: `Receipt persistence failed (strict mode): ${error instanceof Error ? error.message : String(error)}`
+          },
+          data: result // Return the data anyway for debugging
+        };
+      }
+      // Non-strict mode: warn and continue
+      console.warn('⚠️  Receipt append failed (non-strict mode - continuing):', error);
     }
 
     return {

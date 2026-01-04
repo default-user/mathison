@@ -1,5 +1,11 @@
 /**
- * API Types (mirrored from mathison-kernel-mac/src/api-types.ts)
+ * API Types for kernel-mac (mirrored from mathison-kernel-mac/src/api-types.ts)
+ *
+ * NOTE: These types are for kernel-mac (port 3001) - the desktop/development UI backend.
+ * They are NOT for mathison-server (port 3000) - the canonical product API.
+ *
+ * Kernel-mac endpoints: beams, chat, models, identity, CDI
+ * Mathison-server endpoints: jobs, memory, governance (see mathison-server/src/openapi.ts)
  *
  * These types are duplicated here to ensure the UI has no runtime dependency
  * on the kernel package. Types are validated at the API boundary using Zod.

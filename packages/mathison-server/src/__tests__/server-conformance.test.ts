@@ -4,6 +4,7 @@
  */
 
 import { MathisonServer } from '../index';
+import { generateTestKeypair, signGenome } from './test-utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,11 +14,12 @@ describe('Phase 3 Server Conformance', () => {
   const originalEnv = { ...process.env };
   const testGenomePath = path.join(os.tmpdir(), 'mathison-test-genome-server-conformance.json');
 
-  beforeAll(() => {
-    // Create test genome file in /tmp
-    // Using absolute path in /tmp to avoid __dirname issues with ts-jest
+  beforeAll(async () => {
+    // Generate real test keypair
+    const keypair = await generateTestKeypair('test-fixture-key');
 
-    const testGenome = {
+    // Create test genome (unsigned)
+    const testGenomeUnsigned = {
       schema_version: 'genome.v0.1',
       name: 'TEST_FIXTURE_GENOME',
       version: '1.0.0',
@@ -27,7 +29,7 @@ describe('Phase 3 Server Conformance', () => {
         signers: [{
           key_id: 'test-fixture-key',
           alg: 'ed25519',
-          public_key: 'MCowBQYDK2VwAyEAiENVzPT23crQdta+l7RPa+wy5LW8GraUMcP/sAL3mow='
+          public_key: keypair.publicKeyBase64
         }],
         threshold: 1
       },
@@ -49,13 +51,11 @@ describe('Phase 3 Server Conformance', () => {
         ],
         deny_actions: []
       }],
-      build_manifest: { files: [] },
-      signature: {
-        alg: 'ed25519',
-        signer_key_id: 'test-fixture-key',
-        sig_base64: 'A0YA7htgOfRgA2iMrMeditA/humff1XbzrgtYPfBn4HyX6/hXuJyZABEiwXTA3Xzl0f6g2LfpV4mj+o3ttELCw=='
-      }
+      build_manifest: { files: [] }
     };
+
+    // Sign genome with real signature
+    const testGenome = await signGenome(testGenomeUnsigned, keypair);
 
     fs.writeFileSync(testGenomePath, JSON.stringify(testGenome));
   });

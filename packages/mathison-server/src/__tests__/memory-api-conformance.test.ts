@@ -15,6 +15,7 @@
  */
 
 import { MathisonServer } from '../index';
+import { generateTestKeypair, signGenome } from './test-utils';
 import { MemoryGraph } from 'mathison-memory';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -25,9 +26,12 @@ describe('Phase 1: Complete Memory API Conformance', () => {
   const originalEnv = { ...process.env };
   const testGenomePath = path.join(os.tmpdir(), 'mathison-test-genome-memory-api-conformance.json');
 
-  beforeAll(() => {
-    // Create test genome file with all required capabilities
-    const testGenome = {
+  beforeAll(async () => {
+    // Generate real test keypair
+    const keypair = await generateTestKeypair('test-fixture-key');
+
+    // Create test genome file with all required capabilities (unsigned)
+    const testGenomeUnsigned = {
       schema_version: 'genome.v0.1',
       name: 'TEST_MEMORY_API_GENOME',
       version: '1.0.0',
@@ -37,7 +41,7 @@ describe('Phase 1: Complete Memory API Conformance', () => {
         signers: [{
           key_id: 'test-fixture-key',
           alg: 'ed25519',
-          public_key: 'MCowBQYDK2VwAyEAiENVzPT23crQdta+l7RPa+wy5LW8GraUMcP/sAL3mow='
+          public_key: keypair.publicKeyBase64
         }],
         threshold: 1
       },
@@ -63,13 +67,11 @@ describe('Phase 1: Complete Memory API Conformance', () => {
         ],
         deny_actions: []
       }],
-      build_manifest: { files: [] },
-      signature: {
-        alg: 'ed25519',
-        signer_key_id: 'test-fixture-key',
-        sig_base64: 'A0YA7htgOfRgA2iMrMeditA/humff1XbzrgtYPfBn4HyX6/hXuJyZABEiwXTA3Xzl0f6g2LfpV4mj+o3ttELCw=='
-      }
+      build_manifest: { files: [] }
     };
+
+    // Sign genome with real signature
+    const testGenome = await signGenome(testGenomeUnsigned, keypair);
 
     fs.writeFileSync(testGenomePath, JSON.stringify(testGenome));
   });

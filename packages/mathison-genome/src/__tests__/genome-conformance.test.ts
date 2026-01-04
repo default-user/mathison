@@ -479,7 +479,7 @@ describe('Genome Conformance Tests', () => {
 
       const result = await verifyGenomeSignature(tamperedGenome);
       expect(result.verified).toBe(false);
-      expect(result.errors.some(e => e.includes('Signature verification failed'))).toBe(true);
+      expect(result.errors.some(e => e.includes('Invalid signature'))).toBe(true);
     });
 
     test('verifies genome with multiple real signatures meeting threshold', async () => {

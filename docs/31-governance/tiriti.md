@@ -252,7 +252,7 @@ grep -r "sentient\|conscious\|I feel" packages/*/src/**/*.ts
   - Fastify hooks enforce CIF → CDI → handler → CDI → CIF flow
 
 ### Configuration Files
-- Treaty source: `/home/user/mathison/docs/tiriti.md`
+- Treaty source: `/home/user/mathison/docs/31-governance/tiriti.md`
 - Genome authority: `/home/user/mathison/genomes/TOTK_ROOT_v1.0.0/genome.json`
 
 ### Test Coverage
@@ -261,7 +261,7 @@ grep -r "sentient\|conscious\|I feel" packages/*/src/**/*.ts
 - Integration: `packages/mathison-server/src/__tests__/genome-boot-conformance.test.ts`
 
 ### Extension Points
-- **Custom rules**: Edit `/home/user/mathison/docs/tiriti.md`, increment version
+- **Custom rules**: Edit `/home/user/mathison/docs/31-governance/tiriti.md`, increment version
 - **New consent signals**: Extend `ConsentSignal` type in CDI
 - **Additional safeguards**: Add pattern matchers in non-personhood guard section
 - **Human state detection**: Implement adaptive output logic based on context metadata

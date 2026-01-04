@@ -63,7 +63,7 @@ async function verifyGenome(genomePath: string): Promise<void> {
     console.error('  - Invalid signature (wrong key or tampered content)');
     console.error('  - Schema version mismatch');
     console.error('');
-    console.error('See PRODUCTION_REQUIREMENTS.md for genome creation instructions.');
+    console.error('See docs/61-operations/production-requirements.md for genome creation instructions.');
 
     process.exit(1);
   }

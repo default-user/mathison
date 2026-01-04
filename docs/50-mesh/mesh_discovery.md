@@ -199,4 +199,4 @@ MATHISON_MESH_DISCOVERY=mdns MATHISON_PORT=3001 pnpm server
 ## See Also
 
 - [Mesh E2EE](./mesh_e2ee.md)
-- [Architecture](../architecture.md)
+- [Architecture](../20-architecture/repo-architecture.md)

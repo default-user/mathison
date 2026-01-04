@@ -111,8 +111,8 @@ https://default-user.github.io/mathison/quad.js
 **Documentation:**
 ```
 https://default-user.github.io/mathison/README.md
-https://default-user.github.io/mathison/DEPLOYMENT.md
-https://default-user.github.io/mathison/BRIDGE.md
+https://default-user.github.io/mathison/docs/61-operations/deployment.md
+https://default-user.github.io/mathison/docs/20-architecture/quadratic-bridge.md
 ```
 
 ## Custom Domain (Optional)

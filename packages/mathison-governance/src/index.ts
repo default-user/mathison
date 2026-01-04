@@ -39,7 +39,7 @@ export class GovernanceEngine {
     const configData = await fs.readFile(configPath, 'utf-8');
     const config = JSON.parse(configData);
 
-    await this.loadTreaty(config.treatyPath || './docs/tiriti.md');
+    await this.loadTreaty(config.treatyPath || './docs/31-governance/tiriti.md');
     this.initializeCoreRules();
   }
 

@@ -89,7 +89,7 @@ This command will:
 
 ```
 ⚖️  Initializing Governance Engine...
-📜 Loading treaty from: ./docs/tiriti.md
+📜 Loading treaty from: ./docs/31-governance/tiriti.md
 ✓ Treaty loaded: Tiriti o te Kai v1.0
 ✓ Initialized 3 core governance rules
 🧬 Loading genome from: genomes/TOTK_ROOT_v1.0.0/genome.json
@@ -99,7 +99,7 @@ This command will:
 ```
 
 **What This Proves:**
-- Governance treaty loaded from `docs/tiriti.md`
+- Governance treaty loaded from `docs/31-governance/tiriti.md`
 - Genome signature verified using Ed25519
 - Fail-closed defaults active (strictMode: true)
 

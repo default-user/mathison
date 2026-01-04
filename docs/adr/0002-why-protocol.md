@@ -22,7 +22,7 @@ We want a single, small, canonical artifact that:
 ## Decision
 
 Add **THE_WHY_PROTOCOL.md** at repo root as the canonical operational doctrine that:
-1) is explicitly **subordinate to `docs/tiriti.md`** (charter precedence),
+1) is explicitly **subordinate to `docs/31-governance/tiriti.md`** (charter precedence),
 2) codifies the **Prime Loop** requirement (CIF→CDI→handler→CDI→CIF),
 3) mandates **fail‑closed**, capability‑only authority, oracle‑not‑sovereign models,
 4) preserves anti‑hive identity integrity and human‑paced care defaults,
@@ -44,8 +44,8 @@ Add **THE_WHY_PROTOCOL.md** at repo root as the canonical operational doctrine t
 
 ## References
 
-- Charter: `docs/tiriti.md`
-- Governance specs: `docs/cif-spec.md`, `docs/cdi-spec.md`
-- Threat model: `THREAT_MODEL.md`
-- Governance claims: `GOVERNANCE_CLAIMS.md`
+- Charter: `docs/31-governance/tiriti.md`
+- Governance specs: `docs/31-governance/cif-spec.md`, `docs/31-governance/cdi-spec.md`
+- Threat model: `docs/61-operations/threat-model.md`
+- Governance claims: `docs/31-governance/governance-claims.md`
 - Conformance tests: `packages/mathison-server/src/__tests__/server-conformance.test.ts`

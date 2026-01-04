@@ -457,6 +457,5 @@ curl http://localhost:3000/jobs/logs?job_id=job-abc123
 
 ## See Also
 
-- [Memory API](./MEMORY_API.md)
-- [CDI Specification](./cdi-spec.md)
-- [ActionGate Documentation](./action-gate.md)
+- [Memory API](./memory_api.md)
+- [CDI Specification](../31-governance/cdi-spec.md)

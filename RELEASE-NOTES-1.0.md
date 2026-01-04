@@ -181,22 +181,22 @@ export ANTHROPIC_API_KEY="sk-ant-..." # Fallback
 
 ### Core Docs
 - `README.md` — Overview and quick start
-- `VISION.md` — Project vision and philosophy
-- `DEPLOYMENT.md` — Deployment guide (all platforms)
-- `QUICKSTART.md` — New user onboarding
+- `docs/10-vision/vision.md` — Project vision and philosophy
+- `docs/61-operations/deployment.md` — Deployment guide (all platforms)
+- `docs/00-start-here/quickstart.md` — New user onboarding
 
 ### Technical Specs
-- `docs/architecture.md` — System architecture
-- `docs/cdi-spec.md` — CDI specification
-- `docs/cif-spec.md` — CIF specification
-- `docs/tiriti.md` — Governance treaty
+- `docs/20-architecture/repo-architecture.md` — System architecture
+- `docs/31-governance/cdi-spec.md` — CDI specification
+- `docs/31-governance/cif-spec.md` — CIF specification
+- `docs/31-governance/tiriti.md` — Governance treaty
 
 ### Package Docs
 - `packages/mathison-quadratic/README.md` — Quadratic runtime
-- `packages/mathison-quadratic/ARCHITECTURE.md` — Two-plane architecture
+- `packages/mathison-quadratic/docs/20-architecture/system-architecture.md` — Two-plane architecture
 - `packages/mathison-mobile/README.md` — Mobile deployment
-- `BRIDGE.md` — Bridge server documentation
-- `GITHUB_MODELS_SETUP.md` — LLM integration guide
+- `docs/20-architecture/quadratic-bridge.md` — Bridge server documentation
+- `docs/45-integrations/github-models-setup.md` — LLM integration guide
 
 ---
 

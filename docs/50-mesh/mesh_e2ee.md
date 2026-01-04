@@ -295,4 +295,4 @@ assert.equal(decrypted.toString(), 'Hello, Bob!');
 ## See Also
 
 - [Mesh Discovery](./mesh_discovery.md)
-- [Storage Adapter](../architecture.md#storage)
+- [Storage Adapter](../20-architecture/repo-architecture.md#storage)

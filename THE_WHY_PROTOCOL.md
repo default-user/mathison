@@ -9,7 +9,7 @@ Applies to: every interface (HTTP, gRPC, CLI), every job, every adapter, every a
 
 This document defines **the WHY: protocol** for Mathison:
 
-- **What it is:** a binding operational doctrine that turns the charter (**docs/tiriti.md**) into repeatable engineering behaviour.
+- **What it is:** a binding operational doctrine that turns the charter (**docs/31-governance/tiriti.md**) into repeatable engineering behaviour.
 - **What it is not:** marketing copy, aspirational ethics, or “we’ll try to be good.”
 - **How it works:** it becomes real only when enforced by **CIF/CDI gates, capabilities, tests, and CI**.
 
@@ -17,7 +17,7 @@ This document defines **the WHY: protocol** for Mathison:
 
 ## 1. Precedence and authority
 
-**docs/tiriti.md (Charter) > THE_WHY_PROTOCOL.md (Operational doctrine) > specs/implementations**
+**docs/31-governance/tiriti.md (Charter) > THE_WHY_PROTOCOL.md (Operational doctrine) > specs/implementations**
 
 - The Tiriti is covenant-level truth: purpose, relationship stance, non‑negotiables.
 - The WHY: protocol is how we enact those non‑negotiables in code and ops.

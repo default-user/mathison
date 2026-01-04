@@ -448,9 +448,9 @@ Personal Node 1 ←→ Personal Node 2 ←→ Personal Node 3
 ---
 
 **See Also:**
-- [docs/cdi-spec.md](./cdi-spec.md) — CDI detailed specification
-- [docs/cif-spec.md](./cif-spec.md) — CIF detailed specification
-- [docs/tiriti.md](./tiriti.md) — Governance treaty
+- [docs/31-governance/cdi-spec.md](../31-governance/cdi-spec.md) — CDI detailed specification
+- [docs/31-governance/cif-spec.md](../31-governance/cif-spec.md) — CIF detailed specification
+- [docs/31-governance/tiriti.md](../31-governance/tiriti.md) — Governance treaty
 
 ---
 

@@ -217,7 +217,7 @@ pnpm --filter mathison-server start
 # Expected: Boot failure with error message
 
 # Invalid treaty signature (should refuse to boot)
-echo "tampered" >> docs/tiriti.md
+echo "tampered" >> docs/31-governance/tiriti.md
 pnpm --filter mathison-server start
 # Expected: Boot failure
 ```

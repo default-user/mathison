@@ -23,6 +23,9 @@ service MathisonService {
 
   // Search memory (unary or streaming)
   rpc SearchMemory(SearchRequest) returns (stream SearchResult);
+
+  // Knowledge ingestion via CPACK (unary)
+  rpc IngestKnowledge(IngestKnowledgeRequest) returns (IngestKnowledgeResult);
 }
 
 message JobRunRequest {
@@ -102,4 +105,36 @@ message SearchResult {
   string type = 2;
   bytes data = 3;
   double score = 4;
+}
+
+// Knowledge ingestion messages
+message IngestKnowledgeRequest {
+  string cpack_yaml = 1;           // CPACK as YAML string (alternative to cpack_json)
+  string cpack_json = 2;           // CPACK as JSON string
+  bytes llm_output = 3;            // LLMOutput as JSON bytes
+  string mode = 4;                 // GROUND_ONLY or GROUND_PLUS_HYPOTHESIS
+  bytes context = 5;               // Optional context as JSON bytes
+}
+
+message IngestKnowledgeResult {
+  bool success = 1;
+  string reason_code = 2;
+  string message = 3;
+  int32 grounded_count = 4;
+  int32 hypothesis_count = 5;
+  int32 denied_count = 6;
+  int32 conflict_count = 7;
+  repeated string grounded_claim_ids = 8;
+  repeated string hypothesis_claim_ids = 9;
+  repeated DeniedReason denied_reasons = 10;
+  repeated string conflict_ids = 11;
+  string packet_id = 12;
+  string ingestion_run_id = 13;
+  string sources_hash = 14;
+  int64 timestamp = 15;
+}
+
+message DeniedReason {
+  int32 claim_index = 1;
+  string reason = 2;
 }

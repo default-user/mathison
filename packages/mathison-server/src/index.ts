@@ -17,6 +17,8 @@ import { Interpreter } from 'mathison-oi';
 import { HeartbeatMonitor, createHeartbeatFromEnv, HeartbeatStatus } from './heartbeat';
 import { loadPrerequisites, ValidatedPrerequisites } from './prerequisites';
 import { randomBytes } from 'crypto';
+import { KnowledgeIngestionGate } from './knowledge/ingestion-gate';
+import { makeChunkRetrieverFromEnv } from './knowledge/chunk-retriever';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -47,6 +49,8 @@ export class MathisonServer {
   // Heartbeat monitor (self-audit loop)
   private heartbeat: HeartbeatMonitor | null = null;
   private heartbeatFailClosed: boolean = false;
+  // Knowledge ingestion gate (P2.1)
+  private knowledgeGate: KnowledgeIngestionGate | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -298,6 +302,14 @@ export class MathisonServer {
         this.genome?.version
       );
       console.log('✓ OI Interpreter initialized');
+
+      // P2.1: Initialize Knowledge Ingestion Gate
+      const chunkRetriever = makeChunkRetrieverFromEnv();
+      this.knowledgeGate = new KnowledgeIngestionGate({
+        knowledgeStore: this.storageAdapter.getKnowledgeStore(),
+        chunkRetriever,
+      });
+      console.log('✓ Knowledge Ingestion Gate initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -1513,6 +1525,61 @@ export class MathisonServer {
         return reply.code(500).send({
           reason_code: 'GOVERNANCE_INIT_FAILED',
           message: error instanceof Error ? error.message : 'Interpretation failed'
+        });
+      }
+    });
+
+    // P2.1: POST /v1/knowledge/ingest - Knowledge ingestion via CPACK
+    this.app.post('/v1/knowledge/ingest', async (request, reply) => {
+      (request as any).action = 'knowledge_ingest';
+      const body = (request as any).sanitizedBody as any;
+
+      // Fail-closed: require knowledge ingestion gate
+      if (!this.knowledgeGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'Knowledge ingestion gate not initialized'
+        });
+      }
+
+      // Validate required fields
+      if (!body.cpack_yaml && !body.cpack) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing required field: cpack_yaml or cpack'
+        });
+      }
+
+      if (!body.llm_output || !body.llm_output.claims) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing required field: llm_output.claims'
+        });
+      }
+
+      try {
+        // Process ingestion through the gate
+        const result = await this.knowledgeGate.processIngestion({
+          cpack_yaml: body.cpack_yaml,
+          cpack: body.cpack,
+          llm_output: body.llm_output,
+          mode: body.mode,
+          context: {
+            posture: 'NORMAL',
+            task_id: body.context?.task_id,
+            user_id: body.context?.user_id,
+            oi_id: this.genomeId || undefined,
+          },
+        });
+
+        // Return result with appropriate status code
+        const statusCode = result.success ? 200 : 400;
+        return reply.code(statusCode).send(result);
+      } catch (error) {
+        // Handle ingestion errors (fail-closed)
+        return reply.code(500).send({
+          reason_code: 'INGESTION_FAILED',
+          message: error instanceof Error ? error.message : 'Knowledge ingestion failed'
         });
       }
     });

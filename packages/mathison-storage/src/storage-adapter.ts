@@ -7,9 +7,12 @@
 import { CheckpointStore } from './checkpoint_store';
 import { ReceiptStore } from './receipt_store';
 import { GraphStore } from './graph_store';
+import { KnowledgeStore } from './knowledge_store';
 import { StoreBackend, loadStoreConfigFromEnv } from './types';
 import { FileCheckpointStore, FileReceiptStore, FileGraphStore } from './backends/file';
+import { FileKnowledgeStore } from './backends/file/file-knowledge-store';
 import { SQLiteCheckpointStore, SQLiteReceiptStore, SQLiteGraphStore } from './backends/sqlite';
+import { SQLiteKnowledgeStore } from './backends/sqlite/sqlite-knowledge-store';
 
 /**
  * StorageAdapter provides a unified interface for storage lifecycle management.
@@ -44,6 +47,11 @@ export interface StorageAdapter {
    * Get the graph store
    */
   getGraphStore(): GraphStore;
+
+  /**
+   * Get the knowledge store
+   */
+  getKnowledgeStore(): KnowledgeStore;
 }
 
 /**
@@ -53,6 +61,7 @@ export class FileStorageAdapter implements StorageAdapter {
   private checkpointStore: FileCheckpointStore;
   private receiptStore: FileReceiptStore;
   private graphStore: FileGraphStore;
+  private knowledgeStore: FileKnowledgeStore;
   private initialized = false;
   private closed = false;
 
@@ -60,6 +69,7 @@ export class FileStorageAdapter implements StorageAdapter {
     this.checkpointStore = new FileCheckpointStore(path);
     this.receiptStore = new FileReceiptStore(path);
     this.graphStore = new FileGraphStore(path);
+    this.knowledgeStore = new FileKnowledgeStore(path);
   }
 
   async init(): Promise<void> {
@@ -73,6 +83,7 @@ export class FileStorageAdapter implements StorageAdapter {
     await this.checkpointStore.init();
     await this.receiptStore.init();
     await this.graphStore.initialize();
+    await this.knowledgeStore.init();
     this.initialized = true;
   }
 
@@ -82,6 +93,7 @@ export class FileStorageAdapter implements StorageAdapter {
     }
 
     await this.graphStore.shutdown();
+    await this.knowledgeStore.close();
     this.closed = true;
     this.initialized = false;
   }
@@ -105,6 +117,11 @@ export class FileStorageAdapter implements StorageAdapter {
     return this.graphStore;
   }
 
+  getKnowledgeStore(): KnowledgeStore {
+    this.assertInitialized();
+    return this.knowledgeStore;
+  }
+
   private assertInitialized(): void {
     if (this.closed) {
       throw new Error('StorageAdapter has been closed');
@@ -122,6 +139,7 @@ export class SqliteStorageAdapter implements StorageAdapter {
   private checkpointStore: SQLiteCheckpointStore;
   private receiptStore: SQLiteReceiptStore;
   private graphStore: SQLiteGraphStore;
+  private knowledgeStore: SQLiteKnowledgeStore;
   private initialized = false;
   private closed = false;
 
@@ -129,6 +147,7 @@ export class SqliteStorageAdapter implements StorageAdapter {
     this.checkpointStore = new SQLiteCheckpointStore(path);
     this.receiptStore = new SQLiteReceiptStore(path);
     this.graphStore = new SQLiteGraphStore(path);
+    this.knowledgeStore = new SQLiteKnowledgeStore(path);
   }
 
   async init(): Promise<void> {
@@ -142,6 +161,7 @@ export class SqliteStorageAdapter implements StorageAdapter {
     await this.checkpointStore.init();
     await this.receiptStore.init();
     await this.graphStore.initialize();
+    await this.knowledgeStore.init();
     this.initialized = true;
   }
 
@@ -151,6 +171,7 @@ export class SqliteStorageAdapter implements StorageAdapter {
     }
 
     await this.graphStore.shutdown();
+    await this.knowledgeStore.close();
     this.closed = true;
     this.initialized = false;
   }
@@ -172,6 +193,11 @@ export class SqliteStorageAdapter implements StorageAdapter {
   getGraphStore(): GraphStore {
     this.assertInitialized();
     return this.graphStore;
+  }
+
+  getKnowledgeStore(): KnowledgeStore {
+    this.assertInitialized();
+    return this.knowledgeStore;
   }
 
   private assertInitialized(): void {

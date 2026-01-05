@@ -9,5 +9,15 @@
     "enforceConsent": true,
     "failClosed": true,
     "antiHive": true
+  },
+  "consent": {
+    "description": "ATTACK 12 FIX: Consent anchor actors with priority semantics",
+    "anchorActors": ["system", "kaitiaki", "admin"],
+    "priority": {
+      "description": "Priority order: anchor stop > any pause > any resume",
+      "levels": ["stop", "pause", "resume"]
+    },
+    "durableStorage": false,
+    "durableStorageNote": "Consent signals are in-memory only. On restart, all consent state is reset. For persistent consent, set durableStorage=true and configure ConsentStore."
   }
 }

@@ -6,7 +6,7 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
-import { CIF, CDI } from 'mathison-governance';
+import { CIF, CDI, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
 import { ActionGate } from '../action-gate';
 import { MemoryGraph } from 'mathison-memory';
 import { Interpreter } from 'mathison-oi';
@@ -16,6 +16,7 @@ import { createCIFIngressInterceptor, createCIFEgressInterceptor } from './inter
 import { createCDIInterceptor } from './interceptors/cdi-interceptor';
 import { createHeartbeatInterceptor } from './interceptors/heartbeat-interceptor';
 import { HeartbeatMonitor } from '../heartbeat';
+import { createHash, randomBytes } from 'crypto';
 
 export interface GRPCServerConfig {
   port: number;
@@ -100,12 +101,20 @@ export class MathisonGRPCServer {
   /**
    * Governance pipeline wrapper for all RPC calls
    * Applies: Heartbeat -> CIF Ingress -> CDI Action Check -> Handler -> CDI Output -> CIF Egress
+   * P0.1: Generates GovernanceProof for every request
    */
   private async withGovernance<TRequest, TResponse>(
     call: grpc.ServerUnaryCall<TRequest, TResponse> | grpc.ServerWritableStream<TRequest, TResponse>,
     action: string,
-    handler: (sanitizedRequest: TRequest) => Promise<TResponse>
+    actionId: string | undefined,  // P0.4: Canonical action ID
+    handler: (sanitizedRequest: TRequest, proof: GovernanceProofBuilder) => Promise<TResponse>
   ): Promise<TResponse> {
+    // P0.1: Initialize governance proof
+    const requestId = randomBytes(16).toString('hex');
+    const requestHash = createHash('sha256')
+      .update(JSON.stringify(call.request))
+      .digest('hex');
+    const proof = new GovernanceProofBuilder(requestId, requestHash);
     // 1. Heartbeat fail-closed check
     if (this.config.heartbeat && !this.config.heartbeat.isHealthy()) {
       const status = this.config.heartbeat.getStatus();
@@ -120,75 +129,121 @@ export class MathisonGRPCServer {
 
     // 2. CIF Ingress
     const clientId = call.getPeer();
-    const ingressResult = await this.config.cif.ingress({
+    const ingressInput = {
       clientId,
       endpoint: (call as any).handler?.path || 'unknown',
       payload: call.request,
       headers: call.metadata.getMap() as Record<string, string>,
       timestamp: Date.now()
-    });
+    };
+    const ingressResult = await this.config.cif.ingress(ingressInput);
+
+    // P0.1: Record CIF ingress stage
+    proof.addCIFIngress(ingressInput, ingressResult);
 
     if (!ingressResult.allowed) {
+      // P0.1: Generate denial proof
+      proof.setVerdict('deny');
+      const denialProof = proof.build();
       const error: any = new Error('CIF ingress blocked');
       error.code = grpc.status.INVALID_ARGUMENT;
       error.details = JSON.stringify({
         reason_code: 'CIF_INGRESS_BLOCKED',
-        violations: ingressResult.violations
+        violations: ingressResult.violations,
+        governance_proof: denialProof
       });
       throw error;
     }
 
     // 3. CDI Action Check
-    const actionResult = await this.config.cdi.checkAction({
+    const actionInput = {
       actor: clientId,
       action,
-      payload: ingressResult.sanitizedPayload
-    });
+      action_id: actionId,  // P0.4: Canonical action ID
+      payload: ingressResult.sanitizedPayload,
+      route: (call as any).handler?.path,
+      method: 'gRPC',
+      request_hash: requestHash
+    };
+    const actionResult = await this.config.cdi.checkAction(actionInput);
+
+    // P0.1: Record CDI action stage
+    proof.addCDIAction(actionInput, actionResult);
 
     if (actionResult.verdict !== 'allow') {
+      // P0.1: Generate denial proof
+      proof.setVerdict('deny');
+      const denialProof = proof.build();
       const error: any = new Error('CDI action denied');
       error.code = grpc.status.PERMISSION_DENIED;
       error.details = JSON.stringify({
         reason_code: 'CDI_ACTION_DENIED',
-        reason: actionResult.reason
+        reason: actionResult.reason,
+        governance_proof: denialProof
       });
       throw error;
     }
 
     // 4. Execute handler
-    const response = await handler(ingressResult.sanitizedPayload as TRequest);
+    const handlerInput = ingressResult.sanitizedPayload as TRequest;
+    const response = await handler(handlerInput, proof);
+
+    // P0.1: Record handler stage
+    proof.addHandler(handlerInput, response);
 
     // 5. CDI Output Check
-    const outputCheck = await this.config.cdi.checkOutput({
-      content: JSON.stringify(response)
-    });
+    const outputInput = { content: JSON.stringify(response) };
+    const outputCheck = await this.config.cdi.checkOutput(outputInput);
+
+    // P0.1: Record CDI output stage
+    proof.addCDIOutput(outputInput, outputCheck);
 
     if (!outputCheck.allowed) {
+      // P0.1: Generate denial proof
+      proof.setVerdict('deny');
+      const denialProof = proof.build();
       const error: any = new Error('CDI output blocked');
       error.code = grpc.status.PERMISSION_DENIED;
       error.details = JSON.stringify({
         reason_code: 'CDI_OUTPUT_BLOCKED',
-        violations: outputCheck.violations
+        violations: outputCheck.violations,
+        governance_proof: denialProof
       });
       throw error;
     }
 
     // 6. CIF Egress
-    const egressResult = await this.config.cif.egress({
+    const egressInput = {
       clientId,
       endpoint: (call as any).handler?.path || 'unknown',
       payload: response
-    });
+    };
+    const egressResult = await this.config.cif.egress(egressInput);
+
+    // P0.1: Record CIF egress stage
+    proof.addCIFEgress(egressInput, egressResult);
 
     if (!egressResult.allowed) {
+      // P0.1: Generate denial proof
+      proof.setVerdict('deny');
+      const denialProof = proof.build();
       const error: any = new Error('CIF egress blocked');
       error.code = grpc.status.PERMISSION_DENIED;
       error.details = JSON.stringify({
         reason_code: 'CIF_EGRESS_BLOCKED',
-        violations: egressResult.violations
+        violations: egressResult.violations,
+        governance_proof: denialProof
       });
       throw error;
     }
+
+    // P0.1: Finalize governance proof
+    proof.setVerdict('allow');
+    const finalProof = proof.build();
+
+    // TODO P2.1: Generate receipt with proof and capability token
+    // For now, just return the sanitized response
+    // In full implementation, would call ActionGate to generate receipt
 
     return egressResult.sanitizedPayload as TResponse;
   }
@@ -198,7 +253,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'job_run', async (req) => {
+      const response = await this.withGovernance(call, 'job_run', 'action:job:run', async (req, proof) => {
         if (!this.config.jobExecutor) {
           throw new Error('Job executor not initialized');
         }
@@ -238,7 +293,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'job_status', async (req) => {
+      const response = await this.withGovernance(call, 'job_status', 'action:job:status', async (req, proof) => {
         if (!this.config.jobExecutor) {
           throw new Error('Job executor not initialized');
         }
@@ -286,7 +341,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'oi_interpret', async (req) => {
+      const response = await this.withGovernance(call, 'oi_interpret', 'action:oi:interpret', async (req, proof) => {
         if (!this.config.interpreter) {
           throw new Error('OI interpreter not initialized');
         }
@@ -327,7 +382,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'memory_read_node', async (req) => {
+      const response = await this.withGovernance(call, 'memory_read_node', 'action:read:memory', async (req, proof) => {
         if (!this.config.memoryGraph) {
           throw new Error('Memory graph not initialized');
         }

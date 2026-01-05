@@ -103,11 +103,16 @@ NORMAL → DEFENSIVE: transient failures, rate limits, resource exhaustion
 
 ## Remaining Work (P2)
 
-### P2.1: gRPC Parity ⚠️ Partial
-- **Status**: Core governance pipeline exists, missing P0 enhancements
-- **Missing**: GovernanceProof, capability tokens, receipt generation
-- **Files**: `grpc/server.ts` (has CIF/CDI pipeline)
-- **Priority**: Medium (HTTP is primary interface)
+### P2.1: gRPC Parity ✅ Complete
+- **Status**: Full P0 parity achieved
+- **Implemented**: GovernanceProof generation, capability tokens, receipt generation via ActionGate
+- **Files**: `grpc/server.ts` (complete governance pipeline + receipts)
+- **Commit**: `49978e9` - Receipt generation via ActionGate
+- **Details**:
+  - All RPC calls generate GovernanceProof with stage hashing
+  - Write operations (RunJob, CreateMemoryNode) use ActionGate.executeSideEffect
+  - Receipts generated and returned in responses (receipt_id field)
+  - Defense in depth: withGovernance pipeline + ActionGate CDI checks
 
 ### P2.2: Supply Chain Verification 📋 Not Started
 - **Scope**: pnpm lockfile hash in genome, SBOM verification
@@ -142,7 +147,7 @@ MATHISON_VERIFY_MANIFEST=true   # Verify genome signatures
 ✅ Receipts are tamper-evident and validated continuously
 ✅ Action IDs are canonical; token minting is single source of authority
 ✅ Integrity checks fail closed on mismatch
-⚠️ gRPC governed (core pipeline yes, P0 enhancements no)
+✅ gRPC fully governed (proofs, receipts, capability tokens)
 ✅ Tests cover: allow, deny, tamper, bypass, TTL/use-count, chain break, posture
 ✅ No secrets committed
 ✅ Build green, all tests passing
@@ -152,15 +157,16 @@ MATHISON_VERIFY_MANIFEST=true   # Verify genome signatures
 1. **P0.1 + P0.2**: `3181fae` - GovernanceProof + Storage Sealing
 2. **P0.3 + P0.4**: `0cbe3fd` - Receipt chains + Action registry/tokens
 3. **P1.1 + P1.2**: `ac2552f` - Integrity verification + Posture ladder
+4. **P2.1 (part 1)**: `8b2e420` - gRPC governance proofs
+5. **P2.1 (part 2)**: `49978e9` - gRPC receipt generation via ActionGate
 
 **Branch**: `claude/provable-governance-sealing-wWFY5`
 
 ## Next Steps for Human
 
 ### High Priority
-1. **gRPC P0 Parity**: Add GovernanceProof, tokens, receipts to `grpc/server.ts`
-2. **Architecture Docs**: Update `docs/20-architecture/` with new proof model
-3. **Genome Hashes**: Replace placeholders with real hashes for production
+1. **Genome Hashes**: Replace placeholders with real hashes for production
+2. **Production Validation**: Test P0+P1 features in staging environment
 
 ### Medium Priority
 4. **P1.3**: Implement capability negotiation protocol if needed
@@ -188,23 +194,27 @@ MATHISON_VERIFY_MANIFEST=true   # Verify genome signatures
 - `packages/mathison-governance/src/posture.ts`
 - `packages/mathison-governance/src/__tests__/posture.test.ts`
 
-### Modified (15 files)
+### Modified (16 files)
 - `packages/mathison-governance/src/index.ts` (exports)
 - `packages/mathison-governance/src/cdi.ts` (token minting)
 - `packages/mathison-server/src/index.ts` (boot verification, proof init)
 - `packages/mathison-server/src/heartbeat.ts` (chain + canary checks)
 - `packages/mathison-server/src/action-gate/index.ts` (proof attachment)
+- `packages/mathison-server/src/grpc/server.ts` (P2.1: proofs + receipts)
 - `packages/mathison-storage/src/receipt_store.ts` (chain fields)
 - `packages/mathison-storage/src/backends/file/receipt.ts` (chaining)
 - `packages/mathison-storage/src/backends/sqlite/receipt.ts` (chaining)
 - `packages/mathison-storage/src/index.ts` (seal exports)
 - `packages/mathison-storage/src/storage-adapter.ts` (seal checks)
+- `docs/PROVABLE_GOVERNANCE_COMPLETE.md` (this file)
+- `docs/20-architecture/system-architecture.md` (P0+P1 architecture)
 
 ## Summary
 
-**Completed**: P0 (all 4 priorities) + P1.1 + P1.2
+**Completed**: P0 (all 4 priorities) + P1.1 + P1.2 + P2.1
 **Test Coverage**: 171 passing tests
 **Build Status**: ✅ Green
 **Security Posture**: Provably governed with tamper detection
+**gRPC Parity**: ✅ Complete (proofs, receipts, capability tokens)
 
-The codebase is now "structurally governed AND provable under tamper attempts" with fail-closed integrity verification and graduated security postures.
+The codebase is now "structurally governed AND provable under tamper attempts" with fail-closed integrity verification, graduated security postures, and full HTTP/gRPC parity.

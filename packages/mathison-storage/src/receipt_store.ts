@@ -23,6 +23,23 @@ export interface Receipt {
   // Genome metadata (added for memetic genome governance)
   genome_id?: string;
   genome_version?: string;
+
+  // P0.1: Cryptographic governance proof (proves governance actually ran)
+  governance_proof?: {
+    request_id: string;
+    request_hash: string;
+    stage_hashes: Record<string, string>;
+    cumulative_hash: string;
+    signature: string;
+    boot_key_id: string;
+    timestamp: string;
+    verdict: 'allow' | 'deny' | 'uncertain';
+  };
+
+  // P0.3: Tamper-evident chain fields
+  prev_hash?: string;
+  sequence_number?: number;
+  chain_signature?: string;
 }
 
 export interface ReceiptStore {

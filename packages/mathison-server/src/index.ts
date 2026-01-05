@@ -5,8 +5,8 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF } from 'mathison-governance';
-import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv } from 'mathison-storage';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
+import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
 import { ActionGate } from './action-gate';
@@ -16,6 +16,7 @@ import { generateOpenAPISpec } from './openapi';
 import { Interpreter } from 'mathison-oi';
 import { HeartbeatMonitor, createHeartbeatFromEnv, HeartbeatStatus } from './heartbeat';
 import { loadPrerequisites, ValidatedPrerequisites } from './prerequisites';
+import { randomBytes } from 'crypto';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -97,6 +98,10 @@ export class MathisonServer {
         host: this.config.host
       });
 
+      // P0.2: Seal storage after boot completes successfully
+      // From this point on, only governance-authorized components can create storage adapters
+      sealStorage();
+
       this.bootStatus = 'ready';
       console.log('✅ Mathison Server started successfully');
       console.log(`🌐 Listening on http://${this.config.host}:${this.config.port}`);
@@ -130,6 +135,9 @@ export class MathisonServer {
     console.log('⚖️  Initializing governance layer (fail-closed)...');
 
     try {
+      // P0.1: Initialize boot key for governance proofs (ephemeral, rotates per boot)
+      initializeBootKey();
+
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
@@ -238,8 +246,18 @@ export class MathisonServer {
 
   private registerGovernancePipeline(): void {
     // P3-A: Mandatory governance pipeline for all requests
-    // FIRST: Check heartbeat fail-closed posture
+    // FIRST: Check heartbeat fail-closed posture AND initialize governance proof builder
     this.app.addHook('onRequest', async (request, reply) => {
+      // P0.1: Create governance proof builder for this request
+      const requestId = `req_${randomBytes(8).toString('hex')}`;
+      const proofBuilder = new GovernanceProofBuilder(requestId, {
+        method: request.method,
+        url: request.url,
+        headers: request.headers
+      });
+      (request as any).governanceProofBuilder = proofBuilder;
+      (request as any).requestId = requestId;
+
       // Fail-closed: If heartbeat detected system unhealthy, deny all requests
       if (this.heartbeat && !this.heartbeat.isHealthy()) {
         const status = this.heartbeat.getStatus();
@@ -261,15 +279,26 @@ export class MathisonServer {
       const clientId = request.ip;
 
       // CIF Ingress
-      const ingressResult = await this.cif.ingress({
+      const ingressInput = {
         clientId,
         endpoint: request.url,
         payload: request.body ?? {},
         headers: request.headers as Record<string, string>,
         timestamp: Date.now()
-      });
+      };
+
+      const ingressResult = await this.cif.ingress(ingressInput);
+
+      // P0.1: Record CIF ingress proof
+      const proofBuilder = (request as any).governanceProofBuilder as GovernanceProofBuilder;
+      if (proofBuilder) {
+        proofBuilder.addCIFIngress(ingressInput, ingressResult);
+      }
 
       if (!ingressResult.allowed) {
+        if (proofBuilder) {
+          proofBuilder.setVerdict('deny');
+        }
         reply.code(400).send({
           error: 'CIF_INGRESS_BLOCKED',
           violations: ingressResult.violations,
@@ -366,13 +395,24 @@ export class MathisonServer {
 
       const clientId = request.ip;
 
-      const actionResult = await this.cdi.checkAction({
+      const actionInput = {
         actor: clientId,
         action,
         payload: (request as any).sanitizedBody
-      });
+      };
+
+      const actionResult = await this.cdi.checkAction(actionInput);
+
+      // P0.1: Record CDI action proof
+      const proofBuilder = (request as any).governanceProofBuilder as GovernanceProofBuilder;
+      if (proofBuilder) {
+        proofBuilder.addCDIAction(actionInput, actionResult);
+      }
 
       if (actionResult.verdict !== 'allow') {
+        if (proofBuilder) {
+          proofBuilder.setVerdict('deny');
+        }
         reply.code(403).send({
           error: 'CDI_ACTION_DENIED',
           reason: actionResult.reason,
@@ -380,11 +420,15 @@ export class MathisonServer {
         });
         return reply;
       }
+
+      // Attach action to request for downstream use
+      (request as any).governedAction = action;
     });
 
     // Pre-serialization: JSON contract enforcement + CDI output check + CIF egress
     this.app.addHook('onSend', async (request, reply, payload) => {
       const clientId = request.ip;
+      const proofBuilder = (request as any).governanceProofBuilder as GovernanceProofBuilder;
 
       // Phase 0.4: JSON-only contract enforcement (fail-closed)
       // All responses MUST be JSON-serializable
@@ -408,11 +452,20 @@ export class MathisonServer {
       reply.header('Content-Type', 'application/json');
 
       // CDI output check
-      const outputCheck = await this.cdi.checkOutput({
+      const outputInput = {
         content: typeof payload === 'string' ? payload : JSON.stringify(payload)
-      });
+      };
+      const outputCheck = await this.cdi.checkOutput(outputInput);
+
+      // P0.1: Record CDI output proof
+      if (proofBuilder) {
+        proofBuilder.addCDIOutput(outputInput, outputCheck);
+      }
 
       if (!outputCheck.allowed) {
+        if (proofBuilder) {
+          proofBuilder.setVerdict('deny');
+        }
         reply.code(403);
         return JSON.stringify({
           error: 'CDI_OUTPUT_BLOCKED',
@@ -421,19 +474,40 @@ export class MathisonServer {
       }
 
       // CIF egress
-      const egressResult = await this.cif.egress({
+      const egressInput = {
         clientId,
         endpoint: request.url,
         payload: parsedPayload
-      });
+      };
+      const egressResult = await this.cif.egress(egressInput);
+
+      // P0.1: Record CIF egress proof
+      if (proofBuilder) {
+        proofBuilder.addCIFEgress(egressInput, egressResult);
+      }
 
       if (!egressResult.allowed) {
+        if (proofBuilder) {
+          proofBuilder.setVerdict('deny');
+        }
         reply.code(403);
         return JSON.stringify({
           error: 'CIF_EGRESS_BLOCKED',
           violations: egressResult.violations,
           leaks: egressResult.leaksDetected
         });
+      }
+
+      // P0.1: Finalize proof and attach to response headers (for debugging)
+      if (proofBuilder && reply.statusCode < 400) {
+        proofBuilder.setVerdict('allow');
+      }
+      if (proofBuilder) {
+        const proof = proofBuilder.build();
+        reply.header('X-Governance-Proof-ID', proof.request_id);
+        reply.header('X-Governance-Proof-Verdict', proof.verdict);
+        // Store proof in request for ActionGate to attach to receipts
+        (request as any).governanceProof = proof;
       }
 
       return JSON.stringify(egressResult.sanitizedPayload);

@@ -27,6 +27,16 @@ export type { ActionContext, ActionResult } from './cdi';
 export { CIF } from './cif';
 export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressResult } from './cif';
 
+// Re-export GovernanceProof (P0.1)
+export {
+  initializeBootKey,
+  getBootKeyId,
+  GovernanceProofBuilder,
+  verifyGovernanceProof,
+  createDenialProof
+} from './governance-proof';
+export type { GovernanceProof } from './governance-proof';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

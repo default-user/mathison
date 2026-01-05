@@ -59,6 +59,27 @@ export {
 } from './capability-token';
 export type { CapabilityToken, TokenValidationResult } from './capability-token';
 
+// Re-export Governance Integrity (P1.1)
+export {
+  verifyGovernanceIntegrity,
+  computeFileHash,
+  createCIFCanary,
+  createCDICanary,
+  runCanaryTests
+} from './integrity';
+export type { IntegrityManifestEntry, IntegrityCheckResult, CanaryTest } from './integrity';
+
+// Re-export Security Posture (P1.2)
+export {
+  SecurityPosture,
+  PostureEscalationReason,
+  POSTURE_POLICIES,
+  PostureManager,
+  initializePostureManager,
+  getPostureManager
+} from './posture';
+export type { PostureTransition, PosturePolicy } from './posture';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

@@ -5,7 +5,7 @@
  */
 
 import { validateAllPrerequisites, PrerequisiteValidationResult, PrerequisiteCode } from './prerequisites';
-import { CIF, CDI } from 'mathison-governance';
+import { CIF, CDI, createCIFCanary, createCDICanary, runCanaryTests } from 'mathison-governance';
 import { ReceiptStore } from 'mathison-storage';
 
 export interface HeartbeatCheck {
@@ -222,6 +222,49 @@ export class HeartbeatMonitor {
           name: 'Receipt Chain',
           ok: true, // Don't fail-close on validation errors, just warn
           detail: 'Chain validation error (see warnings)'
+        });
+      }
+    }
+
+    // P1.1: Check 5: Run canary watchdog tests (governance sanity checks)
+    if (this.cif && this.cdi) {
+      try {
+        const canaries = [
+          createCIFCanary(this.cif),
+          createCDICanary(this.cdi)
+        ];
+
+        const canaryResult = await runCanaryTests(canaries);
+
+        if (canaryResult.passed) {
+          checks.push({
+            name: 'Canary Watchdogs',
+            ok: true,
+            detail: `All ${canaryResult.results.length} canaries passed`
+          });
+        } else {
+          allOk = false;
+          const failedCanaries = canaryResult.results.filter(r => !r.passed);
+          checks.push({
+            name: 'Canary Watchdogs',
+            ok: false,
+            code: 'CANARY_FAILED',
+            detail: `${failedCanaries.length} canary tests failed (governance enforcement broken)`
+          });
+
+          // Log which canaries failed
+          for (const failure of failedCanaries) {
+            warnings.push(`Canary FAILED: ${failure.name} - ${failure.description}`);
+          }
+        }
+      } catch (error) {
+        // Canary test error - treat as failure
+        allOk = false;
+        checks.push({
+          name: 'Canary Watchdogs',
+          ok: false,
+          code: 'CANARY_ERROR',
+          detail: `Canary tests error: ${error instanceof Error ? error.message : String(error)}`
         });
       }
     }

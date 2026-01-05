@@ -5,7 +5,7 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity } from 'mathison-governance';
 import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
@@ -148,6 +148,9 @@ export class MathisonServer {
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
+      // P1.1: Verify integrity of critical governance modules
+      await this.verifyGovernanceIntegrity();
+
       await this.governance.initialize();
       await this.cdi.initialize();
 
@@ -189,6 +192,51 @@ export class MathisonServer {
     } catch (error) {
       console.error('❌ Genome verification failed (FAIL-CLOSED)');
       throw new Error(`GENOME_INVALID: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * P1.1: Verify integrity of critical governance modules
+   * Checks that CIF/CDI/ActionGate source hashes match genome build manifest
+   */
+  private async verifyGovernanceIntegrity(): Promise<void> {
+    if (!this.genome || !this.genome.build_manifest) {
+      console.warn('⚠️  No build manifest in genome - skipping integrity check');
+      return;
+    }
+
+    const isProduction = process.env.MATHISON_ENV === 'production';
+    const strictMode = isProduction || process.env.MATHISON_INTEGRITY_STRICT === 'true';
+
+    console.log(`🔒 Verifying governance integrity (strict: ${strictMode})...`);
+
+    try {
+      const result = await verifyGovernanceIntegrity(
+        this.genome.build_manifest.files,
+        process.cwd(),
+        strictMode
+      );
+
+      if (!result.valid) {
+        console.error('❌ Governance integrity check FAILED:');
+        for (const error of result.errors) {
+          console.error(`   - ${error}`);
+        }
+        throw new Error('GOVERNANCE_INTEGRITY_FAILED: Critical modules do not match expected hashes');
+      }
+
+      console.log(`✓ Governance integrity verified (${result.checked.length} files)`);
+      for (const check of result.checked) {
+        if (check.match) {
+          console.log(`   ✓ ${check.path}`);
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('GOVERNANCE_INTEGRITY_FAILED')) {
+        throw error; // Re-throw integrity failures
+      }
+      console.error('❌ Governance integrity check error:', error);
+      throw new Error(`GOVERNANCE_INTEGRITY_ERROR: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 

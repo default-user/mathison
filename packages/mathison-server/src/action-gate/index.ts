@@ -41,6 +41,17 @@ export interface ActionGateContext {
   // Genome metadata for capability enforcement and receipt attribution
   genome_id?: string;
   genome_version?: string;
+  // P0.1: Governance proof (if available from HTTP pipeline)
+  governance_proof?: {
+    request_id: string;
+    request_hash: string;
+    stage_hashes: Record<string, string>;
+    cumulative_hash: string;
+    signature: string;
+    boot_key_id: string;
+    timestamp: string;
+    verdict: 'allow' | 'deny' | 'uncertain';
+  };
 }
 
 export interface SideEffectResult {
@@ -123,7 +134,9 @@ export class ActionGate {
       genome_version: context.genome_version,
       reason_code: 'GOVERNANCE_PASSED',
       content_hash: computeContentHash(context.payload),
-      notes: `ActionGate: ${context.action}`
+      notes: `ActionGate: ${context.action}`,
+      // P0.1: Attach governance proof if available
+      governance_proof: context.governance_proof
     };
 
     try {

@@ -27,6 +27,59 @@ export type { ActionContext, ActionResult } from './cdi';
 export { CIF } from './cif';
 export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressResult } from './cif';
 
+// Re-export GovernanceProof (P0.1)
+export {
+  initializeBootKey,
+  getBootKeyId,
+  getBootKeyForChaining,
+  GovernanceProofBuilder,
+  verifyGovernanceProof,
+  createDenialProof
+} from './governance-proof';
+export type { GovernanceProof } from './governance-proof';
+
+// Re-export Action Registry (P0.4)
+export {
+  actionRegistry,
+  validateActionId,
+  hasSideEffects,
+  getActionRisk,
+  RiskClass
+} from './action-registry';
+export type { ActionDefinition } from './action-registry';
+
+// Re-export Capability Tokens (P0.4)
+export {
+  initializeTokenKey,
+  getTokenKeyId,
+  mintToken,
+  mintSingleUseToken,
+  validateToken,
+  assertTokenValid
+} from './capability-token';
+export type { CapabilityToken, TokenValidationResult } from './capability-token';
+
+// Re-export Governance Integrity (P1.1)
+export {
+  verifyGovernanceIntegrity,
+  computeFileHash,
+  createCIFCanary,
+  createCDICanary,
+  runCanaryTests
+} from './integrity';
+export type { IntegrityManifestEntry, IntegrityCheckResult, CanaryTest } from './integrity';
+
+// Re-export Security Posture (P1.2)
+export {
+  SecurityPosture,
+  PostureEscalationReason,
+  POSTURE_POLICIES,
+  PostureManager,
+  initializePostureManager,
+  getPostureManager
+} from './posture';
+export type { PostureTransition, PosturePolicy } from './posture';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

@@ -7,3 +7,5 @@ export * from "./backends/file";
 export * from "./backends/sqlite";
 export * from "./beam_store";
 export * from "./storage-adapter";
+export * from "./storage-seal";
+export * from "./receipt-chain";

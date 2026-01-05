@@ -5,7 +5,8 @@
  */
 
 import { validateAllPrerequisites, PrerequisiteValidationResult, PrerequisiteCode } from './prerequisites';
-import { CIF, CDI } from 'mathison-governance';
+import { CIF, CDI, createCIFCanary, createCDICanary, runCanaryTests } from 'mathison-governance';
+import { ReceiptStore } from 'mathison-storage';
 
 export interface HeartbeatCheck {
   name: string;
@@ -46,6 +47,9 @@ export class HeartbeatMonitor {
   private cif: CIF | null = null;
   private cdi: CDI | null = null;
 
+  // P0.3: Receipt store for chain validation
+  private receiptStore: ReceiptStore | null = null;
+
   constructor(config: HeartbeatConfig) {
     this.intervalMs = config.intervalMs;
     this.configPath = config.configPath || './config/governance.json';
@@ -58,6 +62,13 @@ export class HeartbeatMonitor {
   setGovernanceComponents(cif: CIF, cdi: CDI): void {
     this.cif = cif;
     this.cdi = cdi;
+  }
+
+  /**
+   * P0.3: Set receipt store for chain validation
+   */
+  setReceiptStore(receiptStore: ReceiptStore): void {
+    this.receiptStore = receiptStore;
   }
 
   /**
@@ -177,6 +188,85 @@ export class HeartbeatMonitor {
       });
     } else {
       checks.push({ name: 'Storage Config', ok: true });
+    }
+
+    // P0.3: Check 4: Validate receipt chain integrity
+    if (this.receiptStore) {
+      try {
+        const chainValidation = await this.receiptStore.validateChain();
+
+        if (chainValidation.valid) {
+          checks.push({
+            name: 'Receipt Chain',
+            ok: true,
+            detail: `Chain valid (${chainValidation.lastSequence + 1} receipts)`
+          });
+        } else {
+          allOk = false;
+          checks.push({
+            name: 'Receipt Chain',
+            ok: false,
+            code: 'RECEIPT_CHAIN_BROKEN',
+            detail: `Chain validation failed: ${chainValidation.errors.slice(0, 3).join('; ')}`
+          });
+
+          // Add warning with full error list
+          if (chainValidation.errors.length > 3) {
+            warnings.push(`Receipt chain has ${chainValidation.errors.length} errors (showing first 3)`);
+          }
+        }
+      } catch (error) {
+        // Chain validation failed due to error
+        warnings.push(`Receipt chain validation error: ${error instanceof Error ? error.message : String(error)}`);
+        checks.push({
+          name: 'Receipt Chain',
+          ok: true, // Don't fail-close on validation errors, just warn
+          detail: 'Chain validation error (see warnings)'
+        });
+      }
+    }
+
+    // P1.1: Check 5: Run canary watchdog tests (governance sanity checks)
+    if (this.cif && this.cdi) {
+      try {
+        const canaries = [
+          createCIFCanary(this.cif),
+          createCDICanary(this.cdi)
+        ];
+
+        const canaryResult = await runCanaryTests(canaries);
+
+        if (canaryResult.passed) {
+          checks.push({
+            name: 'Canary Watchdogs',
+            ok: true,
+            detail: `All ${canaryResult.results.length} canaries passed`
+          });
+        } else {
+          allOk = false;
+          const failedCanaries = canaryResult.results.filter(r => !r.passed);
+          checks.push({
+            name: 'Canary Watchdogs',
+            ok: false,
+            code: 'CANARY_FAILED',
+            detail: `${failedCanaries.length} canary tests failed (governance enforcement broken)`
+          });
+
+          // Log which canaries failed
+          for (const failure of failedCanaries) {
+            warnings.push(`Canary FAILED: ${failure.name} - ${failure.description}`);
+          }
+        }
+      } catch (error) {
+        // Canary test error - treat as failure
+        allOk = false;
+        checks.push({
+          name: 'Canary Watchdogs',
+          ok: false,
+          code: 'CANARY_ERROR',
+          detail: `Canary tests error: ${error instanceof Error ? error.message : String(error)}`
+        });
+      }
     }
 
     // Build status

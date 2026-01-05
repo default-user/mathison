@@ -141,6 +141,184 @@ HTTP Response (with receipt if write)
 - ActionGate is the ONLY path to storage writes
 - Denial at any stage halts the pipeline (fail-closed)
 
+## Provable Governance (P0 + P1)
+
+### GovernanceProof: Cryptographic Verification (P0.1)
+
+Every request generates a cryptographic proof that the governance pipeline actually ran:
+
+```typescript
+interface GovernanceProof {
+  request_id: string;
+  request_hash: string;
+  stage_hashes: {
+    cif_ingress: string;    // CIF ingress stage hash
+    cdi_action: string;     // CDI action check hash
+    handler: string;        // Handler execution hash
+    cdi_output: string;     // CDI output check hash
+    cif_egress: string;     // CIF egress stage hash
+  };
+  cumulative_hash: string;  // Rolling hash of all stages
+  signature: string;        // HMAC-SHA256 signature
+  boot_key_id: string;      // Ephemeral key ID (rotates per restart)
+  timestamp: string;
+  verdict: 'allow' | 'deny' | 'uncertain';
+}
+```
+
+**Security Model:**
+- **Ephemeral boot keys**: Generated at server start, rotated per restart, never persisted
+- **HMAC signatures**: Prevent forgery (attacker cannot mint fake proofs)
+- **Stage hashing**: Each governance stage is hashed with inputs/outputs
+- **Cumulative hash**: Chains all stages together (tamper detection)
+- **Proof attachment**: Every receipt includes the full proof
+
+### Storage Sealing: Bypass Prevention (P0.2)
+
+After server boot completes, storage is **sealed** - new storage adapters cannot be created without a governance capability token:
+
+```typescript
+// At boot (before sealing)
+const stores = await makeStorageAdapterFromEnv();  // ✅ Allowed
+
+// After boot (storage sealed)
+await sealStorage();
+const token = getSealToken();  // Only governance has this
+
+// Attempting bypass
+const rogue = await makeStorageAdapterFromEnv();  // ❌ Throws GOVERNANCE_BYPASS_DETECTED
+
+// With governance token
+const governed = await makeStorageAdapterFromEnv(token);  // ✅ Allowed
+```
+
+**Attack Prevention:**
+- Direct storage writes fail closed
+- Handlers cannot instantiate new adapters
+- Only ActionGate holds the seal token
+- Bypass attempts throw deterministic errors
+
+### Tamper-Evident Receipt Chains (P0.3)
+
+Receipts are hash-chained like a blockchain, with continuous validation:
+
+```typescript
+interface Receipt {
+  // ... existing fields ...
+
+  // P0.3: Chain fields
+  prev_hash?: string;         // Hash of previous receipt
+  sequence_number?: number;   // Monotonic sequence (0-based)
+  chain_signature?: string;   // HMAC(receiptHash, prevHash, seq)
+}
+```
+
+**Chain Properties:**
+- **Hash linking**: Each receipt links to previous via `prev_hash`
+- **Signatures**: HMAC prevents forgery or modification
+- **Sequence numbers**: Detect insertions/deletions
+- **Genesis hash**: First receipt chains to `0x0000...` (64 zeros)
+- **Continuous validation**: Heartbeat validates chain every N seconds
+
+**Tamper Detection:**
+- Modified content → signature mismatch
+- Broken prev_hash → chain break
+- Missing receipt → sequence gap
+- Inserted receipt → sequence/hash mismatch
+- **Response**: Escalate to FAIL_CLOSED posture
+
+### Action Registry + Capability Tokens (P0.4)
+
+Single source of truth for all valid actions with minted capability tokens:
+
+```typescript
+// Action Registry (canonical IDs)
+const action = actionRegistry.get('action:write:storage');
+// → { id, risk_class: 'HIGH', side_effect: true, description }
+
+// CDI mints token on ALLOW verdict
+const result = await cdi.checkAction({
+  actor: 'user@example.com',
+  action_id: 'action:write:storage',  // Canonical ID
+  route: '/api/storage',
+  method: 'POST'
+});
+
+if (result.verdict === 'allow') {
+  const token = result.capability_token;
+  // → Scoped to (actor, action_id, route, TTL=60s, max_use=1)
+  // → HMAC-signed, bound to boot session
+}
+```
+
+**Token Enforcement:**
+- ActionGate requires valid token for writes
+- Token validation checks: signature, expiry, use count, action ID match
+- Single-use tokens prevent replay attacks
+- Tokens bound to boot session (cross-session reuse blocked)
+
+### Governance Integrity Verification (P1.1)
+
+Boot-time verification of critical governance modules:
+
+```typescript
+// Genome build manifest
+{
+  "build_manifest": {
+    "files": [
+      { "path": "packages/mathison-governance/src/cdi.ts", "sha256": "abc123..." },
+      { "path": "packages/mathison-governance/src/cif.ts", "sha256": "def456..." },
+      { "path": "packages/mathison-server/src/action-gate/index.ts", "sha256": "789abc..." }
+    ]
+  }
+}
+
+// At boot
+const result = await verifyGovernanceIntegrity(manifest.files, rootDir, strictMode);
+if (!result.valid) {
+  // FAIL CLOSED: integrity mismatch detected
+  throw new Error('GOVERNANCE_INTEGRITY_FAILED');
+}
+```
+
+**Canary Watchdogs:**
+Heartbeat runs sanity tests to verify governance is working:
+- **CIF canary**: Known-bad oversized payload should be blocked
+- **CDI canary**: Known-forbidden hive action should be denied
+- **Response**: If canary fails → escalate to FAIL_CLOSED
+
+### Security Posture Ladder (P1.2)
+
+Graduated security states with automatic escalation:
+
+```
+NORMAL
+  ↓ (transient failure, rate limit)
+DEFENSIVE (read-only)
+  ↓ (chain break, integrity failure, canary failure)
+FAIL_CLOSED (all operations blocked)
+```
+
+**Posture Policies:**
+
+| Posture | Reads | Writes | Connections | Trigger |
+|---------|-------|--------|-------------|---------|
+| **NORMAL** | ✅ | ✅ | ✅ | Default state |
+| **DEFENSIVE** | ✅ | ❌ | ✅ | Transient failures |
+| **FAIL_CLOSED** | ❌ | ❌ | ❌ | Integrity/chain break |
+
+**Escalation Rules:**
+- Receipt chain break → FAIL_CLOSED
+- Integrity verification failure → FAIL_CLOSED
+- Canary test failure → FAIL_CLOSED
+- Optional adapter down → DEFENSIVE
+- Resource exhaustion → DEFENSIVE
+
+**Posture Lock:**
+- FAIL_CLOSED locks by default (manual unlock required)
+- Prevents automatic downgrade without human approval
+- Transition history logged with timestamps and reasons
+
 ## Monorepo Package Map
 
 ```

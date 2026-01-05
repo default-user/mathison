@@ -187,8 +187,22 @@ export class SqliteStorageAdapter implements StorageAdapter {
 /**
  * Factory function to create a StorageAdapter from environment configuration.
  * Fail-closed: throws StoreMisconfiguredError if config invalid/missing.
+ *
+ * P0.2: After storage sealing (post-boot), requires governance capability token
+ * to prevent direct storage access that bypasses governance.
+ *
+ * @param env Environment variables (default: process.env)
+ * @param governanceToken Governance capability token (required after sealing)
+ * @throws Error if storage is sealed and token is invalid
  */
-export function makeStorageAdapterFromEnv(env = process.env): StorageAdapter {
+export function makeStorageAdapterFromEnv(
+  env = process.env,
+  governanceToken?: symbol
+): StorageAdapter {
+  // P0.2: Check governance capability before creating adapter
+  const { assertGovernanceCapability } = require('./storage-seal');
+  assertGovernanceCapability(governanceToken);
+
   const config = loadStoreConfigFromEnv(env);
 
   if (config.backend === 'FILE') {

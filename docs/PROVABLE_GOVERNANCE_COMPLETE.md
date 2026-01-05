@@ -103,16 +103,25 @@ NORMAL → DEFENSIVE: transient failures, rate limits, resource exhaustion
 
 ## Remaining Work (P2)
 
-### P2.1: gRPC Parity ✅ Complete
-- **Status**: Full P0 parity achieved
-- **Implemented**: GovernanceProof generation, capability tokens, receipt generation via ActionGate
-- **Files**: `grpc/server.ts` (complete governance pipeline + receipts)
-- **Commit**: `49978e9` - Receipt generation via ActionGate
+### P2.1: gRPC Parity ✅ Complete + Security Hardening
+- **Status**: Full P0 parity + streaming + security fixes
+- **Implemented**:
+  - GovernanceProof generation, capability tokens, receipt generation via ActionGate
+  - Server streaming (StreamJobStatus, SearchMemory) with bounded limits
+  - Security fixes: ATTACK 6, 7, 10, 11, 12
+- **Files**: `grpc/server.ts` (complete governance pipeline + receipts + streaming)
 - **Details**:
   - All RPC calls generate GovernanceProof with stage hashing
   - Write operations (RunJob, CreateMemoryNode) use ActionGate.executeSideEffect
   - Receipts generated and returned in responses (receipt_id field)
   - Defense in depth: withGovernance pipeline + ActionGate CDI checks
+  - Streaming endpoints bounded (max 60s duration, 100 events)
+  - CIF egress checks applied per stream event
+  - **ATTACK 6 FIX**: Node ID collision prevention in memory writes
+  - **ATTACK 7 FIX**: CIF egress size check BEFORE serialization (timing attack prevention)
+  - **ATTACK 10 FIX**: Storage seal hardened with cryptographic tokens (not Symbol.for)
+  - **ATTACK 11 FIX**: Anti-hive indirect coordination detection (payload inspection)
+  - **ATTACK 12 FIX**: Consent anchor priority (anchor stop overrides all)
 
 ### P2.2: Supply Chain Verification 📋 Not Started
 - **Scope**: pnpm lockfile hash in genome, SBOM verification

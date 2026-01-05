@@ -17,12 +17,16 @@
  * ```
  */
 
-import { randomBytes } from 'crypto';
+import { randomBytes, timingSafeEqual } from 'crypto';
 
 /**
- * Governance capability token - only governance components can hold this
+ * ATTACK 10 FIX: Use cryptographic capability tokens instead of Symbols
+ * Symbols can be forged via Symbol.for(), but crypto tokens cannot
  */
-export const GOVERNANCE_CAPABILITY_TOKEN = Symbol.for('mathison.governance.capability');
+export interface GovernanceCapabilityToken {
+  secret: Buffer;
+  issuedAt: Date;
+}
 
 /**
  * Storage seal state
@@ -31,9 +35,9 @@ let sealed = false;
 let sealedAt: Date | null = null;
 
 /**
- * The actual governance token value (random, created at seal time)
+ * The actual governance token value (cryptographic random, created at seal time)
  */
-let governanceTokenValue: symbol | null = null;
+let governanceTokenValue: Buffer | null = null;
 
 /**
  * Seal storage - after this point, only governance-authorized calls can create adapters
@@ -41,23 +45,31 @@ let governanceTokenValue: symbol | null = null;
  *
  * @returns The governance token to be held by ActionGate
  */
-export function sealStorage(): symbol {
+export function sealStorage(): GovernanceCapabilityToken {
   if (sealed && governanceTokenValue) {
     // Already sealed - return the existing token (idempotent)
     console.warn('⚠️  Storage already sealed, returning existing token');
-    return governanceTokenValue;
+    return {
+      secret: governanceTokenValue,
+      issuedAt: sealedAt!
+    };
   }
 
   sealed = true;
   sealedAt = new Date();
 
-  // Create a unique token for this boot session
-  governanceTokenValue = Symbol.for(`mathison.gov.token.${randomBytes(16).toString('hex')}`);
+  // ATTACK 10 FIX: Create a cryptographic random token (32 bytes = 256 bits)
+  // This cannot be forged unlike Symbol.for()
+  governanceTokenValue = randomBytes(32);
 
   console.log(`🔒 Storage SEALED at ${sealedAt.toISOString()}`);
   console.log('   Only governance-authorized components can create storage adapters');
+  console.log(`   Token: ${governanceTokenValue.toString('hex').substring(0, 16)}... (truncated)`);
 
-  return governanceTokenValue;
+  return {
+    secret: governanceTokenValue,
+    issuedAt: sealedAt
+  };
 }
 
 /**
@@ -75,23 +87,32 @@ export function getSealedAt(): Date | null {
 }
 
 /**
- * Verify governance capability token
+ * ATTACK 10 FIX: Verify governance capability token using constant-time comparison
+ * Prevents timing attacks to discover the token value
  *
  * @param token The token to verify
  * @returns true if token is valid and storage is sealed
  */
-export function verifyGovernanceCapability(token: symbol | undefined): boolean {
+export function verifyGovernanceCapability(token: GovernanceCapabilityToken | undefined): boolean {
   if (!sealed) {
     // Not sealed yet - allow (pre-boot setup phase)
     return true;
   }
 
-  if (!token || !governanceTokenValue) {
+  if (!token || !token.secret || !governanceTokenValue) {
     return false;
   }
 
-  // Compare symbols by converting to string (symbol identity)
-  return token.toString() === governanceTokenValue.toString();
+  // ATTACK 10 FIX: Use constant-time comparison to prevent timing attacks
+  try {
+    if (token.secret.length !== governanceTokenValue.length) {
+      return false;
+    }
+    return timingSafeEqual(token.secret, governanceTokenValue);
+  } catch (error) {
+    // timingSafeEqual throws if buffers are different lengths
+    return false;
+  }
 }
 
 /**
@@ -101,7 +122,7 @@ export function verifyGovernanceCapability(token: symbol | undefined): boolean {
  * @param token The governance capability token
  * @throws Error if governance capability check fails
  */
-export function assertGovernanceCapability(token: symbol | undefined): void {
+export function assertGovernanceCapability(token: GovernanceCapabilityToken | undefined): void {
   if (!sealed) {
     // Not sealed yet - allow all
     return;

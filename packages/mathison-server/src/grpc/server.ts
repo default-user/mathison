@@ -365,12 +365,135 @@ export class MathisonGRPCServer {
     }
   }
 
+  /**
+   * Stream job status updates (server streaming)
+   * Polls job executor and streams status updates until job completes or times out
+   */
   private async handleStreamJobStatus(
     call: grpc.ServerWritableStream<any, any>
   ): Promise<void> {
-    // Streaming implementation - placeholder
-    // Would poll job status and stream updates
-    call.end();
+    try {
+      // Apply governance to streaming call (ingress + action check)
+      const clientId = call.getPeer();
+      const ingressInput = {
+        clientId,
+        endpoint: '/mathison.MathisonService/StreamJobStatus',
+        payload: call.request,
+        headers: call.metadata.getMap() as Record<string, string>,
+        timestamp: Date.now()
+      };
+
+      const ingressResult = await this.config.cif.ingress(ingressInput);
+      if (!ingressResult.allowed) {
+        call.emit('error', {
+          code: grpc.status.INVALID_ARGUMENT,
+          message: 'CIF ingress blocked',
+          details: JSON.stringify({ violations: ingressResult.violations })
+        });
+        call.end();
+        return;
+      }
+
+      // CDI action check
+      const actionInput = {
+        actor: clientId,
+        action: 'job_stream_status',
+        action_id: 'action:job:stream_status',
+        payload: ingressResult.sanitizedPayload,
+        route: '/mathison.MathisonService/StreamJobStatus',
+        method: 'gRPC'
+      };
+      const actionResult = await this.config.cdi.checkAction(actionInput);
+      if (actionResult.verdict !== 'allow') {
+        call.emit('error', {
+          code: grpc.status.PERMISSION_DENIED,
+          message: 'CDI action denied',
+          details: JSON.stringify({ reason: actionResult.reason })
+        });
+        call.end();
+        return;
+      }
+
+      if (!this.config.jobExecutor) {
+        call.emit('error', {
+          code: grpc.status.UNAVAILABLE,
+          message: 'Job executor not initialized'
+        });
+        call.end();
+        return;
+      }
+
+      const jobId = (call.request as any).job_id;
+      const pollIntervalMs = 500;
+      const maxDurationMs = 60000; // 1 minute max
+      const maxEvents = 100; // Max 100 status updates
+      const startTime = Date.now();
+      let eventCount = 0;
+
+      // Poll and stream status updates
+      const pollInterval = setInterval(async () => {
+        try {
+          const status = await this.config.jobExecutor!.getStatus(
+            jobId,
+            this.config.genomeId ?? undefined,
+            this.config.genome?.version
+          );
+
+          if (!status) {
+            call.emit('error', {
+              code: grpc.status.NOT_FOUND,
+              message: 'Job not found'
+            });
+            clearInterval(pollInterval);
+            call.end();
+            return;
+          }
+
+          // Stream status update (with CIF egress check)
+          const egressInput = { clientId, endpoint: '/StreamJobStatus', payload: status };
+          const egressResult = await this.config.cif.egress(egressInput);
+
+          if (egressResult.allowed) {
+            call.write({
+              job_id: status.job_id,
+              status: status.status,
+              current_stage: '',
+              start_time: 0,
+              end_time: 0
+            });
+            eventCount++;
+          }
+
+          // Stop conditions
+          const elapsed = Date.now() - startTime;
+          if (status.status === 'completed' || status.status === 'failed' ||
+              elapsed > maxDurationMs || eventCount >= maxEvents) {
+            clearInterval(pollInterval);
+            call.end();
+          }
+        } catch (error) {
+          clearInterval(pollInterval);
+          call.emit('error', {
+            code: grpc.status.INTERNAL,
+            message: error instanceof Error ? error.message : String(error)
+          });
+          call.end();
+        }
+      }, pollIntervalMs);
+
+      // Handle client disconnect
+      call.on('cancelled', () => {
+        clearInterval(pollInterval);
+        call.end();
+      });
+
+    } catch (error: any) {
+      call.emit('error', {
+        code: error.code || grpc.status.INTERNAL,
+        message: error.message
+      });
+      call.end();
+    }
   }
 
   private async handleInterpretText(
@@ -507,11 +630,108 @@ export class MathisonGRPCServer {
     }
   }
 
+  /**
+   * Stream memory search results (server streaming)
+   * Searches memory graph and streams results with governance
+   */
   private async handleSearchMemory(
     call: grpc.ServerWritableStream<any, any>
   ): Promise<void> {
-    // Streaming search - placeholder
-    call.end();
+    try {
+      // Apply governance to streaming call
+      const clientId = call.getPeer();
+      const ingressInput = {
+        clientId,
+        endpoint: '/mathison.MathisonService/SearchMemory',
+        payload: call.request,
+        headers: call.metadata.getMap() as Record<string, string>,
+        timestamp: Date.now()
+      };
+
+      const ingressResult = await this.config.cif.ingress(ingressInput);
+      if (!ingressResult.allowed) {
+        call.emit('error', {
+          code: grpc.status.INVALID_ARGUMENT,
+          message: 'CIF ingress blocked',
+          details: JSON.stringify({ violations: ingressResult.violations })
+        });
+        call.end();
+        return;
+      }
+
+      // CDI action check
+      const actionInput = {
+        actor: clientId,
+        action: 'memory_search',
+        action_id: 'action:read:memory',
+        payload: ingressResult.sanitizedPayload,
+        route: '/mathison.MathisonService/SearchMemory',
+        method: 'gRPC'
+      };
+      const actionResult = await this.config.cdi.checkAction(actionInput);
+      if (actionResult.verdict !== 'allow') {
+        call.emit('error', {
+          code: grpc.status.PERMISSION_DENIED,
+          message: 'CDI action denied',
+          details: JSON.stringify({ reason: actionResult.reason })
+        });
+        call.end();
+        return;
+      }
+
+      if (!this.config.memoryGraph) {
+        call.emit('error', {
+          code: grpc.status.UNAVAILABLE,
+          message: 'Memory graph not initialized'
+        });
+        call.end();
+        return;
+      }
+
+      const query = (call.request as any).query || '';
+      const limit = (call.request as any).limit || 10;
+      const boundedLimit = Math.min(limit, 100); // Max 100 results
+
+      // Perform search
+      const results = this.config.memoryGraph.search(query, boundedLimit);
+
+      // Stream results one by one with CIF egress checks
+      let streamedCount = 0;
+      for (const node of results) {
+        try {
+          // CIF egress check for each result
+          const egressInput = { clientId, endpoint: '/SearchMemory', payload: node };
+          const egressResult = await this.config.cif.egress(egressInput);
+
+          if (egressResult.allowed) {
+            call.write({
+              node_id: node.id,
+              type: node.type,
+              data: Buffer.from(JSON.stringify(node.data || {})),
+              score: 1.0 // Simple search doesn't have scores
+            });
+            streamedCount++;
+          }
+
+          // Bounded event count
+          if (streamedCount >= boundedLimit) {
+            break;
+          }
+        } catch (error) {
+          // Skip this result on error, continue to next
+          console.error(`Failed to stream search result ${node.id}:`, error);
+        }
+      }
+
+      call.end();
+
+    } catch (error: any) {
+      call.emit('error', {
+        code: error.code || grpc.status.INTERNAL,
+        message: error.message
+      });
+      call.end();
+    }
   }
 
   private async handleIngestKnowledge(

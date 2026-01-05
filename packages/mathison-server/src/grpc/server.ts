@@ -17,6 +17,7 @@ import { createCDIInterceptor } from './interceptors/cdi-interceptor';
 import { createHeartbeatInterceptor } from './interceptors/heartbeat-interceptor';
 import { HeartbeatMonitor } from '../heartbeat';
 import { createHash, randomBytes } from 'crypto';
+import { KnowledgeIngestionGate } from '../knowledge/ingestion-gate';
 
 export interface GRPCServerConfig {
   port: number;
@@ -30,6 +31,7 @@ export interface GRPCServerConfig {
   genome: Genome | null;
   genomeId: string | null;
   heartbeat: HeartbeatMonitor | null;
+  knowledgeGate: KnowledgeIngestionGate | null;
 }
 
 export class MathisonGRPCServer {
@@ -67,7 +69,8 @@ export class MathisonGRPCServer {
       InterpretText: this.handleInterpretText.bind(this),
       CreateMemoryNode: this.handleCreateMemoryNode.bind(this),
       ReadMemoryNode: this.handleReadMemoryNode.bind(this),
-      SearchMemory: this.handleSearchMemory.bind(this)
+      SearchMemory: this.handleSearchMemory.bind(this),
+      IngestKnowledge: this.handleIngestKnowledge.bind(this)
     };
 
     // Add service with interceptors
@@ -509,5 +512,118 @@ export class MathisonGRPCServer {
   ): Promise<void> {
     // Streaming search - placeholder
     call.end();
+  }
+
+  private async handleIngestKnowledge(
+    call: grpc.ServerUnaryCall<any, any>,
+    callback: grpc.sendUnaryData<any>
+  ): Promise<void> {
+    try {
+      await this.withGovernance(
+        call,
+        'knowledge_ingest',
+        'action:knowledge:ingest',
+        async (sanitizedRequest, proof) => {
+          // Fail-closed: require knowledge gate
+          if (!this.config.knowledgeGate) {
+            const error: any = new Error('Knowledge ingestion gate not initialized');
+            error.code = grpc.status.UNAVAILABLE;
+            error.details = JSON.stringify({
+              reason_code: 'GOVERNANCE_INIT_FAILED',
+              message: 'Knowledge ingestion gate not initialized'
+            });
+            throw error;
+          }
+
+          // Parse request
+          const req = sanitizedRequest as any;
+
+          // Parse CPACK (from YAML or JSON)
+          let cpack;
+          if (req.cpack_yaml) {
+            cpack = { cpack_yaml: req.cpack_yaml };
+          } else if (req.cpack_json) {
+            try {
+              cpack = { cpack: JSON.parse(req.cpack_json) };
+            } catch (err) {
+              const error: any = new Error('Invalid cpack_json');
+              error.code = grpc.status.INVALID_ARGUMENT;
+              throw error;
+            }
+          } else {
+            const error: any = new Error('Missing cpack_yaml or cpack_json');
+            error.code = grpc.status.INVALID_ARGUMENT;
+            throw error;
+          }
+
+          // Parse LLM output
+          let llm_output;
+          try {
+            llm_output = JSON.parse(Buffer.from(req.llm_output).toString('utf-8'));
+          } catch (err) {
+            const error: any = new Error('Invalid llm_output');
+            error.code = grpc.status.INVALID_ARGUMENT;
+            throw error;
+          }
+
+          // Parse context if present
+          let context;
+          if (req.context) {
+            try {
+              context = JSON.parse(Buffer.from(req.context).toString('utf-8'));
+            } catch (err) {
+              context = {};
+            }
+          } else {
+            context = {};
+          }
+
+          // Process ingestion
+          const result = await this.config.knowledgeGate.processIngestion({
+            ...cpack,
+            llm_output,
+            mode: req.mode || 'GROUND_ONLY',
+            context: {
+              ...context,
+              posture: 'NORMAL',
+              oi_id: this.config.genomeId || undefined,
+            },
+          });
+
+          // Convert to gRPC response
+          const grpcResult = {
+            success: result.success,
+            reason_code: result.reason_code,
+            message: result.message,
+            grounded_count: result.grounded_count,
+            hypothesis_count: result.hypothesis_count,
+            denied_count: result.denied_count,
+            conflict_count: result.conflict_count,
+            grounded_claim_ids: result.grounded_claim_ids || [],
+            hypothesis_claim_ids: result.hypothesis_claim_ids || [],
+            denied_reasons: (result.denied_reasons || []).map(r => ({
+              claim_index: r.claim_index,
+              reason: r.reason
+            })),
+            conflict_ids: result.conflict_ids || [],
+            packet_id: result.packet_id,
+            ingestion_run_id: result.ingestion_run_id,
+            sources_hash: result.sources_hash || '',
+            timestamp: result.timestamp
+          };
+
+          return grpcResult;
+        }
+      ).then(response => {
+        callback(null, response);
+      }).catch(error => {
+        callback(error, null);
+      });
+    } catch (error) {
+      const grpcError: any = new Error('Knowledge ingestion failed');
+      grpcError.code = grpc.status.INTERNAL;
+      grpcError.details = error instanceof Error ? error.message : String(error);
+      callback(grpcError, null);
+    }
   }
 }

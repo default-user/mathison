@@ -117,6 +117,36 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     side_effect: false, // Side effects determined by nested action
     description: 'Handle HTTP request through governance pipeline',
     requires_governance: true
+  },
+
+  // Knowledge ingestion actions
+  {
+    id: 'action:knowledge:ingest',
+    risk_class: RiskClass.HIGH,
+    side_effect: true,
+    description: 'Ingest grounded knowledge claims via CPACK',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:read_claim',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Read knowledge claim by ID',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:read_conflicts',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: false,
+    description: 'Read knowledge conflicts',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:fetch_chunk',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Fetch chunk for verification',
+    requires_governance: true
   }
 ];
 

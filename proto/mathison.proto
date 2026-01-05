@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package mathison;
+
+service MathisonService {
+  // Run a job (unary)
+  rpc RunJob(JobRunRequest) returns (JobResult);
+
+  // Get job status (unary)
+  rpc GetJobStatus(JobStatusRequest) returns (JobStatus);
+
+  // Stream job status updates (server streaming)
+  rpc StreamJobStatus(JobStatusRequest) returns (stream JobStatus);
+
+  // OI interpretation (unary)
+  rpc InterpretText(InterpretRequest) returns (InterpretResult);
+
+  // Create memory node (unary)
+  rpc CreateMemoryNode(CreateNodeRequest) returns (CreateNodeResult);
+
+  // Read memory node (unary)
+  rpc ReadMemoryNode(ReadNodeRequest) returns (Node);
+
+  // Search memory (unary or streaming)
+  rpc SearchMemory(SearchRequest) returns (stream SearchResult);
+}
+
+message JobRunRequest {
+  string job_type = 1;
+  bytes inputs = 2;
+  string policy_id = 3;
+  string job_id = 4;
+}
+
+message JobResult {
+  string job_id = 1;
+  string status = 2;
+  bytes outputs = 3;
+  string receipt_id = 4;
+}
+
+message JobStatusRequest {
+  string job_id = 1;
+}
+
+message JobStatus {
+  string job_id = 1;
+  string status = 2;
+  string current_stage = 3;
+  int64 start_time = 4;
+  int64 end_time = 5;
+}
+
+message InterpretRequest {
+  string text = 1;
+  int32 limit = 2;
+}
+
+message InterpretResult {
+  repeated string tokens = 1;
+  repeated InterpretMatch matches = 2;
+}
+
+message InterpretMatch {
+  string node_id = 1;
+  string type = 2;
+  double score = 3;
+}
+
+message CreateNodeRequest {
+  string idempotency_key = 1;
+  string id = 2;
+  string type = 3;
+  bytes data = 4;
+  bytes metadata = 5;
+}
+
+message CreateNodeResult {
+  Node node = 1;
+  bool created = 2;
+  string receipt_id = 3;
+}
+
+message ReadNodeRequest {
+  string id = 1;
+}
+
+message Node {
+  string id = 1;
+  string type = 2;
+  bytes data = 3;
+  bytes metadata = 4;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 limit = 2;
+}
+
+message SearchResult {
+  string node_id = 1;
+  string type = 2;
+  bytes data = 3;
+  double score = 4;
+}

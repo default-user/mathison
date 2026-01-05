@@ -14,6 +14,8 @@ import { JobExecutor } from './job-executor';
 import { IdempotencyLedger } from './idempotency';
 import { generateOpenAPISpec } from './openapi';
 import { Interpreter } from 'mathison-oi';
+import { HeartbeatMonitor, createHeartbeatFromEnv, HeartbeatStatus } from './heartbeat';
+import { loadPrerequisites, ValidatedPrerequisites } from './prerequisites';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -41,6 +43,9 @@ export class MathisonServer {
   private genomeId: string | null = null;
   // OI Interpreter (Phase 2)
   private interpreter: Interpreter | null = null;
+  // Heartbeat monitor (self-audit loop)
+  private heartbeat: HeartbeatMonitor | null = null;
+  private heartbeatFailClosed: boolean = false;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -70,9 +75,10 @@ export class MathisonServer {
     console.log(`📍 Governance: Tiriti o te Kai v1.0`);
 
     try {
-      // P3-A: Fail-closed boot validation
+      // P3-A: Fail-closed boot validation with centralized prerequisites
       await this.initializeGovernance();
       await this.initializeStorage();
+      await this.initializeHeartbeat();
 
       // Register CORS
       await this.app.register(cors, {
@@ -104,6 +110,9 @@ export class MathisonServer {
 
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
+    if (this.heartbeat) {
+      this.heartbeat.stop();
+    }
     await this.app.close();
     if (this.memoryGraph) {
       await this.memoryGraph.shutdown();
@@ -150,24 +159,36 @@ export class MathisonServer {
     console.log(`   Manifest verification: ${verifyManifest ? 'ON' : 'OFF'}`);
 
     try {
-      const repoRoot = process.env.MATHISON_REPO_ROOT || process.cwd();
-      const { genome, genome_id } = await loadAndVerifyGenome(genomePath, {
-        verifyManifest,
-        repoRoot
-      });
-      this.genome = genome;
-      this.genomeId = genome_id;
-      console.log(`✓ Genome loaded and verified: ${genome.name} v${genome.version}`);
-      console.log(`  Genome ID: ${genome_id.substring(0, 16)}...`);
-      console.log(`  Invariants: ${genome.invariants.length}`);
-      console.log(`  Capabilities: ${genome.capabilities.length}`);
+      // Use centralized prerequisite validation
+      const prereqs = await loadPrerequisites();
+      this.genome = prereqs.genome;
+      this.genomeId = prereqs.genomeId;
+
+      console.log(`✓ Genome loaded and verified: ${this.genome.name} v${this.genome.version}`);
+      console.log(`  Genome ID: ${this.genomeId.substring(0, 16)}...`);
+      console.log(`  Invariants: ${this.genome.invariants.length}`);
+      console.log(`  Capabilities: ${this.genome.capabilities.length}`);
       if (verifyManifest) {
-        console.log(`  Build manifest: ${genome.build_manifest.files.length} files verified`);
+        console.log(`  Build manifest: ${this.genome.build_manifest.files.length} files verified`);
       }
     } catch (error) {
       console.error('❌ Genome verification failed (FAIL-CLOSED)');
       throw new Error(`GENOME_INVALID: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private async initializeHeartbeat(): Promise<void> {
+    console.log('💓 Initializing heartbeat monitor...');
+
+    this.heartbeat = createHeartbeatFromEnv();
+
+    // Set governance component references for wiring validation
+    this.heartbeat.setGovernanceComponents(this.cif, this.cdi);
+
+    // Register callback for fail-closed posture switching
+    this.heartbeat.start();
+
+    console.log('✓ Heartbeat monitor initialized');
   }
 
   private async initializeStorage(): Promise<void> {
@@ -217,6 +238,24 @@ export class MathisonServer {
 
   private registerGovernancePipeline(): void {
     // P3-A: Mandatory governance pipeline for all requests
+    // FIRST: Check heartbeat fail-closed posture
+    this.app.addHook('onRequest', async (request, reply) => {
+      // Fail-closed: If heartbeat detected system unhealthy, deny all requests
+      if (this.heartbeat && !this.heartbeat.isHealthy()) {
+        const status = this.heartbeat.getStatus();
+        reply.code(503).send({
+          reason_code: 'HEARTBEAT_FAIL_CLOSED',
+          message: 'System in fail-closed posture due to prerequisite validation failure',
+          failed_checks: status?.checks.filter(c => !c.ok).map(c => ({
+            name: c.name,
+            code: c.code,
+            detail: c.detail
+          }))
+        });
+        return reply;
+      }
+    });
+
     // CIF Ingress happens in preValidation (after body parsing)
     this.app.addHook('preValidation', async (request, reply) => {
       const clientId = request.ip;
@@ -402,7 +441,7 @@ export class MathisonServer {
   }
 
   private registerRoutes(): void {
-    // P3-A: GET /health - governance status check
+    // P3-A: GET /health - governance status check including heartbeat
     this.app.get('/health', async (request, reply) => {
       (request as any).action = 'health_check';
 
@@ -416,10 +455,18 @@ export class MathisonServer {
 
       const isProduction = process.env.MATHISON_ENV === 'production';
       const manifestVerified = process.env.MATHISON_VERIFY_MANIFEST === 'true' || isProduction;
+      const heartbeatStatus = this.heartbeat?.getStatus();
 
       return {
-        status: 'healthy',
+        status: heartbeatStatus?.ok ? 'healthy' : 'unhealthy',
         bootStatus: this.bootStatus,
+        heartbeat: heartbeatStatus ? {
+          ok: heartbeatStatus.ok,
+          lastCheck: heartbeatStatus.timestamp,
+          failedChecks: heartbeatStatus.failedCount,
+          checks: heartbeatStatus.checks,
+          warnings: heartbeatStatus.warnings
+        } : null,
         governance: {
           treaty: {
             version: this.governance.getTreatyVersion(),

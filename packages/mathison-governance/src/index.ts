@@ -9,7 +9,7 @@ import * as path from 'path';
 export interface Treaty {
   path: string;
   version: string;
-  authority: 'kaitiaki' | 'substack' | 'authority.nz';
+  authority: string; // Configurable, read from governance.json
   rules: Record<string, unknown>;
   content?: string;
 }
@@ -57,10 +57,21 @@ export class GovernanceEngine {
     const versionMatch = content.match(/version: "([^"]+)"/);
     const version = versionMatch ? versionMatch[1] : '1.0';
 
+    // Read authority from config file (no hard-coding)
+    const configPath = path.join(process.cwd(), 'config', 'governance.json');
+    let authorityValue = 'unknown';
+    try {
+      const configData = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configData);
+      authorityValue = config.authority || 'unknown';
+    } catch {
+      console.warn('⚠️  Could not read authority from config, using "unknown"');
+    }
+
     this.treaty = {
       path: treatyPath,
       version,
-      authority: 'kaitiaki',
+      authority: authorityValue,
       content,
       rules: {
         enforceNonPersonhood: true,
@@ -70,7 +81,7 @@ export class GovernanceEngine {
       }
     };
 
-    console.log(`✓ Treaty loaded: Tiriti o te Kai v${version}`);
+    console.log(`✓ Treaty loaded: Tiriti o te Kai v${version} (authority: ${authorityValue})`);
   }
 
   private initializeCoreRules(): void {
@@ -133,7 +144,7 @@ export class GovernanceEngine {
     return true;
   }
 
-  getTreatyAuthority(): 'kaitiaki' | 'substack' | 'authority.nz' | null {
+  getTreatyAuthority(): string | null {
     return this.treaty?.authority || null;
   }
 

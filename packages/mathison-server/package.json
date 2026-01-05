@@ -17,7 +17,9 @@
     "mathison-governance": "workspace:*",
     "mathison-storage": "workspace:*",
     "fastify": "^4.26.0",
-    "@fastify/cors": "^9.0.0"
+    "@fastify/cors": "^9.0.0",
+    "@grpc/grpc-js": "^1.9.0",
+    "@grpc/proto-loader": "^0.7.10"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

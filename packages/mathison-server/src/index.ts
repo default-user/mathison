@@ -163,6 +163,13 @@ export class MathisonServer {
         this.cdi.setGenomeCapabilities(this.genome.capabilities);
       }
 
+      // ATTACK 12 FIX: Load anchor actors from governance config for consent priority
+      const prereqs = await loadPrerequisites();
+      if (prereqs.config.consent?.anchorActors) {
+        this.cdi.setAnchorActors(prereqs.config.consent.anchorActors);
+        console.log(`⚓ Configured ${prereqs.config.consent.anchorActors.length} consent anchor actors`);
+      }
+
       await this.cif.initialize();
       console.log('✓ Governance layer initialized');
     } catch (error) {
@@ -1434,7 +1441,8 @@ export class MathisonServer {
           genome_version: this.genome?.version
         },
         async () => {
-          this.memoryGraph!.addNode(updatedNode);
+          // ATTACK 6 FIX: Use updateNode() for updates (not addNode() which prevents overwrite)
+          this.memoryGraph!.updateNode(updatedNode);
           return updatedNode;
         }
       );

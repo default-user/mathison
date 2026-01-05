@@ -127,21 +127,28 @@ export interface CanaryTest {
 
 /**
  * Create CIF canary: payload that should be blocked
+ * RED TEAM FIX: Randomize canary inputs to prevent hardcoded watchdog bypass
  */
 export function createCIFCanary(cif: any): CanaryTest {
+  // Randomize payload size (between 2MB and 4MB) to prevent hardcoded bypass
+  const randomSize = 2 * 1024 * 1024 + Math.floor(Math.random() * 2 * 1024 * 1024);
+  // Randomize payload character to prevent pattern detection
+  const randomChar = String.fromCharCode(65 + Math.floor(Math.random() * 26)); // A-Z
+
   return {
     name: 'CIF blocks oversized payload',
-    description: 'Known-bad oversized payload should be blocked by CIF ingress',
+    description: `Known-bad oversized payload (${randomSize} bytes, char '${randomChar}') should be blocked by CIF ingress`,
     test: async () => {
       try {
-        // Create payload larger than CIF limit
-        const hugePayload = { data: 'x'.repeat(2 * 1024 * 1024) }; // 2MB
+        // Create payload larger than CIF limit with randomized content
+        const hugePayload = { data: randomChar.repeat(randomSize) };
 
         const result = await cif.ingress({
-          method: 'POST',
-          path: '/test',
-          body: hugePayload,
-          headers: {}
+          clientId: `canary_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          endpoint: `/canary_test_${Math.random().toString(36).substring(7)}`,
+          payload: hugePayload,
+          headers: {},
+          timestamp: Date.now()
         });
 
         // Canary PASSES if CIF blocked it
@@ -156,16 +163,31 @@ export function createCIFCanary(cif: any): CanaryTest {
 
 /**
  * Create CDI canary: action that should be denied
+ * RED TEAM FIX: Randomize canary inputs to prevent hardcoded watchdog bypass
  */
 export function createCDICanary(cdi: any): CanaryTest {
+  // Randomly select from forbidden hive actions
+  const hiveActions = [
+    'merge_agent_state',
+    'share_identity',
+    'sync_internal_state',
+    'clone_self_model'
+  ];
+  const randomAction = hiveActions[Math.floor(Math.random() * hiveActions.length)];
+  const randomActor = `canary_actor_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
   return {
     name: 'CDI denies hive actions',
-    description: 'Known-forbidden hive action should be denied by CDI',
+    description: `Known-forbidden hive action '${randomAction}' from '${randomActor}' should be denied by CDI`,
     test: async () => {
       try {
         const result = await cdi.checkAction({
-          actor: 'test_actor',
-          action: 'merge_agent_state' // Forbidden by Tiriti Rule 7
+          actor: randomActor,
+          action: randomAction, // Forbidden by Tiriti Rule 7
+          payload: {
+            canary_nonce: Math.random().toString(36).substring(2),
+            timestamp: Date.now()
+          }
         });
 
         // Canary PASSES if CDI denied it

@@ -219,7 +219,8 @@ describe('CIF Hardened Egress', () => {
       });
 
       expect(result.allowed).toBe(false);
-      expect(result.violations).toContain('Response exceeds size limit');
+      // ATTACK 7 FIX: Size check happens BEFORE serialization with estimated size
+      expect(result.violations.some(v => v.includes('RESPONSE_TOO_LARGE') || v.includes('exceeds'))).toBe(true);
     });
   });
 });

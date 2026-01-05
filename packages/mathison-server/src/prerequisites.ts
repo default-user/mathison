@@ -44,11 +44,23 @@ export interface Treaty {
   content: string;
 }
 
+export interface ConsentConfig {
+  description?: string;
+  anchorActors: string[];
+  priority?: {
+    description?: string;
+    levels: string[];
+  };
+  durableStorage?: boolean;
+  durableStorageNote?: string;
+}
+
 export interface GovernanceConfig {
   treatyPath: string;
   treatyVersion: string;
   authority: string;
   rules: Record<string, unknown>;
+  consent?: ConsentConfig;
 }
 
 export interface ValidatedPrerequisites {

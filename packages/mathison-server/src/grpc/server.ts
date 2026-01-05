@@ -241,9 +241,8 @@ export class MathisonGRPCServer {
     proof.setVerdict('allow');
     const finalProof = proof.build();
 
-    // TODO P2.1: Generate receipt with proof and capability token
-    // For now, just return the sanitized response
-    // In full implementation, would call ActionGate to generate receipt
+    // P2.1: Receipt generation complete - handlers use ActionGate.executeSideEffect
+    // which generates receipts for write operations (see handleRunJob, handleCreateMemoryNode)
 
     return egressResult.sanitizedPayload as TResponse;
   }
@@ -257,24 +256,59 @@ export class MathisonGRPCServer {
         if (!this.config.jobExecutor) {
           throw new Error('Job executor not initialized');
         }
+        if (!this.config.actionGate) {
+          throw new Error('Action gate not initialized');
+        }
 
-        const result = await this.config.jobExecutor.runJob(
-          call.getPeer(),
+        const jobRequest = {
+          jobType: (req as any).job_type || 'default',
+          inputs: (req as any).inputs ? JSON.parse(Buffer.from((req as any).inputs).toString()) : {},
+          policyId: (req as any).policy_id,
+          jobId: (req as any).job_id
+        };
+
+        // Execute via ActionGate (generates receipt for gRPC RPC)
+        // Note: JobExecutor also generates receipts internally for job checkpoints
+        const gateResult = await this.config.actionGate.executeSideEffect(
           {
-            jobType: (req as any).job_type || 'default',
-            inputs: (req as any).inputs ? JSON.parse(Buffer.from((req as any).inputs).toString()) : {},
-            policyId: (req as any).policy_id,
-            jobId: (req as any).job_id
+            actor: call.getPeer(),
+            action: 'JOB_RUN',
+            payload: jobRequest,
+            metadata: {
+              job_id: jobRequest.jobId || 'new',
+              stage: 'grpc_job_run',
+              policy_id: jobRequest.policyId || 'default'
+            },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
           },
-          this.config.genomeId ?? undefined,
-          this.config.genome?.version
+          async () => {
+            return this.config.jobExecutor!.runJob(
+              call.getPeer(),
+              jobRequest,
+              this.config.genomeId ?? undefined,
+              this.config.genome?.version
+            );
+          }
         );
+
+        if (!gateResult.success) {
+          const error: any = new Error(gateResult.governance.message || 'ActionGate denied');
+          error.code = grpc.status.PERMISSION_DENIED;
+          error.details = JSON.stringify({
+            reason_code: gateResult.governance.reasonCode,
+            message: gateResult.governance.message
+          });
+          throw error;
+        }
+
+        const result = gateResult.data as any;
 
         return {
           job_id: result.job_id,
           status: result.status,
           outputs: Buffer.from(JSON.stringify(result.outputs || {})),
-          receipt_id: ''  // Receipt ID not in JobResult type
+          receipt_id: gateResult.receipt?.timestamp || ''
         };
       });
 
@@ -370,11 +404,70 @@ export class MathisonGRPCServer {
     call: grpc.ServerUnaryCall<any, any>,
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
-    // Placeholder - would integrate with ActionGate like HTTP endpoint
-    callback({
-      code: grpc.status.UNIMPLEMENTED,
-      message: 'CreateMemoryNode not yet implemented'
-    }, null);
+    try {
+      const response = await this.withGovernance(call, 'memory_node_create', 'action:memory:create', async (req, proof) => {
+        if (!this.config.memoryGraph) {
+          throw new Error('Memory graph not initialized');
+        }
+        if (!this.config.actionGate) {
+          throw new Error('Action gate not initialized');
+        }
+
+        const nodeId = (req as any).id || `node-${randomBytes(8).toString('hex')}`;
+        const node = {
+          id: nodeId,
+          type: (req as any).type,
+          data: (req as any).data ? JSON.parse(Buffer.from((req as any).data).toString()) : {},
+          metadata: (req as any).metadata ? JSON.parse(Buffer.from((req as any).metadata).toString()) : {}
+        };
+
+        // Execute via ActionGate (generates receipt)
+        const result = await this.config.actionGate.executeSideEffect(
+          {
+            actor: call.getPeer(),
+            action: 'MEMORY_NODE_CREATE',
+            payload: node,
+            metadata: {
+              job_id: 'memory',
+              stage: 'memory_write',
+              policy_id: 'default'
+            },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
+          },
+          async () => {
+            this.config.memoryGraph!.addNode(node);
+            return node;
+          }
+        );
+
+        if (!result.success) {
+          const error: any = new Error(result.governance.message || 'ActionGate denied');
+          error.code = grpc.status.PERMISSION_DENIED;
+          error.details = JSON.stringify({
+            reason_code: result.governance.reasonCode,
+            message: result.governance.message
+          });
+          throw error;
+        }
+
+        return {
+          id: node.id,
+          type: node.type,
+          data: Buffer.from(JSON.stringify(node.data)),
+          metadata: Buffer.from(JSON.stringify(node.metadata)),
+          receipt_id: result.receipt?.timestamp || ''
+        };
+      });
+
+      callback(null, response);
+    } catch (error: any) {
+      callback({
+        code: error.code || grpc.status.INTERNAL,
+        message: error.message,
+        details: error.details
+      }, null);
+    }
   }
 
   private async handleReadMemoryNode(

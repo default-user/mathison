@@ -113,6 +113,37 @@ export class MemoryGraph {
   }
 
   addNode(node: Node): void {
+    // ATTACK 6 FIX: Prevent node ID collision overwrite
+    const existing = this.nodes.get(node.id);
+    if (existing) {
+      throw new Error(
+        `NODE_ID_COLLISION: Node with id '${node.id}' already exists. ` +
+        `Use updateNode() to modify existing nodes.`
+      );
+    }
+
+    this.nodes.set(node.id, node);
+    // Persist to storage if available
+    if (this.graphStore) {
+      this.graphStore.writeNode(node).catch((err) => {
+        console.error(`Failed to persist node ${node.id}:`, err);
+      });
+    }
+  }
+
+  /**
+   * Update an existing node
+   * Throws if node doesn't exist (prevents accidental creation)
+   */
+  updateNode(node: Node): void {
+    const existing = this.nodes.get(node.id);
+    if (!existing) {
+      throw new Error(
+        `NODE_NOT_FOUND: Cannot update non-existent node '${node.id}'. ` +
+        `Use addNode() to create new nodes.`
+      );
+    }
+
     this.nodes.set(node.id, node);
     // Persist to storage if available
     if (this.graphStore) {

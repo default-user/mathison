@@ -10,9 +10,10 @@ import {
   verifyGovernanceCapability,
   assertGovernanceCapability,
   unsealStorageForTesting,
-  GOVERNANCE_CAPABILITY_TOKEN
+  GovernanceCapabilityToken
 } from '../storage-seal';
 import { makeStorageAdapterFromEnv } from '../storage-adapter';
+import { randomBytes } from 'crypto';
 
 describe('Storage Sealing - P0.2', () => {
   beforeEach(() => {
@@ -35,7 +36,9 @@ describe('Storage Sealing - P0.2', () => {
       const token = sealStorage();
 
       expect(token).toBeDefined();
-      expect(typeof token).toBe('symbol');
+      expect(token.secret).toBeInstanceOf(Buffer);
+      expect(token.secret.length).toBe(32); // 256-bit token
+      expect(token.issuedAt).toBeInstanceOf(Date);
       expect(isStorageSealed()).toBe(true);
       expect(getSealedAt()).toBeInstanceOf(Date);
     });
@@ -44,7 +47,7 @@ describe('Storage Sealing - P0.2', () => {
       const token1 = sealStorage();
       const token2 = sealStorage();
 
-      expect(token1.toString()).toBe(token2.toString());
+      expect(token1.secret.toString('hex')).toBe(token2.secret.toString('hex'));
       expect(isStorageSealed()).toBe(true);
     });
 
@@ -63,7 +66,12 @@ describe('Storage Sealing - P0.2', () => {
   describe('Governance capability verification', () => {
     it('should allow all operations before sealing', () => {
       expect(verifyGovernanceCapability(undefined)).toBe(true);
-      expect(verifyGovernanceCapability(Symbol('invalid'))).toBe(true);
+
+      const fakeToken: GovernanceCapabilityToken = {
+        secret: randomBytes(32),
+        issuedAt: new Date()
+      };
+      expect(verifyGovernanceCapability(fakeToken)).toBe(true);
 
       // Should not throw
       expect(() => assertGovernanceCapability(undefined)).not.toThrow();
@@ -78,7 +86,10 @@ describe('Storage Sealing - P0.2', () => {
     it('should reject invalid token after sealing', () => {
       sealStorage();
 
-      const invalidToken = Symbol('invalid');
+      const invalidToken: GovernanceCapabilityToken = {
+        secret: randomBytes(32),
+        issuedAt: new Date()
+      };
       expect(verifyGovernanceCapability(invalidToken)).toBe(false);
     });
 
@@ -130,7 +141,10 @@ describe('Storage Sealing - P0.2', () => {
     it('should block storage adapter creation with invalid token', () => {
       sealStorage();
 
-      const invalidToken = Symbol('invalid');
+      const invalidToken: GovernanceCapabilityToken = {
+        secret: randomBytes(32),
+        issuedAt: new Date()
+      };
 
       expect(() => {
         makeStorageAdapterFromEnv(process.env, invalidToken);
@@ -216,8 +230,11 @@ describe('Storage Sealing - P0.2', () => {
     it('should prevent token forgery', () => {
       const realToken = sealStorage();
 
-      // Attacker tries to create their own token
-      const forgedToken = Symbol.for('mathison.governance.capability');
+      // Attacker tries to create their own token (ATTACK 10 FIX: crypto tokens prevent forgery)
+      const forgedToken: GovernanceCapabilityToken = {
+        secret: randomBytes(32),
+        issuedAt: new Date()
+      };
 
       expect(verifyGovernanceCapability(forgedToken)).toBe(false);
 
@@ -234,7 +251,7 @@ describe('Storage Sealing - P0.2', () => {
       const token2 = sealStorage();
 
       // Old token from previous session should not work
-      expect(token1.toString()).not.toBe(token2.toString());
+      expect(token1.secret.toString('hex')).not.toBe(token2.secret.toString('hex'));
       expect(verifyGovernanceCapability(token1)).toBe(false);
     });
   });

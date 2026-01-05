@@ -216,13 +216,16 @@ export class HeartbeatMonitor {
           }
         }
       } catch (error) {
-        // Chain validation failed due to error
-        warnings.push(`Receipt chain validation error: ${error instanceof Error ? error.message : String(error)}`);
+        // FIX: Chain validation error (exception) → FAIL-CLOSED
+        // This prevents bypassing validation by causing exceptions
+        allOk = false;
         checks.push({
           name: 'Receipt Chain',
-          ok: true, // Don't fail-close on validation errors, just warn
-          detail: 'Chain validation error (see warnings)'
+          ok: false,
+          code: 'RECEIPT_CHAIN_VALIDATION_ERROR',
+          detail: `Chain validation exception: ${error instanceof Error ? error.message : String(error)}`
         });
+        warnings.push(`Receipt chain validation threw exception (fail-closed)`);
       }
     }
 

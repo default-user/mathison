@@ -223,7 +223,7 @@ export class SqliteStorageAdapter implements StorageAdapter {
  */
 export function makeStorageAdapterFromEnv(
   env = process.env,
-  governanceToken?: symbol
+  governanceToken?: import('./storage-seal').GovernanceCapabilityToken
 ): StorageAdapter {
   // P0.2: Check governance capability before creating adapter
   const { assertGovernanceCapability } = require('./storage-seal');

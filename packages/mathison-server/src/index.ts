@@ -5,8 +5,8 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
-import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage } from 'mathison-storage';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
+import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
 import { ActionGate } from './action-gate';
@@ -138,6 +138,13 @@ export class MathisonServer {
       // P0.1: Initialize boot key for governance proofs (ephemeral, rotates per boot)
       initializeBootKey();
 
+      // P0.3: Initialize chain key for receipt chaining (uses same boot key)
+      const { key, id } = getBootKeyForChaining();
+      initializeChainKey(key, id);
+
+      // P0.4: Initialize token key for capability tokens (uses same boot key)
+      initializeTokenKey(key, id);
+
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
@@ -225,6 +232,11 @@ export class MathisonServer {
       const maxConcurrentJobs = process.env.MATHISON_MAX_CONCURRENT_JOBS ? parseInt(process.env.MATHISON_MAX_CONCURRENT_JOBS, 10) : 100;
       this.jobExecutor = new JobExecutor(this.actionGate, { jobTimeout, maxConcurrentJobs });
       console.log('✓ ActionGate and JobExecutor initialized');
+
+      // P0.3: Set receipt store on heartbeat for chain validation
+      if (this.heartbeat) {
+        this.heartbeat.setReceiptStore(stores.receiptStore);
+      }
 
       // P4-C: Initialize MemoryGraph with persistent storage
       this.memoryGraph = new MemoryGraph(stores.graphStore);

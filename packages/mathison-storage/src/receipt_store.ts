@@ -47,4 +47,7 @@ export interface ReceiptStore {
   append(r: Receipt): Promise<void>;
   readByJob(jobId: string, opts?: { limit?: number }): Promise<Receipt[]>;
   latest(jobId: string): Promise<Receipt | null>;
+  // P0.3: Chain validation methods
+  readAll(opts?: { limit?: number; offset?: number }): Promise<Receipt[]>;
+  validateChain(): Promise<{ valid: boolean; errors: string[]; lastSequence: number }>;
 }

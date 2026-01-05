@@ -55,6 +55,17 @@ export function getBootKeyId(): string {
 }
 
 /**
+ * Get boot key for external use (e.g., receipt chaining)
+ * P0.3: Exposed for receipt chain to use same boot key
+ */
+export function getBootKeyForChaining(): { key: Buffer; id: string } {
+  return {
+    key: getBootKey(),
+    id: getBootKeyId()
+  };
+}
+
+/**
  * Hash a governance stage (input + output)
  */
 export function hashStage(stageName: string, input: unknown, output: unknown): string {

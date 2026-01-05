@@ -31,11 +31,33 @@ export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressRes
 export {
   initializeBootKey,
   getBootKeyId,
+  getBootKeyForChaining,
   GovernanceProofBuilder,
   verifyGovernanceProof,
   createDenialProof
 } from './governance-proof';
 export type { GovernanceProof } from './governance-proof';
+
+// Re-export Action Registry (P0.4)
+export {
+  actionRegistry,
+  validateActionId,
+  hasSideEffects,
+  getActionRisk,
+  RiskClass
+} from './action-registry';
+export type { ActionDefinition } from './action-registry';
+
+// Re-export Capability Tokens (P0.4)
+export {
+  initializeTokenKey,
+  getTokenKeyId,
+  mintToken,
+  mintSingleUseToken,
+  validateToken,
+  assertTokenValid
+} from './capability-token';
+export type { CapabilityToken, TokenValidationResult } from './capability-token';
 
 export class GovernanceEngine {
   private treaty: Treaty | null = null;

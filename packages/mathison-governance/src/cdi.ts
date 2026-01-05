@@ -3,6 +3,8 @@
  * Kernel-level governance enforcement from Tiriti o te Kai
  */
 
+import { mintSingleUseToken, CapabilityToken } from './capability-token';
+
 export enum ActionVerdict {
   ALLOW = 'allow',
   TRANSFORM = 'transform',
@@ -13,12 +15,17 @@ export enum ActionVerdict {
 export interface ActionContext {
   actor: string;
   action: string;
+  action_id?: string; // P0.4: Canonical action ID from registry (if applicable)
   target?: string;
   payload?: unknown;
   metadata?: Record<string, unknown>;
   // Genome metadata for capability ceiling enforcement
   genome_id?: string;
   genome_version?: string;
+  // P0.4: Context for token scoping
+  route?: string;
+  method?: string;
+  request_hash?: string;
 }
 
 export interface ActionResult {
@@ -26,6 +33,8 @@ export interface ActionResult {
   reason: string;
   transformedPayload?: unknown;
   suggestedAlternative?: string;
+  // P0.4: Minted capability token (on ALLOW only)
+  capability_token?: CapabilityToken;
 }
 
 export interface ConsentSignal {
@@ -105,9 +114,29 @@ export class CDI {
       };
     }
 
+    // P0.4: Mint capability token for ALLOW verdict
+    let token: CapabilityToken | undefined;
+    if (context.action_id) {
+      try {
+        token = mintSingleUseToken(context.action_id, context.actor, {
+          route: context.route,
+          method: context.method,
+          request_hash: context.request_hash
+        });
+      } catch (error) {
+        // Token minting failed (e.g., invalid action_id)
+        console.error('Failed to mint capability token:', error);
+        return {
+          verdict: ActionVerdict.DENY,
+          reason: `Token minting failed: ${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+    }
+
     return {
       verdict: ActionVerdict.ALLOW,
-      reason: 'Action complies with treaty constraints'
+      reason: 'Action complies with treaty constraints',
+      capability_token: token
     };
   }
 

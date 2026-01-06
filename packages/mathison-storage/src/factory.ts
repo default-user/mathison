@@ -15,8 +15,22 @@ export interface Stores {
  * Factory function to create stores based on environment configuration.
  * Reads MATHISON_STORE_BACKEND and MATHISON_STORE_PATH.
  * Fail-closed: throws StoreMisconfiguredError if config invalid/missing.
+ *
+ * P0.2: After storage sealing (post-boot), requires governance capability token
+ * to prevent direct storage access that bypasses governance.
+ *
+ * @param env Environment variables (default: process.env)
+ * @param governanceToken Governance capability token (required after sealing)
+ * @throws Error if storage is sealed and token is invalid
  */
-export function makeStoresFromEnv(env = process.env): Stores {
+export function makeStoresFromEnv(
+  env = process.env,
+  governanceToken?: import('./storage-seal').GovernanceCapabilityToken
+): Stores {
+  // P0.2: Check governance capability before creating stores
+  const { assertGovernanceCapability } = require('./storage-seal');
+  assertGovernanceCapability(governanceToken);
+
   const config = loadStoreConfigFromEnv(env);
 
   let checkpointStore: CheckpointStore;

@@ -45,7 +45,25 @@ function computeFileHash(filePath: string): string {
   return hash.digest('hex');
 }
 
-async function buildManifest(genomeDir: string): Promise<void> {
+/**
+ * Resolve dist path from src path if dist mode is enabled
+ * E.g., packages/foo/src/index.ts -> packages/foo/dist/index.js
+ */
+function resolveDistPath(srcPath: string, distMode: boolean): string {
+  if (!distMode) {
+    return srcPath;
+  }
+
+  // Check if path is a TypeScript source file
+  if (srcPath.includes('/src/') && srcPath.endsWith('.ts')) {
+    // Convert src/*.ts to dist/*.js
+    return srcPath.replace('/src/', '/dist/').replace(/\.ts$/, '.js');
+  }
+
+  return srcPath;
+}
+
+async function buildManifest(genomeDir: string, distMode: boolean = false): Promise<void> {
   const genomePath = join(genomeDir, 'genome.json');
 
   // Read genome
@@ -56,11 +74,12 @@ async function buildManifest(genomeDir: string): Promise<void> {
   const genomeContent = readFileSync(genomePath, 'utf-8');
   const genome: Genome = JSON.parse(genomeContent);
 
-  // Get repo root (assuming script is in scripts/ directory)
-  const repoRoot = resolve(__dirname, '..');
+  // Get repo root (use MATHISON_REPO_ROOT env var if set, otherwise assume script is in scripts/)
+  const repoRoot = process.env.MATHISON_REPO_ROOT ?? resolve(__dirname, '..');
 
   console.log(`📦 Building manifest for ${genome.name} v${genome.version}`);
   console.log(`   Repo root: ${repoRoot}`);
+  console.log(`   Dist mode: ${distMode ? 'enabled (using dist/*.js)' : 'disabled (using src/*.ts)'}`);
   console.log(`   Files to hash: ${genome.build_manifest.files.length}`);
 
   // Compute hashes for all files
@@ -68,10 +87,12 @@ async function buildManifest(genomeDir: string): Promise<void> {
   let errorCount = 0;
 
   for (const file of genome.build_manifest.files) {
-    const filePath = resolve(join(repoRoot, file.path));
+    // Resolve dist path if dist mode is enabled
+    const targetPath = resolveDistPath(file.path, distMode);
+    const filePath = resolve(join(repoRoot, targetPath));
 
     if (!existsSync(filePath)) {
-      console.error(`   ❌ File not found: ${file.path}`);
+      console.error(`   ❌ File not found: ${targetPath} (resolved from ${file.path})`);
       errorCount++;
       continue;
     }
@@ -81,16 +102,16 @@ async function buildManifest(genomeDir: string): Promise<void> {
       const oldHash = file.sha256;
 
       if (newHash !== oldHash) {
-        console.log(`   📝 Updated: ${file.path}`);
+        console.log(`   📝 Updated: ${file.path}${distMode ? ` (hashed ${targetPath})` : ''}`);
         console.log(`      Old: ${oldHash.substring(0, 16)}...`);
         console.log(`      New: ${newHash.substring(0, 16)}...`);
         file.sha256 = newHash;
         updatedCount++;
       } else {
-        console.log(`   ✓ Unchanged: ${file.path}`);
+        console.log(`   ✓ Unchanged: ${file.path}${distMode ? ` (hashed ${targetPath})` : ''}`);
       }
     } catch (error) {
-      console.error(`   ❌ Error hashing ${file.path}: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`   ❌ Error hashing ${targetPath}: ${error instanceof Error ? error.message : String(error)}`);
       errorCount++;
     }
   }
@@ -118,14 +139,19 @@ async function buildManifest(genomeDir: string): Promise<void> {
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.length < 1) {
-    console.error('Usage: tsx scripts/genome-build-manifest.ts <genome-dir>');
+    console.error('Usage: tsx scripts/genome-build-manifest.ts <genome-dir> [--dist]');
     console.error('Example: tsx scripts/genome-build-manifest.ts genomes/TOTK_ROOT_v1.0.0');
+    console.error('         tsx scripts/genome-build-manifest.ts genomes/TOTK_ROOT_v1.0.0 --dist');
+    console.error('');
+    console.error('Options:');
+    console.error('  --dist    Hash dist/*.js files instead of src/*.ts files (production mode)');
     process.exit(1);
   }
 
   const genomeDir = args[0];
+  const distMode = args.includes('--dist');
 
-  buildManifest(genomeDir)
+  buildManifest(genomeDir, distMode)
     .then(() => process.exit(0))
     .catch((error) => {
       console.error('❌ Build manifest failed:', error.message);

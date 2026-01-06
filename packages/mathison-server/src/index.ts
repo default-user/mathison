@@ -19,6 +19,7 @@ import { loadPrerequisites, ValidatedPrerequisites } from './prerequisites';
 import { randomBytes } from 'crypto';
 import { KnowledgeIngestionGate } from './knowledge/ingestion-gate';
 import { makeChunkRetrieverFromEnv } from './knowledge/chunk-retriever';
+import { MathisonGRPCServer } from './grpc/server';
 
 export interface MathisonServerConfig {
   port?: number;
@@ -51,6 +52,8 @@ export class MathisonServer {
   private heartbeatFailClosed: boolean = false;
   // Knowledge ingestion gate (P2.1)
   private knowledgeGate: KnowledgeIngestionGate | null = null;
+  // gRPC server (optional, started if MATHISON_GRPC_PORT is set)
+  private grpcServer: MathisonGRPCServer | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -96,11 +99,35 @@ export class MathisonServer {
       // Register routes
       this.registerRoutes();
 
-      // Start server
+      // Start HTTP server
       await this.app.listen({
         port: this.config.port,
         host: this.config.host
       });
+
+      // P1: Start gRPC server if MATHISON_GRPC_PORT is set
+      if (process.env.MATHISON_GRPC_PORT) {
+        const grpcPort = parseInt(process.env.MATHISON_GRPC_PORT, 10);
+        const grpcHost = process.env.MATHISON_GRPC_HOST ?? this.config.host;
+
+        this.grpcServer = new MathisonGRPCServer({
+          port: grpcPort,
+          host: grpcHost,
+          cif: this.cif,
+          cdi: this.cdi,
+          actionGate: this.actionGate,
+          memoryGraph: this.memoryGraph,
+          interpreter: this.interpreter,
+          jobExecutor: this.jobExecutor,
+          genome: this.genome,
+          genomeId: this.genomeId,
+          heartbeat: this.heartbeat,
+          knowledgeGate: this.knowledgeGate
+        });
+
+        await this.grpcServer.start();
+        console.log(`🔌 gRPC server listening on ${grpcHost}:${grpcPort}`);
+      }
 
       // P0.2: Seal storage after boot completes successfully
       // From this point on, only governance-authorized components can create storage adapters
@@ -108,7 +135,7 @@ export class MathisonServer {
 
       this.bootStatus = 'ready';
       console.log('✅ Mathison Server started successfully');
-      console.log(`🌐 Listening on http://${this.config.host}:${this.config.port}`);
+      console.log(`🌐 HTTP listening on http://${this.config.host}:${this.config.port}`);
     } catch (error) {
       this.bootStatus = 'failed';
       this.bootError = error instanceof Error ? error.message : String(error);
@@ -119,6 +146,9 @@ export class MathisonServer {
 
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
+    if (this.grpcServer) {
+      await this.grpcServer.stop();
+    }
     if (this.heartbeat) {
       this.heartbeat.stop();
     }
@@ -219,12 +249,15 @@ export class MathisonServer {
     const isProduction = process.env.MATHISON_ENV === 'production';
     const strictMode = isProduction || process.env.MATHISON_INTEGRITY_STRICT === 'true';
 
-    console.log(`🔒 Verifying governance integrity (strict: ${strictMode})...`);
+    // Resolve repo root: use MATHISON_REPO_ROOT env var if set, else process.cwd()
+    const repoRoot = process.env.MATHISON_REPO_ROOT ?? process.cwd();
+
+    console.log(`🔒 Verifying governance integrity (strict: ${strictMode}, root: ${repoRoot})...`);
 
     try {
       const result = await verifyGovernanceIntegrity(
         this.genome.build_manifest.files,
-        process.cwd(),
+        repoRoot,
         strictMode
       );
 

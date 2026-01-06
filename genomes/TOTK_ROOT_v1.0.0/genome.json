@@ -127,21 +127,16 @@
     "files": [
       {
         "path": "packages/mathison-genome/src/index.ts",
-        "sha256": "placeholder-will-compute-in-production"
+        "sha256": "2cf39aa26f7d60e02331fdb70bb3c46e3eead2552daf86bbe7bcfa6ce673b5eb"
       },
       {
         "path": "packages/mathison-governance/src/cdi.ts",
-        "sha256": "placeholder-will-compute-in-production"
+        "sha256": "753309703c3e2ade4da38bffbbdb8c87f68a8eedc6c37266eac6d993e7fcb83b"
       },
       {
         "path": "packages/mathison-server/src/index.ts",
-        "sha256": "placeholder-will-compute-in-production"
+        "sha256": "106161cdff2e265bd1da06ea1c2e0d8b46b707d304759fc8c1781a4ff969598c"
       }
     ]
-  },
-  "signature": {
-    "alg": "ed25519",
-    "signer_key_id": "totk-dev-key-001",
-    "sig_base64": "fWlhI6j63p62be9sl7GC5CTmTqOB1ytTMj1GjSdeP9dL6dAc/MrCv5v85ZyAq3FC2JEVrPN9FpRg8WaFLoxXBg=="
   }
 }

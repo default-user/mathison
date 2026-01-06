@@ -240,13 +240,19 @@ export class CIF {
     }
 
     // Check for PII
-    const piiFound = this.config.piiPatterns.some(pattern => pattern.test(payloadStr));
+    const piiFound = this.config.piiPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(payloadStr);
+    });
     if (piiFound) {
       leaksDetected.push('PII detected');
     }
 
     // Check for secrets
-    const secretsFound = this.config.secretPatterns.some(pattern => pattern.test(payloadStr));
+    const secretsFound = this.config.secretPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(payloadStr);
+    });
     if (secretsFound) {
       leaksDetected.push('Secrets detected');
       violations.push('Attempted secret leakage');
@@ -346,7 +352,10 @@ export class CIF {
       /\.\.\//g, // Path traversal
     ];
 
-    return suspiciousPatterns.some(pattern => pattern.test(input));
+    return suspiciousPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(input);
+    });
   }
 }
 

@@ -153,6 +153,57 @@ describe('Governance Integrity - P1.1', () => {
       expect(result.errors[0]).toContain('placeholder hash not allowed');
     });
 
+    it('should pass when hashes match and fail when file content changes', async () => {
+      const testFile = path.join(tempDir, 'module.ts');
+      const originalContent = 'export const value = 42;';
+      await fs.writeFile(testFile, originalContent, 'utf-8');
+
+      // Build manifest entry with correct hash
+      const correctHash = await computeFileHash(testFile);
+      const manifest = [{ path: path.relative(tempDir, testFile), sha256: correctHash }];
+
+      // First verification should pass
+      const result1 = await verifyGovernanceIntegrity(manifest, tempDir, true);
+      expect(result1.valid).toBe(true);
+      expect(result1.errors).toEqual([]);
+      expect(result1.checked[0].match).toBe(true);
+
+      // Modify file content
+      const modifiedContent = 'export const value = 99; // TAMPERED';
+      await fs.writeFile(testFile, modifiedContent, 'utf-8');
+
+      // Second verification should fail (hash mismatch)
+      const result2 = await verifyGovernanceIntegrity(manifest, tempDir, true);
+      expect(result2.valid).toBe(false);
+      expect(result2.errors.length).toBe(1);
+      expect(result2.errors[0]).toContain('hash mismatch');
+      expect(result2.checked[0].match).toBe(false);
+    });
+
+    it('should fail in strict mode on any placeholder hash regardless of prefix', async () => {
+      const testFile = path.join(tempDir, 'module.ts');
+      await fs.writeFile(testFile, 'content', 'utf-8');
+
+      const placeholders = [
+        'placeholder-dev',
+        'placeholder-will-compute-in-production',
+        'placeholder',
+        'placeholderABCD'
+      ];
+
+      for (const placeholder of placeholders) {
+        const result = await verifyGovernanceIntegrity(
+          [{ path: path.relative(tempDir, testFile), sha256: placeholder }],
+          tempDir,
+          true // strict mode
+        );
+
+        expect(result.valid).toBe(false);
+        expect(result.errors.length).toBe(1);
+        expect(result.errors[0]).toContain('placeholder hash not allowed');
+      }
+    });
+
     it('should verify multiple files', async () => {
       const file1 = path.join(tempDir, 'file1.ts');
       const file2 = path.join(tempDir, 'file2.ts');

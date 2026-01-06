@@ -12,7 +12,8 @@
 
 import { KnowledgeIngestionGate } from '../knowledge/ingestion-gate';
 import { InMemoryChunkRetriever } from '../knowledge/chunk-retriever';
-import { FileKnowledgeStore } from 'mathison-storage';
+// Import from internal path since backends are no longer exported from package root
+import { FileKnowledgeStore } from 'mathison-storage/src/backends/file/file-knowledge-store';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { tmpdir } from 'os';

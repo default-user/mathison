@@ -37,10 +37,34 @@ export async function computeFileHash(filePath: string): Promise<string> {
 }
 
 /**
+ * Resolve dist path from src path if MATHISON_USE_DIST is set
+ * E.g., packages/foo/src/index.ts -> packages/foo/dist/index.js
+ */
+function resolveDistPath(srcPath: string): string {
+  const useDist = process.env.MATHISON_USE_DIST === 'true' || process.env.MATHISON_ENV === 'production';
+
+  if (!useDist) {
+    return srcPath;
+  }
+
+  // Check if path is a TypeScript source file
+  if (srcPath.includes('/src/') && srcPath.endsWith('.ts')) {
+    // Convert src/*.ts to dist/*.js
+    return srcPath.replace('/src/', '/dist/').replace(/\.ts$/, '.js');
+  }
+
+  return srcPath;
+}
+
+/**
  * Verify integrity of critical governance modules
  *
  * Checks that actual file hashes match expected hashes from genome manifest.
  * Skips entries with placeholder hashes (allows dev mode).
+ *
+ * In production mode (MATHISON_ENV=production or MATHISON_USE_DIST=true):
+ * - Resolves src/*.ts paths to dist/*.js paths before hashing
+ * - Placeholder hashes cause verification failure (strictMode)
  *
  * @param manifest Expected hashes from genome build_manifest
  * @param rootDir Root directory of the repository (for resolving relative paths)
@@ -55,7 +79,9 @@ export async function verifyGovernanceIntegrity(
   const checked: IntegrityCheckResult['checked'] = [];
 
   for (const entry of manifest) {
-    const filePath = path.join(rootDir, entry.path);
+    // Resolve dist path if in production/dist mode
+    const targetPath = resolveDistPath(entry.path);
+    const filePath = path.join(rootDir, targetPath);
 
     // Skip placeholders in dev mode
     if (!strictMode && entry.sha256.startsWith('placeholder')) {

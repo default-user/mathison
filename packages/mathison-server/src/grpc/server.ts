@@ -604,75 +604,87 @@ export class MathisonGRPCServer {
       let eventCount = 0;
       let streamCompleted = false;
       let streamError: any = null;
+      let cancelled = false;
 
-      // Poll and stream status updates
-      const pollInterval = setInterval(async () => {
+      // Handle client disconnect
+      call.on('cancelled', () => {
+        cancelled = true;
+        call.end();
+      });
+
+      // Async polling loop to avoid overlapping async calls
+      const pollLoop = async () => {
         try {
-          const status = await this.config.jobExecutor!.getStatus(
-            jobId,
-            this.config.genomeId ?? undefined,
-            this.config.genome?.version
-          );
+          while (!cancelled) {
+            const status = await this.config.jobExecutor!.getStatus(
+              jobId,
+              this.config.genomeId ?? undefined,
+              this.config.genome?.version
+            );
 
-          if (!status) {
-            streamError = { code: grpc.status.NOT_FOUND, message: 'Job not found' };
-            clearInterval(pollInterval);
-            call.emit('error', streamError);
-            call.end();
-            return;
-          }
-
-          // 6. CDI output check for each event
-          const outputInput = { content: JSON.stringify(status) };
-          const outputCheck = await this.config.cdi.checkOutput(outputInput);
-
-          if (!outputCheck.allowed) {
-            // Fail closed: deny this event, continue stream
-            console.warn(`Stream event blocked by CDI output: ${outputCheck.violations}`);
-          } else {
-            // 7. CIF egress check for each event
-            const egressInput = { clientId, endpoint, payload: status };
-            const egressResult = await this.config.cif.egress(egressInput);
-
-            if (egressResult.allowed) {
-              call.write({
-                job_id: status.job_id,
-                status: status.status,
-                current_stage: '',
-                start_time: 0,
-                end_time: 0
-              });
-              eventCount++;
+            if (!status) {
+              streamError = { code: grpc.status.NOT_FOUND, message: 'Job not found' };
+              call.emit('error', streamError);
+              call.end();
+              return;
             }
-          }
 
-          // Stop conditions
-          const elapsed = Date.now() - startTime;
-          if (status.status === 'completed' || status.status === 'failed' ||
-              elapsed > maxDurationMs || eventCount >= maxEvents) {
-            streamCompleted = true;
-            clearInterval(pollInterval);
-            call.end();
+            // 6. CDI output check for each event
+            const outputInput = { content: JSON.stringify(status) };
+            const outputCheck = await this.config.cdi.checkOutput(outputInput);
+
+            if (!outputCheck.allowed) {
+              // Fail closed: deny this event, continue stream
+              console.warn(`Stream event blocked by CDI output: ${outputCheck.violations}`);
+            } else {
+              // 7. CIF egress check for each event
+              const egressInput = { clientId, endpoint, payload: status };
+              const egressResult = await this.config.cif.egress(egressInput);
+
+              if (egressResult.allowed) {
+                call.write({
+                  job_id: status.job_id,
+                  status: status.status,
+                  current_stage: '',
+                  start_time: 0,
+                  end_time: 0
+                });
+                eventCount++;
+              }
+            }
+
+            // Stop conditions
+            const elapsed = Date.now() - startTime;
+            if (status.status === 'completed' || status.status === 'failed' ||
+                elapsed > maxDurationMs || eventCount >= maxEvents) {
+              streamCompleted = true;
+              call.end();
+              return;
+            }
+
+            // Wait before next poll
+            await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
           }
         } catch (error) {
           streamError = error;
-          clearInterval(pollInterval);
           call.emit('error', {
             code: grpc.status.INTERNAL,
             message: error instanceof Error ? error.message : String(error)
           });
           call.end();
         }
-      }, pollIntervalMs);
+      };
 
-      // Handle client disconnect
-      call.on('cancelled', () => {
-        clearInterval(pollInterval);
-        call.end();
-      });
+      // Start polling loop
+      pollLoop();
 
       // Handle stream end: generate completion receipt and proof
-      call.on('finish', async () => {
+      // Use once flag to prevent duplicate receipts on multiple events
+      let completionReceiptGenerated = false;
+      const generateCompletionReceipt = async () => {
+        if (completionReceiptGenerated) return;
+        completionReceiptGenerated = true;
+
         try {
           // 8. Generate stream completion receipt via ActionGate
           if (this.config.actionGate) {
@@ -712,7 +724,12 @@ export class MathisonGRPCServer {
         } catch (error) {
           console.error('Stream completion receipt failed:', error);
         }
-      });
+      };
+
+      // Attach to multiple stream lifecycle events to ensure reliable receipt generation
+      call.on('finish', generateCompletionReceipt);
+      call.on('close', generateCompletionReceipt);
+      call.on('end', generateCompletionReceipt);
 
     } catch (error: any) {
       proof.setVerdict('deny');
@@ -807,10 +824,13 @@ export class MathisonGRPCServer {
         }
 
         return {
-          id: node.id,
-          type: node.type,
-          data: Buffer.from(JSON.stringify(node.data)),
-          metadata: Buffer.from(JSON.stringify(node.metadata)),
+          node: {
+            id: node.id,
+            type: node.type,
+            data: Buffer.from(JSON.stringify(node.data)),
+            metadata: Buffer.from(JSON.stringify(node.metadata))
+          },
+          created: true,
           receipt_id: result.receipt?.timestamp || ''
         };
       });

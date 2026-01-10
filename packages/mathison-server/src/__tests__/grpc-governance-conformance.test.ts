@@ -4,15 +4,17 @@
  * Tests ATTACK fixes: 6, 7, 11, 12
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import { MathisonGRPCServer } from '../grpc/server';
 import { CIF, CDI } from 'mathison-governance';
 import { MemoryGraph } from 'mathison-memory';
 import { JobExecutor } from '../job-executor';
 import { ActionGate } from '../action-gate';
+import { makeStoresFromEnv } from '../../../mathison-storage/src/factory';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 
 describe('gRPC Governance Conformance', () => {
   let server: MathisonGRPCServer;
@@ -20,11 +22,15 @@ describe('gRPC Governance Conformance', () => {
   let cif: CIF;
   let cdi: CDI;
   let memoryGraph: MemoryGraph;
+  let tempDir: string;
 
   const TEST_PORT = 50052;
   const TEST_HOST = '127.0.0.1';
 
   beforeAll(async () => {
+    // Create temp directory for FILE backend storage
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mathison-grpc-test-'));
+
     // Initialize governance components
     cif = new CIF({
       maxRequestSize: 1024,
@@ -39,10 +45,17 @@ describe('gRPC Governance Conformance', () => {
     memoryGraph = new MemoryGraph();
     await memoryGraph.initialize();
 
-    const actionGate = new ActionGate({
-      cdi,
-      enabled: true
-    });
+    // Set up stores using FILE backend
+    process.env.MATHISON_STORE_BACKEND = 'FILE';
+    process.env.MATHISON_STORE_PATH = tempDir;
+    const stores = makeStoresFromEnv();
+
+    // Initialize stores
+    await stores.checkpointStore.init();
+    await stores.receiptStore.init();
+    await stores.graphStore.initialize();
+
+    const actionGate = new ActionGate(cdi, cif, stores);
 
     // Create gRPC server
     server = new MathisonGRPCServer({
@@ -63,7 +76,7 @@ describe('gRPC Governance Conformance', () => {
     await server.start();
 
     // Create gRPC client
-    const protoPath = path.join(process.cwd(), 'proto', 'mathison.proto');
+    const protoPath = path.join(process.cwd(), '../../proto/mathison.proto');
     const packageDefinition = protoLoader.loadSync(protoPath, {
       keepCase: true,
       longs: String,
@@ -87,6 +100,10 @@ describe('gRPC Governance Conformance', () => {
     }
     if (server) {
       await server.stop();
+    }
+    // Clean up temp directory
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -499,7 +516,7 @@ describe('gRPC Governance Conformance', () => {
           }
 
           // Verify node was created
-          expect(response.id).toBe(nodeId);
+          expect(response.node.id).toBe(nodeId);
 
           // Note: We can't directly inspect the governance proof here,
           // but the fact that the request succeeded proves the proof was valid.

@@ -221,10 +221,7 @@ export class MathisonGRPCServer {
 
     // P0.1: Initialize governance proof
     const requestId = randomBytes(16).toString('hex');
-    const requestHash = createHash('sha256')
-      .update(JSON.stringify(call.request))
-      .digest('hex');
-    const proof = new GovernanceProofBuilder(requestId, requestHash);
+    const proof = new GovernanceProofBuilder(requestId, call.request);
     // 1. Heartbeat fail-closed check
     if (this.config.heartbeat && !this.config.heartbeat.isHealthy()) {
       const status = this.config.heartbeat.getStatus();
@@ -273,7 +270,7 @@ export class MathisonGRPCServer {
       payload: ingressResult.sanitizedPayload,
       route: (call as any).handler?.path,
       method: 'gRPC',
-      request_hash: requestHash
+      request_hash: createHash('sha256').update(JSON.stringify(call.request)).digest('hex')
     };
     const actionResult = await this.config.cdi.checkAction(actionInput);
 
@@ -475,53 +472,103 @@ export class MathisonGRPCServer {
   /**
    * Stream job status updates (server streaming)
    * Polls job executor and streams status updates until job completes or times out
+   * Full governance parity: heartbeat, CIF ingress/egress, CDI action/output, proofs, receipts
    */
   private async handleStreamJobStatus(
     call: grpc.ServerWritableStream<any, any>
   ): Promise<void> {
-    try {
-      // Apply governance to streaming call (ingress + action check)
-      const clientId = call.getPeer();
-      const ingressInput = {
-        clientId,
-        endpoint: '/mathison.MathisonService/StreamJobStatus',
-        payload: call.request,
-        headers: call.metadata.getMap() as Record<string, string>,
-        timestamp: Date.now()
-      };
+    const clientId = call.getPeer();
+    const endpoint = '/mathison.MathisonService/StreamJobStatus';
+    const requestId = randomBytes(16).toString('hex');
+    const proof = new GovernanceProofBuilder(requestId, call.request);
 
-      const ingressResult = await this.config.cif.ingress(ingressInput);
-      if (!ingressResult.allowed) {
+    try {
+      // 1. Heartbeat fail-closed check
+      if (this.config.heartbeat && !this.config.heartbeat.isHealthy()) {
+        const status = this.config.heartbeat.getStatus();
+        proof.setVerdict('deny');
         call.emit('error', {
-          code: grpc.status.INVALID_ARGUMENT,
-          message: 'CIF ingress blocked',
-          details: JSON.stringify({ violations: ingressResult.violations })
+          code: grpc.status.UNAVAILABLE,
+          message: 'System in fail-closed posture',
+          details: JSON.stringify({
+            reason_code: 'HEARTBEAT_FAIL_CLOSED',
+            failed_checks: status?.checks.filter(c => !c.ok),
+            governance_proof: proof.build()
+          })
         });
         call.end();
         return;
       }
 
-      // CDI action check
+      // 2. Validate action ID against registry
+      if (!actionRegistry.isRegistered(GRPC_ACTION_IDS.STREAM_JOB_STATUS)) {
+        proof.setVerdict('deny');
+        call.emit('error', {
+          code: grpc.status.PERMISSION_DENIED,
+          message: `UNREGISTERED_ACTION: ${GRPC_ACTION_IDS.STREAM_JOB_STATUS}`,
+          details: JSON.stringify({
+            reason_code: 'UNREGISTERED_ACTION',
+            governance_proof: proof.build()
+          })
+        });
+        call.end();
+        return;
+      }
+
+      // 3. CIF ingress
+      const ingressInput = {
+        clientId,
+        endpoint,
+        payload: call.request,
+        headers: call.metadata.getMap() as Record<string, string>,
+        timestamp: Date.now()
+      };
+      const ingressResult = await this.config.cif.ingress(ingressInput);
+      proof.addCIFIngress(ingressInput, ingressResult);
+
+      if (!ingressResult.allowed) {
+        proof.setVerdict('deny');
+        call.emit('error', {
+          code: grpc.status.INVALID_ARGUMENT,
+          message: 'CIF ingress blocked',
+          details: JSON.stringify({
+            violations: ingressResult.violations,
+            governance_proof: proof.build()
+          })
+        });
+        call.end();
+        return;
+      }
+
+      // 4. CDI action check
       const actionInput = {
         actor: clientId,
         action: 'job_stream_status',
         action_id: GRPC_ACTION_IDS.STREAM_JOB_STATUS,
         payload: ingressResult.sanitizedPayload,
-        route: '/mathison.MathisonService/StreamJobStatus',
-        method: 'gRPC'
+        route: endpoint,
+        method: 'gRPC',
+        request_hash: createHash('sha256').update(JSON.stringify(call.request)).digest('hex')
       };
       const actionResult = await this.config.cdi.checkAction(actionInput);
+      proof.addCDIAction(actionInput, actionResult);
+
       if (actionResult.verdict !== 'allow') {
+        proof.setVerdict('deny');
         call.emit('error', {
           code: grpc.status.PERMISSION_DENIED,
           message: 'CDI action denied',
-          details: JSON.stringify({ reason: actionResult.reason })
+          details: JSON.stringify({
+            reason: actionResult.reason,
+            governance_proof: proof.build()
+          })
         });
         call.end();
         return;
       }
 
       if (!this.config.jobExecutor) {
+        proof.setVerdict('deny');
         call.emit('error', {
           code: grpc.status.UNAVAILABLE,
           message: 'Job executor not initialized'
@@ -530,12 +577,33 @@ export class MathisonGRPCServer {
         return;
       }
 
+      // 5. Generate stream start receipt via ActionGate
+      if (this.config.actionGate) {
+        await this.config.actionGate.executeSideEffect(
+          {
+            actor: clientId,
+            action: 'STREAM_START',
+            payload: { endpoint, job_id: (call.request as any).job_id },
+            metadata: {
+              job_id: (call.request as any).job_id,
+              stage: 'grpc_stream_start',
+              policy_id: 'stream'
+            },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
+          },
+          async () => ({ stream_id: requestId, started_at: new Date().toISOString() })
+        );
+      }
+
       const jobId = (call.request as any).job_id;
       const pollIntervalMs = 500;
       const maxDurationMs = 60000; // 1 minute max
       const maxEvents = 100; // Max 100 status updates
       const startTime = Date.now();
       let eventCount = 0;
+      let streamCompleted = false;
+      let streamError: any = null;
 
       // Poll and stream status updates
       const pollInterval = setInterval(async () => {
@@ -547,38 +615,47 @@ export class MathisonGRPCServer {
           );
 
           if (!status) {
-            call.emit('error', {
-              code: grpc.status.NOT_FOUND,
-              message: 'Job not found'
-            });
+            streamError = { code: grpc.status.NOT_FOUND, message: 'Job not found' };
             clearInterval(pollInterval);
+            call.emit('error', streamError);
             call.end();
             return;
           }
 
-          // Stream status update (with CIF egress check)
-          const egressInput = { clientId, endpoint: '/StreamJobStatus', payload: status };
-          const egressResult = await this.config.cif.egress(egressInput);
+          // 6. CDI output check for each event
+          const outputInput = { content: JSON.stringify(status) };
+          const outputCheck = await this.config.cdi.checkOutput(outputInput);
 
-          if (egressResult.allowed) {
-            call.write({
-              job_id: status.job_id,
-              status: status.status,
-              current_stage: '',
-              start_time: 0,
-              end_time: 0
-            });
-            eventCount++;
+          if (!outputCheck.allowed) {
+            // Fail closed: deny this event, continue stream
+            console.warn(`Stream event blocked by CDI output: ${outputCheck.violations}`);
+          } else {
+            // 7. CIF egress check for each event
+            const egressInput = { clientId, endpoint, payload: status };
+            const egressResult = await this.config.cif.egress(egressInput);
+
+            if (egressResult.allowed) {
+              call.write({
+                job_id: status.job_id,
+                status: status.status,
+                current_stage: '',
+                start_time: 0,
+                end_time: 0
+              });
+              eventCount++;
+            }
           }
 
           // Stop conditions
           const elapsed = Date.now() - startTime;
           if (status.status === 'completed' || status.status === 'failed' ||
               elapsed > maxDurationMs || eventCount >= maxEvents) {
+            streamCompleted = true;
             clearInterval(pollInterval);
             call.end();
           }
         } catch (error) {
+          streamError = error;
           clearInterval(pollInterval);
           call.emit('error', {
             code: grpc.status.INTERNAL,
@@ -594,10 +671,55 @@ export class MathisonGRPCServer {
         call.end();
       });
 
+      // Handle stream end: generate completion receipt and proof
+      call.on('finish', async () => {
+        try {
+          // 8. Generate stream completion receipt via ActionGate
+          if (this.config.actionGate) {
+            await this.config.actionGate.executeSideEffect(
+              {
+                actor: clientId,
+                action: 'STREAM_COMPLETE',
+                payload: {
+                  endpoint,
+                  job_id: jobId,
+                  event_count: eventCount,
+                  completed: streamCompleted,
+                  error: streamError?.message || null
+                },
+                metadata: {
+                  job_id: jobId,
+                  stage: 'grpc_stream_complete',
+                  policy_id: 'stream',
+                  event_count: eventCount
+                },
+                genome_id: this.config.genomeId ?? undefined,
+                genome_version: this.config.genome?.version
+              },
+              async () => ({
+                stream_id: requestId,
+                completed_at: new Date().toISOString(),
+                event_count: eventCount
+              })
+            );
+          }
+
+          // 9. Finalize governance proof
+          proof.setVerdict(streamError ? 'deny' : 'allow');
+          proof.addHandler(call.request, { event_count: eventCount, completed: streamCompleted });
+          const finalProof = proof.build();
+          // Proof is generated but not attached to stream (could log or store if needed)
+        } catch (error) {
+          console.error('Stream completion receipt failed:', error);
+        }
+      });
+
     } catch (error: any) {
+      proof.setVerdict('deny');
       call.emit('error', {
         code: error.code || grpc.status.INTERNAL,
-        message: error.message
+        message: error.message,
+        details: JSON.stringify({ governance_proof: proof.build() })
       });
       call.end();
     }
@@ -740,59 +862,134 @@ export class MathisonGRPCServer {
   /**
    * Stream memory search results (server streaming)
    * Searches memory graph and streams results with governance
+   * Full governance parity: heartbeat, CIF ingress/egress, CDI action/output, proofs, receipts
    */
   private async handleSearchMemory(
     call: grpc.ServerWritableStream<any, any>
   ): Promise<void> {
-    try {
-      // Apply governance to streaming call
-      const clientId = call.getPeer();
-      const ingressInput = {
-        clientId,
-        endpoint: '/mathison.MathisonService/SearchMemory',
-        payload: call.request,
-        headers: call.metadata.getMap() as Record<string, string>,
-        timestamp: Date.now()
-      };
+    const clientId = call.getPeer();
+    const endpoint = '/mathison.MathisonService/SearchMemory';
+    const requestId = randomBytes(16).toString('hex');
+    const proof = new GovernanceProofBuilder(requestId, call.request);
+    let streamedCount = 0;
+    let streamError: any = null;
 
-      const ingressResult = await this.config.cif.ingress(ingressInput);
-      if (!ingressResult.allowed) {
+    try {
+      // 1. Heartbeat fail-closed check
+      if (this.config.heartbeat && !this.config.heartbeat.isHealthy()) {
+        const status = this.config.heartbeat.getStatus();
+        proof.setVerdict('deny');
         call.emit('error', {
-          code: grpc.status.INVALID_ARGUMENT,
-          message: 'CIF ingress blocked',
-          details: JSON.stringify({ violations: ingressResult.violations })
+          code: grpc.status.UNAVAILABLE,
+          message: 'System in fail-closed posture',
+          details: JSON.stringify({
+            reason_code: 'HEARTBEAT_FAIL_CLOSED',
+            failed_checks: status?.checks.filter(c => !c.ok),
+            governance_proof: proof.build()
+          })
         });
         call.end();
         return;
       }
 
-      // CDI action check
+      // 2. Validate action ID against registry
+      if (!actionRegistry.isRegistered(GRPC_ACTION_IDS.SEARCH_MEMORY)) {
+        proof.setVerdict('deny');
+        call.emit('error', {
+          code: grpc.status.PERMISSION_DENIED,
+          message: `UNREGISTERED_ACTION: ${GRPC_ACTION_IDS.SEARCH_MEMORY}`,
+          details: JSON.stringify({
+            reason_code: 'UNREGISTERED_ACTION',
+            governance_proof: proof.build()
+          })
+        });
+        call.end();
+        return;
+      }
+
+      // 3. CIF ingress
+      const ingressInput = {
+        clientId,
+        endpoint,
+        payload: call.request,
+        headers: call.metadata.getMap() as Record<string, string>,
+        timestamp: Date.now()
+      };
+      const ingressResult = await this.config.cif.ingress(ingressInput);
+      proof.addCIFIngress(ingressInput, ingressResult);
+
+      if (!ingressResult.allowed) {
+        proof.setVerdict('deny');
+        call.emit('error', {
+          code: grpc.status.INVALID_ARGUMENT,
+          message: 'CIF ingress blocked',
+          details: JSON.stringify({
+            violations: ingressResult.violations,
+            governance_proof: proof.build()
+          })
+        });
+        call.end();
+        return;
+      }
+
+      // 4. CDI action check
       const actionInput = {
         actor: clientId,
         action: 'memory_search',
         action_id: GRPC_ACTION_IDS.SEARCH_MEMORY,
         payload: ingressResult.sanitizedPayload,
-        route: '/mathison.MathisonService/SearchMemory',
-        method: 'gRPC'
+        route: endpoint,
+        method: 'gRPC',
+        request_hash: createHash('sha256').update(JSON.stringify(call.request)).digest('hex')
       };
       const actionResult = await this.config.cdi.checkAction(actionInput);
+      proof.addCDIAction(actionInput, actionResult);
+
       if (actionResult.verdict !== 'allow') {
+        proof.setVerdict('deny');
         call.emit('error', {
           code: grpc.status.PERMISSION_DENIED,
           message: 'CDI action denied',
-          details: JSON.stringify({ reason: actionResult.reason })
+          details: JSON.stringify({
+            reason: actionResult.reason,
+            governance_proof: proof.build()
+          })
         });
         call.end();
         return;
       }
 
       if (!this.config.memoryGraph) {
+        proof.setVerdict('deny');
         call.emit('error', {
           code: grpc.status.UNAVAILABLE,
           message: 'Memory graph not initialized'
         });
         call.end();
         return;
+      }
+
+      // 5. Generate stream start receipt via ActionGate
+      if (this.config.actionGate) {
+        await this.config.actionGate.executeSideEffect(
+          {
+            actor: clientId,
+            action: 'STREAM_START',
+            payload: {
+              endpoint,
+              query: (call.request as any).query,
+              limit: (call.request as any).limit
+            },
+            metadata: {
+              job_id: 'memory_search',
+              stage: 'grpc_stream_start',
+              policy_id: 'stream'
+            },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
+          },
+          async () => ({ stream_id: requestId, started_at: new Date().toISOString() })
+        );
       }
 
       const query = (call.request as any).query || '';
@@ -802,12 +999,21 @@ export class MathisonGRPCServer {
       // Perform search
       const results = this.config.memoryGraph.search(query, boundedLimit);
 
-      // Stream results one by one with CIF egress checks
-      let streamedCount = 0;
+      // Stream results one by one with full governance checks
       for (const node of results) {
         try {
-          // CIF egress check for each result
-          const egressInput = { clientId, endpoint: '/SearchMemory', payload: node };
+          // 6. CDI output check for each result
+          const outputInput = { content: JSON.stringify(node) };
+          const outputCheck = await this.config.cdi.checkOutput(outputInput);
+
+          if (!outputCheck.allowed) {
+            // Fail closed: deny this result, continue to next
+            console.warn(`Search result blocked by CDI output: ${outputCheck.violations}`);
+            continue;
+          }
+
+          // 7. CIF egress check for each result
+          const egressInput = { clientId, endpoint, payload: node };
           const egressResult = await this.config.cif.egress(egressInput);
 
           if (egressResult.allowed) {
@@ -830,12 +1036,50 @@ export class MathisonGRPCServer {
         }
       }
 
+      // 8. Generate stream completion receipt via ActionGate
+      if (this.config.actionGate) {
+        await this.config.actionGate.executeSideEffect(
+          {
+            actor: clientId,
+            action: 'STREAM_COMPLETE',
+            payload: {
+              endpoint,
+              query,
+              result_count: streamedCount,
+              completed: true
+            },
+            metadata: {
+              job_id: 'memory_search',
+              stage: 'grpc_stream_complete',
+              policy_id: 'stream',
+              result_count: streamedCount
+            },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
+          },
+          async () => ({
+            stream_id: requestId,
+            completed_at: new Date().toISOString(),
+            result_count: streamedCount
+          })
+        );
+      }
+
+      // 9. Finalize governance proof
+      proof.setVerdict('allow');
+      proof.addHandler(call.request, { result_count: streamedCount, completed: true });
+      const finalProof = proof.build();
+      // Proof is generated but not attached to stream (could log or store if needed)
+
       call.end();
 
     } catch (error: any) {
+      streamError = error;
+      proof.setVerdict('deny');
       call.emit('error', {
         code: error.code || grpc.status.INTERNAL,
-        message: error.message
+        message: error.message,
+        details: JSON.stringify({ governance_proof: proof.build() })
       });
       call.end();
     }

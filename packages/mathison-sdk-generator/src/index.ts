@@ -516,8 +516,8 @@ class TestAsyncMathisonClient:
     fs.writeFileSync(path.join(outputPath, 'tests', '__init__.py'), '', 'utf-8');
     fs.writeFileSync(path.join(outputPath, 'tests', 'test_client.py'), testPy, 'utf-8');
 
-    console.log(\`📝 Generated Python SDK\`);
-    console.log(\`   Output: \${outputPath}\`);
+    console.log(`📝 Generated Python SDK`);
+    console.log(`   Output: ${outputPath}`);
     console.log('   Files:');
     console.log('     - pyproject.toml');
     console.log('     - mathison_sdk/__init__.py');
@@ -539,19 +539,19 @@ class TestAsyncMathisonClient:
 
     for (const ep of sortedEndpoints) {
       const methodName = this.pythonMethodName(ep.path, ep.method);
-      const docstring = ep.description || \`\${ep.method} \${ep.path}\`;
+      const docstring = ep.description || `${ep.method} ${ep.path}`;
       const returnType = this.pythonReturnType(ep);
       const params = this.pythonParams(ep);
       const body = this.pythonBody(ep);
 
       // Sync method
-      syncMethods.push(\`    def \${methodName}(self\${params}) -> \${returnType}:
-        \"\"\"\${docstring}\"\"\"\${body}\`);
+      syncMethods.push(`    def ${methodName}(self${params}) -> ${returnType}:
+        """${docstring}"""${body}`);
 
       // Async method
-      asyncMethods.push(\`    async def \${methodName}(self\${params}) -> \${returnType}:
-        \"\"\"\${docstring}\"\"\"
-        \${body.replace('self._get', 'await self._get').replace('self._post', 'await self._post')}\`);
+      asyncMethods.push(`    async def ${methodName}(self${params}) -> ${returnType}:
+        """${docstring}"""
+        ${body.replace('self._get', 'await self._get').replace('self._post', 'await self._post')}`);
     }
 
     return {
@@ -583,7 +583,7 @@ class TestAsyncMathisonClient:
 
     // Fallback
     const parts = apiPath.split('/').filter(p => p && !p.startsWith('{'));
-    return \`\${method.toLowerCase()}_\${parts.join('_')}\`;
+    return `${method.toLowerCase()}_${parts.join('_')}`;
   }
 
   private pythonReturnType(ep: APIEndpoint): string {
@@ -603,7 +603,7 @@ class TestAsyncMathisonClient:
     const params: string[] = [];
 
     if (ep.pathParams && ep.pathParams.length > 0) {
-      params.push(...ep.pathParams.map(p => \`, \${p}: str\`));
+      params.push(...ep.pathParams.map(p => `, ${p}: str`));
     }
 
     if (ep.path === '/memory/nodes' && ep.method === 'POST') {
@@ -626,35 +626,35 @@ class TestAsyncMathisonClient:
   private pythonBody(ep: APIEndpoint): string {
     if (ep.method === 'GET') {
       if (ep.path === '/memory/search') {
-        return \`
+        return `
         data = self._get("/memory/search", params={"q": query, "limit": limit})
-        return SearchResponse(**data)\`;
+        return SearchResponse(**data)`;
       }
       if (ep.path.includes('{id}')) {
         const returnType = this.pythonReturnType(ep);
-        return \`
-        data = self._get(f"/\${ep.path.replace('{id}', '{id}').split('/').slice(1).join('/')}")
-        return \${returnType}(**data)\`;
+        return `
+        data = self._get(f"/${ep.path.replace('{id}', '{id}').split('/').slice(1).join('/')}")
+        return ${returnType}(**data)`;
       }
       if (ep.path === '/jobs/status') {
-        return \`
+        return `
         params = {}
         if job_id:
             params["job_id"] = job_id
         if limit:
             params["limit"] = limit
         data = self._get("/jobs/status", params=params if params else None)
-        return JobResult(**data) if "job_id" in data else data\`;
+        return JobResult(**data) if "job_id" in data else data`;
       }
       const returnType = this.pythonReturnType(ep);
-      return \`
-        data = self._get("\${ep.path}")
-        return \${returnType}(**data)\`;
+      return `
+        data = self._get("${ep.path}")
+        return ${returnType}(**data)`;
     }
 
     if (ep.method === 'POST') {
       if (ep.path === '/memory/nodes') {
-        return \`
+        return `
         payload = {"idempotency_key": idempotency_key, "type": type}
         if data:
             payload["data"] = data
@@ -663,38 +663,38 @@ class TestAsyncMathisonClient:
         if id:
             payload["id"] = id
         data = self._post("/memory/nodes", json=payload)
-        return CreateNodeResponse(**data)\`;
+        return CreateNodeResponse(**data)`;
       }
       if (ep.path === '/memory/edges') {
-        return \`
+        return `
         payload = {"idempotency_key": idempotency_key, "from": from_node, "to": to_node, "type": type}
         if metadata:
             payload["metadata"] = metadata
         data = self._post("/memory/edges", json=payload)
-        return CreateEdgeResponse(**data)\`;
+        return CreateEdgeResponse(**data)`;
       }
       if (ep.path === '/oi/interpret') {
-        return \`
+        return `
         payload = {"text": text}
         if limit:
             payload["limit"] = limit
         data = self._post("/oi/interpret", json=payload)
-        return InterpretResponse(**data)\`;
+        return InterpretResponse(**data)`;
       }
       if (ep.path === '/jobs/run') {
-        return \`
+        return `
         payload = {"jobType": job_type}
         if inputs:
             payload["inputs"] = inputs
         if policy_id:
             payload["policyId"] = policy_id
         data = self._post("/jobs/run", json=payload)
-        return JobResult(**data)\`;
+        return JobResult(**data)`;
       }
     }
 
-    return \`
-        return self._\${ep.method.toLowerCase()}("\${ep.path}")\`;
+    return `
+        return self._${ep.method.toLowerCase()}("${ep.path}")`;
   }
 
   private async generateRust(outputPath: string): Promise<void> {

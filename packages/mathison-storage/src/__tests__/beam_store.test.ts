@@ -8,7 +8,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 import {
   BeamStore,
-  SQLiteBeamStore,
   Beam,
   SELF_ROOT_ID,
   bootMathisonIdentity,
@@ -16,9 +15,28 @@ import {
   applyIntentGoverned,
 } from '../beam_store';
 
+function sqliteAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Database = require('better-sqlite3');
+    // Try to actually create a database to verify bindings are available
+    const testDb = new Database(':memory:');
+    testDb.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const REQUIRE_SQLITE = process.env.MATHISON_REQUIRE_SQLITE === '1';
+
 function nowMs(): number {
   return Date.now();
 }
+
+const runTests = () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { SQLiteBeamStore } = require('../beam_store');
 
 describe('BeamStore Conformance Tests', () => {
   let store: BeamStore;
@@ -292,3 +310,21 @@ describe('BeamStore Conformance Tests', () => {
     });
   });
 });
+};
+
+// Conditional test execution based on SQLite availability
+if (!sqliteAvailable()) {
+  if (REQUIRE_SQLITE) {
+    describe('BeamStore Conformance Tests', () => {
+      it('SQLite required but bindings not available', () => {
+        throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+      });
+    });
+  } else {
+    describe.skip('BeamStore Conformance Tests (skipped: better-sqlite3 bindings not available)', () => {
+      it.skip('placeholder', () => {});
+    });
+  }
+} else {
+  runTests();
+}

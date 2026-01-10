@@ -56,6 +56,7 @@ export interface StorageAdapter {
 
 /**
  * FileStorageAdapter - File-based storage backend
+ * P0.2: Requires governance capability token to prevent storage bypass
  */
 export class FileStorageAdapter implements StorageAdapter {
   private checkpointStore: FileCheckpointStore;
@@ -65,7 +66,14 @@ export class FileStorageAdapter implements StorageAdapter {
   private initialized = false;
   private closed = false;
 
-  constructor(path: string) {
+  constructor(
+    path: string,
+    governanceToken?: import('./storage-seal').GovernanceCapabilityToken
+  ) {
+    // P0.2: Validate governance capability before constructing
+    const { assertGovernanceCapability } = require('./storage-seal');
+    assertGovernanceCapability(governanceToken);
+
     this.checkpointStore = new FileCheckpointStore(path);
     this.receiptStore = new FileReceiptStore(path);
     this.graphStore = new FileGraphStore(path);
@@ -134,6 +142,7 @@ export class FileStorageAdapter implements StorageAdapter {
 
 /**
  * SqliteStorageAdapter - SQLite-based storage backend
+ * P0.2: Requires governance capability token to prevent storage bypass
  */
 export class SqliteStorageAdapter implements StorageAdapter {
   private checkpointStore: SQLiteCheckpointStore;
@@ -143,7 +152,14 @@ export class SqliteStorageAdapter implements StorageAdapter {
   private initialized = false;
   private closed = false;
 
-  constructor(path: string) {
+  constructor(
+    path: string,
+    governanceToken?: import('./storage-seal').GovernanceCapabilityToken
+  ) {
+    // P0.2: Validate governance capability before constructing
+    const { assertGovernanceCapability } = require('./storage-seal');
+    assertGovernanceCapability(governanceToken);
+
     this.checkpointStore = new SQLiteCheckpointStore(path);
     this.receiptStore = new SQLiteReceiptStore(path);
     this.graphStore = new SQLiteGraphStore(path);
@@ -226,15 +242,16 @@ export function makeStorageAdapterFromEnv(
   governanceToken?: import('./storage-seal').GovernanceCapabilityToken
 ): StorageAdapter {
   // P0.2: Check governance capability before creating adapter
+  // Note: Token is checked again in adapter constructors for defense in depth
   const { assertGovernanceCapability } = require('./storage-seal');
   assertGovernanceCapability(governanceToken);
 
   const config = loadStoreConfigFromEnv(env);
 
   if (config.backend === 'FILE') {
-    return new FileStorageAdapter(config.path);
+    return new FileStorageAdapter(config.path, governanceToken);
   } else if (config.backend === 'SQLITE') {
-    return new SqliteStorageAdapter(config.path);
+    return new SqliteStorageAdapter(config.path, governanceToken);
   } else {
     // TypeScript exhaustiveness check (should never reach here)
     const _exhaustive: never = config.backend;

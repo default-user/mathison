@@ -103,23 +103,33 @@ NORMAL → DEFENSIVE: transient failures, rate limits, resource exhaustion
 
 ## Remaining Work (P2)
 
-### P2.1: gRPC Parity ✅ Complete + Security Hardening
-- **Status**: Full P0 parity + streaming + security fixes
+### P2.1: gRPC Parity ✅ Complete + Security Hardening + Streaming Governance Parity
+- **Status**: Full P0 parity + streaming with FULL governance enforcement + security fixes
 - **Implemented**:
-  - GovernanceProof generation, capability tokens, receipt generation via ActionGate
-  - Server streaming (StreamJobStatus, SearchMemory) with bounded limits
+  - GovernanceProof generation (FIXED: now passes request object instead of hash string)
+  - Capability tokens, receipt generation via ActionGate
+  - Server streaming (StreamJobStatus, SearchMemory) with FULL governance parity:
+    - ✅ Heartbeat fail-closed check at stream start
+    - ✅ CIF ingress once at stream start
+    - ✅ CIF egress per streamed event (BEFORE serialization)
+    - ✅ CDI action check at stream start
+    - ✅ CDI output check per streamed event (fail-closed on violation)
+    - ✅ GovernanceProof generation (stream start + handler + completion)
+    - ✅ Receipts for stream lifecycle (STREAM_START + STREAM_COMPLETE via ActionGate)
+    - ✅ Bounded limits (max duration 60s, max events 100, max payload via CIF)
+    - ✅ Action ID validation against canonical registry
+  - Storage sealing: concrete adapter constructors now require governance token (prevents direct bypass)
   - Security fixes: ATTACK 6, 7, 10, 11, 12
-- **Files**: `grpc/server.ts` (complete governance pipeline + receipts + streaming)
+- **Files**: `grpc/server.ts`, `storage-adapter.ts` (governance pipeline + streaming + sealing)
 - **Details**:
   - All RPC calls generate GovernanceProof with stage hashing
   - Write operations (RunJob, CreateMemoryNode) use ActionGate.executeSideEffect
   - Receipts generated and returned in responses (receipt_id field)
   - Defense in depth: withGovernance pipeline + ActionGate CDI checks
-  - Streaming endpoints bounded (max 60s duration, 100 events)
-  - CIF egress checks applied per stream event
+  - Streaming endpoints fully governed (same pipeline as unary, but per-event output checks)
   - **ATTACK 6 FIX**: Node ID collision prevention in memory writes
   - **ATTACK 7 FIX**: CIF egress size check BEFORE serialization (timing attack prevention)
-  - **ATTACK 10 FIX**: Storage seal hardened with cryptographic tokens (not Symbol.for)
+  - **ATTACK 10 FIX**: Storage seal hardened with cryptographic tokens (not Symbol.for) + constructor enforcement
   - **ATTACK 11 FIX**: Anti-hive indirect coordination detection (payload inspection)
   - **ATTACK 12 FIX**: Consent anchor priority (anchor stop overrides all)
 

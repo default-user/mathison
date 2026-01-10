@@ -200,4 +200,50 @@ describe('Storage Seal - P0.2', () => {
       expect(verifyGovernanceCapability(shortToken)).toBe(false);
     });
   });
+
+  describe('Direct adapter construction bypass prevention', () => {
+    it('should block FileStorageAdapter construction after sealing without token', () => {
+      sealStorage();
+
+      expect(() => {
+        const { FileStorageAdapter } = require('../storage-adapter');
+        new FileStorageAdapter('/tmp/test');
+      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+    });
+
+    it('should block SqliteStorageAdapter construction after sealing without token', () => {
+      sealStorage();
+
+      expect(() => {
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        new SqliteStorageAdapter('/tmp/test.db');
+      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+    });
+
+    it('should allow FileStorageAdapter construction after sealing with valid token', () => {
+      const token = sealStorage();
+
+      expect(() => {
+        const { FileStorageAdapter } = require('../storage-adapter');
+        new FileStorageAdapter('/tmp/test', token);
+      }).not.toThrow();
+    });
+
+    it('should allow SqliteStorageAdapter construction after sealing with valid token', () => {
+      const token = sealStorage();
+
+      expect(() => {
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        new SqliteStorageAdapter('/tmp/test.db', token);
+      }).not.toThrow();
+    });
+
+    it('should allow adapter construction before sealing (pre-boot phase)', () => {
+      expect(() => {
+        const { FileStorageAdapter, SqliteStorageAdapter } = require('../storage-adapter');
+        new FileStorageAdapter('/tmp/test');
+        new SqliteStorageAdapter('/tmp/test.db');
+      }).not.toThrow();
+    });
+  });
 });

@@ -4,7 +4,21 @@ import * as os from 'os';
 import { CheckpointStore, JobCheckpoint } from '../checkpoint_store';
 import { ReceiptStore, Receipt } from '../receipt_store';
 import { FileCheckpointStore, FileReceiptStore } from '../backends/file';
-import { SQLiteCheckpointStore, SQLiteReceiptStore } from '../backends/sqlite';
+
+function sqliteAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Database = require('better-sqlite3');
+    // Try to actually create a database to verify bindings are available
+    const testDb = new Database(':memory:');
+    testDb.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const REQUIRE_SQLITE = process.env.MATHISON_REQUIRE_SQLITE === '1';
 
 describe('Store Conformance Suite', () => {
   let tempDirs: string[] = [];
@@ -114,16 +128,28 @@ describe('Store Conformance Suite', () => {
       });
     });
 
-    it('SQLITE backend passes equivalence test', async () => {
-      await runEquivalenceTest('SQLITE', async () => {
-        const dir = makeTempDir();
-        const dbPath = path.join(dir, 'test.db');
-        return {
-          checkpointStore: new SQLiteCheckpointStore(dbPath),
-          receiptStore: new SQLiteReceiptStore(dbPath)
-        };
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE backend passes equivalence test', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE backend passes equivalence test (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE backend passes equivalence test', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SQLiteCheckpointStore, SQLiteReceiptStore } = require('../backends/sqlite');
+        await runEquivalenceTest('SQLITE', async () => {
+          const dir = makeTempDir();
+          const dbPath = path.join(dir, 'test.db');
+          return {
+            checkpointStore: new SQLiteCheckpointStore(dbPath),
+            receiptStore: new SQLiteReceiptStore(dbPath)
+          };
+        });
       });
-    });
+    }
   });
 
   describe('Rotation Test (FILE)', () => {
@@ -239,128 +265,152 @@ describe('Store Conformance Suite', () => {
       }
     });
 
-    it('SQLITE backend: resumes after crash', async () => {
-      const dir = makeTempDir();
-      const dbPath = path.join(dir, 'crash-test.db');
-
-      // Phase 1: Write partial checkpoint + receipts
-      {
-        const checkpointStore = new SQLiteCheckpointStore(dbPath);
-        const receiptStore = new SQLiteReceiptStore(dbPath);
-
-        await checkpointStore.init();
-        await receiptStore.init();
-
-        const checkpoint: JobCheckpoint = {
-          job_id: 'crash-job-sqlite',
-          job_type: 'test',
-          status: 'running',
-          current_stage: 'stage1',
-          completed_stages: []
-        };
-
-        await checkpointStore.create(checkpoint);
-
-        const receipt: Receipt = {
-          timestamp: new Date().toISOString(),
-          job_id: 'crash-job-sqlite',
-          stage: 'stage1',
-          action: 'start',
-          store_backend: 'SQLITE'
-        };
-
-        await receiptStore.append(receipt);
-        // Simulate crash (instances go out of scope)
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE backend: resumes after crash', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE backend: resumes after crash (skipped: better-sqlite3 bindings not available)', async () => {});
       }
+    } else {
+      it('SQLITE backend: resumes after crash', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SQLiteCheckpointStore, SQLiteReceiptStore } = require('../backends/sqlite');
+        const dir = makeTempDir();
+        const dbPath = path.join(dir, 'crash-test.db');
 
-      // Phase 2: Re-init new store instances and resume
-      {
-        const checkpointStore = new SQLiteCheckpointStore(dbPath);
-        const receiptStore = new SQLiteReceiptStore(dbPath);
+        // Phase 1: Write partial checkpoint + receipts
+        {
+          const checkpointStore = new SQLiteCheckpointStore(dbPath);
+          const receiptStore = new SQLiteReceiptStore(dbPath);
 
-        await checkpointStore.init();
-        await receiptStore.init();
+          await checkpointStore.init();
+          await receiptStore.init();
 
-        // Load checkpoint - should still be there
-        const loaded = await checkpointStore.load('crash-job-sqlite');
-        expect(loaded).not.toBeNull();
-        expect(loaded?.status).toBe('running');
+          const checkpoint: JobCheckpoint = {
+            job_id: 'crash-job-sqlite',
+            job_type: 'test',
+            status: 'running',
+            current_stage: 'stage1',
+            completed_stages: []
+          };
 
-        // Read receipts - should still be there
-        const receipts = await receiptStore.readByJob('crash-job-sqlite');
-        expect(receipts).toHaveLength(1);
+          await checkpointStore.create(checkpoint);
 
-        // Append new receipt (resume)
-        const receipt2: Receipt = {
-          timestamp: new Date().toISOString(),
-          job_id: 'crash-job-sqlite',
-          stage: 'stage1',
-          action: 'complete',
-          store_backend: 'SQLITE'
-        };
+          const receipt: Receipt = {
+            timestamp: new Date().toISOString(),
+            job_id: 'crash-job-sqlite',
+            stage: 'stage1',
+            action: 'start',
+            store_backend: 'SQLITE'
+          };
 
-        await receiptStore.append(receipt2);
+          await receiptStore.append(receipt);
+          // Simulate crash (instances go out of scope)
+        }
 
-        // Verify no duplicates
-        const allReceipts = await receiptStore.readByJob('crash-job-sqlite');
-        expect(allReceipts).toHaveLength(2);
-        expect(allReceipts[0].action).toBe('start');
-        expect(allReceipts[1].action).toBe('complete');
-      }
-    });
+        // Phase 2: Re-init new store instances and resume
+        {
+          const checkpointStore = new SQLiteCheckpointStore(dbPath);
+          const receiptStore = new SQLiteReceiptStore(dbPath);
+
+          await checkpointStore.init();
+          await receiptStore.init();
+
+          // Load checkpoint - should still be there
+          const loaded = await checkpointStore.load('crash-job-sqlite');
+          expect(loaded).not.toBeNull();
+          expect(loaded?.status).toBe('running');
+
+          // Read receipts - should still be there
+          const receipts = await receiptStore.readByJob('crash-job-sqlite');
+          expect(receipts).toHaveLength(1);
+
+          // Append new receipt (resume)
+          const receipt2: Receipt = {
+            timestamp: new Date().toISOString(),
+            job_id: 'crash-job-sqlite',
+            stage: 'stage1',
+            action: 'complete',
+            store_backend: 'SQLITE'
+          };
+
+          await receiptStore.append(receipt2);
+
+          // Verify no duplicates
+          const allReceipts = await receiptStore.readByJob('crash-job-sqlite');
+          expect(allReceipts).toHaveLength(2);
+          expect(allReceipts[0].action).toBe('start');
+          expect(allReceipts[1].action).toBe('complete');
+        }
+      });
+    }
   });
 
   describe('Append-Only Semantics (SQLITE)', () => {
-    it('receipts table is append-only (no UPDATE/DELETE in code)', async () => {
-      const dir = makeTempDir();
-      const dbPath = path.join(dir, 'append-only-test.db');
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('receipts table is append-only (no UPDATE/DELETE in code)', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('receipts table is append-only (no UPDATE/DELETE in code) (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('receipts table is append-only (no UPDATE/DELETE in code)', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SQLiteReceiptStore } = require('../backends/sqlite');
+        const dir = makeTempDir();
+        const dbPath = path.join(dir, 'append-only-test.db');
 
-      const receiptStore = new SQLiteReceiptStore(dbPath);
-      await receiptStore.init();
+        const receiptStore = new SQLiteReceiptStore(dbPath);
+        await receiptStore.init();
 
-      const receipt1: Receipt = {
-        timestamp: new Date().toISOString(),
-        job_id: 'append-test',
-        stage: 'stage1',
-        action: 'action1',
-        store_backend: 'SQLITE'
-      };
+        const receipt1: Receipt = {
+          timestamp: new Date().toISOString(),
+          job_id: 'append-test',
+          stage: 'stage1',
+          action: 'action1',
+          store_backend: 'SQLITE'
+        };
 
-      const receipt2: Receipt = {
-        timestamp: new Date().toISOString(),
-        job_id: 'append-test',
-        stage: 'stage2',
-        action: 'action2',
-        store_backend: 'SQLITE'
-      };
+        const receipt2: Receipt = {
+          timestamp: new Date().toISOString(),
+          job_id: 'append-test',
+          stage: 'stage2',
+          action: 'action2',
+          store_backend: 'SQLITE'
+        };
 
-      await receiptStore.append(receipt1);
-      await receiptStore.append(receipt2);
+        await receiptStore.append(receipt1);
+        await receiptStore.append(receipt2);
 
-      // Read all receipts
-      const receipts = await receiptStore.readByJob('append-test');
-      expect(receipts).toHaveLength(2);
+        // Read all receipts
+        const receipts = await receiptStore.readByJob('append-test');
+        expect(receipts).toHaveLength(2);
 
-      // Append another receipt - should not affect previous ones
-      const receipt3: Receipt = {
-        timestamp: new Date().toISOString(),
-        job_id: 'append-test',
-        stage: 'stage3',
-        action: 'action3',
-        store_backend: 'SQLITE'
-      };
+        // Append another receipt - should not affect previous ones
+        const receipt3: Receipt = {
+          timestamp: new Date().toISOString(),
+          job_id: 'append-test',
+          stage: 'stage3',
+          action: 'action3',
+          store_backend: 'SQLITE'
+        };
 
-      await receiptStore.append(receipt3);
+        await receiptStore.append(receipt3);
 
-      // Verify all receipts still present in order
-      const allReceipts = await receiptStore.readByJob('append-test');
-      expect(allReceipts).toHaveLength(3);
-      expect(allReceipts[0].action).toBe('action1');
-      expect(allReceipts[1].action).toBe('action2');
-      expect(allReceipts[2].action).toBe('action3');
+        // Verify all receipts still present in order
+        const allReceipts = await receiptStore.readByJob('append-test');
+        expect(allReceipts).toHaveLength(3);
+        expect(allReceipts[0].action).toBe('action1');
+        expect(allReceipts[1].action).toBe('action2');
+        expect(allReceipts[2].action).toBe('action3');
 
-      // Note: This test verifies the code path only uses INSERT.
-      // A deeper test would inspect SQL execution logs, but that's beyond scope.
-    });
+        // Note: This test verifies the code path only uses INSERT.
+        // A deeper test would inspect SQL execution logs, but that's beyond scope.
+      });
+    }
   });
 });

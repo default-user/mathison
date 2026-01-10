@@ -42,8 +42,16 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
 
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 make g++
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Rebuild native modules
+        run: pnpm rebuild better-sqlite3
 
       - name: Build all packages
         run: pnpm -r build
@@ -54,6 +62,8 @@ jobs:
           # Set test environment
           NODE_ENV: test
           MATHISON_ENV: test
+          # Require SQLite bindings in CI
+          MATHISON_REQUIRE_SQLITE: "1"
 
       - name: Verify supply chain
         run: |

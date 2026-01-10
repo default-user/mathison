@@ -1,11 +1,14 @@
 /**
  * P3-C: Minimal job executor using ActionGate
  * All side effects go through ActionGate (structurally enforced)
+ *
+ * P0.4: Enforces maxConcurrentJobs limit for DoS resistance
  */
 
 import { ActionGate } from '../action-gate';
 import { JobCheckpoint } from 'mathison-storage';
 import { randomUUID } from 'crypto';
+import { GovernanceReasonCode } from '../action-gate/reason-codes';
 
 export interface JobRequest {
   jobType: string;
@@ -23,17 +26,107 @@ export interface JobResult {
   error?: string;
   genome_id?: string;
   genome_version?: string;
+  reason_code?: string;  // P0.4: Reason code for denials
+}
+
+/**
+ * P0.4: Simple semaphore for concurrency control
+ * Provides deterministic denial when limit is reached (fail-closed)
+ */
+class ConcurrencySemaphore {
+  private currentCount: number = 0;
+  private maxCount: number;
+  private perActorCounts: Map<string, number> = new Map();
+  private maxPerActor: number;
+
+  constructor(maxCount: number, maxPerActor?: number) {
+    this.maxCount = maxCount;
+    this.maxPerActor = maxPerActor ?? Math.ceil(maxCount / 4); // Default: 25% of total limit per actor
+  }
+
+  /**
+   * Try to acquire a slot for the given actor
+   * Returns true if acquired, false if limit reached
+   */
+  tryAcquire(actor: string): { acquired: boolean; reason?: string } {
+    // Check global limit
+    if (this.currentCount >= this.maxCount) {
+      return {
+        acquired: false,
+        reason: `Global concurrency limit reached (${this.currentCount}/${this.maxCount})`
+      };
+    }
+
+    // Check per-actor limit
+    const actorCount = this.perActorCounts.get(actor) ?? 0;
+    if (actorCount >= this.maxPerActor) {
+      return {
+        acquired: false,
+        reason: `Per-actor concurrency limit reached (${actorCount}/${this.maxPerActor})`
+      };
+    }
+
+    // Acquire slot
+    this.currentCount++;
+    this.perActorCounts.set(actor, actorCount + 1);
+    return { acquired: true };
+  }
+
+  /**
+   * Release a slot for the given actor
+   */
+  release(actor: string): void {
+    if (this.currentCount > 0) {
+      this.currentCount--;
+    }
+
+    const actorCount = this.perActorCounts.get(actor) ?? 0;
+    if (actorCount > 0) {
+      this.perActorCounts.set(actor, actorCount - 1);
+    }
+  }
+
+  /**
+   * Get current status
+   */
+  getStatus(): { current: number; max: number; perActor: Record<string, number> } {
+    return {
+      current: this.currentCount,
+      max: this.maxCount,
+      perActor: Object.fromEntries(this.perActorCounts)
+    };
+  }
 }
 
 export class JobExecutor {
   private actionGate: ActionGate;
   private jobTimeout: number; // milliseconds
   private maxConcurrentJobs: number;
+  private concurrencySemaphore: ConcurrencySemaphore;
 
-  constructor(actionGate: ActionGate, options?: { jobTimeout?: number; maxConcurrentJobs?: number }) {
+  constructor(actionGate: ActionGate, options?: {
+    jobTimeout?: number;
+    maxConcurrentJobs?: number;
+    maxPerActorJobs?: number;
+  }) {
     this.actionGate = actionGate;
     this.jobTimeout = options?.jobTimeout ?? 30000; // 30s default
     this.maxConcurrentJobs = options?.maxConcurrentJobs ?? 100;
+
+    // P0.4: Initialize concurrency semaphore
+    this.concurrencySemaphore = new ConcurrencySemaphore(
+      this.maxConcurrentJobs,
+      options?.maxPerActorJobs
+    );
+
+    console.log(`📊 JobExecutor: maxConcurrentJobs=${this.maxConcurrentJobs}, timeout=${this.jobTimeout}ms`);
+  }
+
+  /**
+   * Get concurrency status (for monitoring)
+   */
+  getConcurrencyStatus(): { current: number; max: number; perActor: Record<string, number> } {
+    return this.concurrencySemaphore.getStatus();
   }
 
   /**
@@ -50,10 +143,43 @@ export class JobExecutor {
 
   /**
    * Run a new job (or resume existing if jobId provided)
+   * P0.4: Enforces concurrency limit (fail-closed denial when limit reached)
    */
   async runJob(actor: string, request: JobRequest, genomeId?: string, genomeVersion?: string): Promise<JobResult> {
     const jobId = request.jobId ?? `job-${randomUUID()}`;
 
+    // P0.4: Concurrency enforcement (fail-closed)
+    const acquireResult = this.concurrencySemaphore.tryAcquire(actor);
+    if (!acquireResult.acquired) {
+      return {
+        job_id: jobId,
+        status: 'error',
+        resumable: true,  // Client can retry later
+        error: acquireResult.reason,
+        reason_code: 'JOB_CONCURRENCY_LIMIT',
+        genome_id: genomeId,
+        genome_version: genomeVersion
+      };
+    }
+
+    // Ensure we release the slot when done (even on error)
+    try {
+      return await this.runJobInternal(actor, request, jobId, genomeId, genomeVersion);
+    } finally {
+      this.concurrencySemaphore.release(actor);
+    }
+  }
+
+  /**
+   * Internal job execution (after concurrency slot acquired)
+   */
+  private async runJobInternal(
+    actor: string,
+    request: JobRequest,
+    jobId: string,
+    genomeId?: string,
+    genomeVersion?: string
+  ): Promise<JobResult> {
     // Check if job already exists
     const existing = await this.actionGate.loadCheckpoint(jobId);
     if (existing && !request.jobId) {
@@ -68,7 +194,7 @@ export class JobExecutor {
 
     if (existing) {
       // Resume existing job
-      return this.resumeJob(actor, jobId, genomeId, genomeVersion);
+      return this.resumeJobInternal(actor, jobId, genomeId, genomeVersion);
     }
 
     // Create new job checkpoint via ActionGate
@@ -156,8 +282,35 @@ export class JobExecutor {
 
   /**
    * Resume an existing job from checkpoint
+   * P0.4: Enforces concurrency limit (fail-closed denial when limit reached)
    */
   async resumeJob(actor: string, jobId: string, genomeId?: string, genomeVersion?: string): Promise<JobResult> {
+    // P0.4: Concurrency enforcement (fail-closed)
+    const acquireResult = this.concurrencySemaphore.tryAcquire(actor);
+    if (!acquireResult.acquired) {
+      return {
+        job_id: jobId,
+        status: 'error',
+        resumable: true,  // Client can retry later
+        error: acquireResult.reason,
+        reason_code: 'JOB_CONCURRENCY_LIMIT',
+        genome_id: genomeId,
+        genome_version: genomeVersion
+      };
+    }
+
+    // Ensure we release the slot when done (even on error)
+    try {
+      return await this.resumeJobInternal(actor, jobId, genomeId, genomeVersion);
+    } finally {
+      this.concurrencySemaphore.release(actor);
+    }
+  }
+
+  /**
+   * Internal resume job execution (after concurrency slot acquired)
+   */
+  private async resumeJobInternal(actor: string, jobId: string, genomeId?: string, genomeVersion?: string): Promise<JobResult> {
     const checkpoint = await this.actionGate.loadCheckpoint(jobId);
 
     if (!checkpoint) {

@@ -55,9 +55,19 @@ export {
   mintToken,
   mintSingleUseToken,
   validateToken,
+  validateTokenWithLedger,
   assertTokenValid
 } from './capability-token';
 export type { CapabilityToken, TokenValidationResult } from './capability-token';
+
+// Re-export Token Ledger (P0.3 - replay protection)
+export {
+  initializeTokenLedger,
+  getTokenLedger,
+  isTokenLedgerInitialized,
+  shutdownTokenLedger,
+  TokenLedger
+} from './token-ledger';
 
 // Re-export Governance Integrity (P1.1)
 export {

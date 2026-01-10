@@ -31,6 +31,11 @@ describe('gRPC Governance Conformance', () => {
     // Create temp directory for FILE backend storage
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mathison-grpc-test-'));
 
+    // Set environment variables
+    process.env.MATHISON_STORE_BACKEND = 'FILE';
+    process.env.MATHISON_STORE_PATH = tempDir;
+    process.env.MATHISON_REPO_ROOT = '/home/user/mathison';
+
     // Initialize governance components
     cif = new CIF({
       maxRequestSize: 1024,
@@ -46,8 +51,6 @@ describe('gRPC Governance Conformance', () => {
     await memoryGraph.initialize();
 
     // Set up stores using FILE backend
-    process.env.MATHISON_STORE_BACKEND = 'FILE';
-    process.env.MATHISON_STORE_PATH = tempDir;
     const stores = makeStoresFromEnv();
 
     // Initialize stores

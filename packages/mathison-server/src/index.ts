@@ -5,7 +5,7 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry } from 'mathison-governance';
 import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
@@ -211,6 +211,10 @@ export class MathisonServer {
 
       // P0.3: Initialize token ledger for replay protection
       initializeTokenLedger();
+
+      // P1.7: Initialize boot key registry for audit trail resilience
+      initializeBootKeyRegistry();
+      getBootKeyRegistryManager().registerSession(id);
 
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();

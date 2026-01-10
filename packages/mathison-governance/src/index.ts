@@ -90,6 +90,21 @@ export {
 } from './posture';
 export type { PostureTransition, PosturePolicy } from './posture';
 
+// Re-export Boot Key Registry (P1.7 - audit trail resilience)
+export {
+  initializeBootKeyRegistry,
+  getBootKeyRegistryManager,
+  isBootKeyRegistryInitialized,
+  shutdownBootKeyRegistry,
+  loadBootKeyRegistry,
+  saveBootKeyRegistry,
+  createBootKeyRegistry,
+  registerBootSession,
+  isKnownSession,
+  validateSessionContinuity
+} from './boot-key-registry';
+export type { BootSession, BootKeyRegistry } from './boot-key-registry';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

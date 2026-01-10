@@ -6,7 +6,8 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
-import { CIF, CDI, GovernanceProofBuilder, GovernanceProof } from 'mathison-governance';
+import * as fs from 'fs';
+import { CIF, CDI, GovernanceProofBuilder, GovernanceProof, actionRegistry } from 'mathison-governance';
 import { ActionGate } from '../action-gate';
 import { MemoryGraph } from 'mathison-memory';
 import { Interpreter } from 'mathison-oi';
@@ -18,6 +19,59 @@ import { createHeartbeatInterceptor } from './interceptors/heartbeat-interceptor
 import { HeartbeatMonitor } from '../heartbeat';
 import { createHash, randomBytes } from 'crypto';
 import { KnowledgeIngestionGate } from '../knowledge/ingestion-gate';
+
+/**
+ * P0.4: Canonical Action IDs for gRPC handlers
+ * Must match HTTP route action IDs for consistency
+ */
+export const GRPC_ACTION_IDS = {
+  RUN_JOB: 'action:job:run',
+  GET_JOB_STATUS: 'action:job:status',
+  STREAM_JOB_STATUS: 'action:job:stream_status',
+  INTERPRET_TEXT: 'action:oi:interpret',
+  CREATE_MEMORY_NODE: 'action:memory:create',
+  READ_MEMORY_NODE: 'action:memory:read',
+  SEARCH_MEMORY: 'action:memory:search',
+  INGEST_KNOWLEDGE: 'action:knowledge:ingest'
+} as const;
+
+/**
+ * Resolve proto file path reliably
+ * Uses MATHISON_REPO_ROOT env var if set, otherwise finds repo root via __dirname
+ */
+function resolveProtoPath(): string {
+  // 1. Check explicit env var
+  if (process.env.MATHISON_REPO_ROOT) {
+    const protoPath = path.join(process.env.MATHISON_REPO_ROOT, 'proto', 'mathison.proto');
+    if (fs.existsSync(protoPath)) {
+      return protoPath;
+    }
+  }
+
+  // 2. Try relative to this file's location (packages/mathison-server/src/grpc -> repo root)
+  const fromDirname = path.resolve(__dirname, '..', '..', '..', '..', 'proto', 'mathison.proto');
+  if (fs.existsSync(fromDirname)) {
+    return fromDirname;
+  }
+
+  // 3. Try relative to dist location (packages/mathison-server/dist/grpc -> repo root)
+  const fromDist = path.resolve(__dirname, '..', '..', '..', '..', 'proto', 'mathison.proto');
+  if (fs.existsSync(fromDist)) {
+    return fromDist;
+  }
+
+  // 4. Fallback to cwd-based resolution (original behavior)
+  const cwdPath = path.join(process.cwd(), 'proto', 'mathison.proto');
+  if (fs.existsSync(cwdPath)) {
+    return cwdPath;
+  }
+
+  // 5. Fail-closed: no proto file found
+  throw new Error(
+    'PROTO_NOT_FOUND: Could not find mathison.proto. ' +
+    'Set MATHISON_REPO_ROOT env var to repo root, or run from repo root.'
+  );
+}
 
 export interface GRPCServerConfig {
   port: number;
@@ -38,17 +92,40 @@ export class MathisonGRPCServer {
   private server: grpc.Server;
   private config: GRPCServerConfig;
   private protoPath: string;
+  private started: boolean = false;
+  private boundPort: number | null = null;
 
   constructor(config: GRPCServerConfig) {
     this.config = config;
-    this.protoPath = path.join(process.cwd(), 'proto', 'mathison.proto');
+    // P0.1: Use reliable proto path resolution instead of cwd-dependent path
+    this.protoPath = resolveProtoPath();
 
     // Create server with interceptors (governance pipeline)
     this.server = new grpc.Server();
   }
 
+  /**
+   * Get the port the server is bound to (after start())
+   */
+  getPort(): number | null {
+    return this.boundPort;
+  }
+
+  /**
+   * Check if server is started
+   */
+  isStarted(): boolean {
+    return this.started;
+  }
+
   async start(): Promise<void> {
+    if (this.started) {
+      console.warn('⚠️  gRPC server already started');
+      return;
+    }
+
     console.log('🔌 Starting gRPC server with governance pipeline...');
+    console.log(`   Proto path: ${this.protoPath}`);
 
     // Load proto definition
     const packageDefinition = protoLoader.loadSync(this.protoPath, {
@@ -76,25 +153,43 @@ export class MathisonGRPCServer {
     // Add service with interceptors
     this.server.addService(proto.mathison.MathisonService.service, serviceImplementation);
 
-    // Bind and start
+    // P0.1: Properly await bindAsync completion using Promise wrapper
     const address = `${this.config.host}:${this.config.port}`;
-    this.server.bindAsync(
-      address,
-      grpc.ServerCredentials.createInsecure(),
-      (error, port) => {
-        if (error) {
-          console.error('❌ gRPC server bind failed:', error);
-          throw error;
+    await new Promise<void>((resolve, reject) => {
+      this.server.bindAsync(
+        address,
+        grpc.ServerCredentials.createInsecure(),
+        (error, port) => {
+          if (error) {
+            console.error('❌ gRPC server bind failed:', error);
+            reject(new Error(`GRPC_BIND_FAILED: ${error.message}`));
+            return;
+          }
+          this.boundPort = port;
+          console.log(`✅ gRPC server bound to ${address} (port ${port})`);
+          resolve();
         }
-        console.log(`✅ gRPC server listening on ${address} (port ${port})`);
-      }
-    );
+      );
+    });
+
+    // P0.1: Actually start the server after successful bind
+    // In @grpc/grpc-js, server.start() is deprecated but we need to ensure the server is ready
+    // The server is ready to accept connections after bindAsync succeeds
+    this.started = true;
+    console.log(`✅ gRPC server listening on ${address}`);
   }
 
   async stop(): Promise<void> {
+    if (!this.started) {
+      console.warn('⚠️  gRPC server not started');
+      return;
+    }
+
     console.log('🛑 Stopping gRPC server...');
     return new Promise((resolve) => {
       this.server.tryShutdown(() => {
+        this.started = false;
+        this.boundPort = null;
         console.log('✅ gRPC server stopped');
         resolve();
       });
@@ -105,13 +200,25 @@ export class MathisonGRPCServer {
    * Governance pipeline wrapper for all RPC calls
    * Applies: Heartbeat -> CIF Ingress -> CDI Action Check -> Handler -> CDI Output -> CIF Egress
    * P0.1: Generates GovernanceProof for every request
+   * P0.4: Validates action_id against canonical registry
    */
   private async withGovernance<TRequest, TResponse>(
     call: grpc.ServerUnaryCall<TRequest, TResponse> | grpc.ServerWritableStream<TRequest, TResponse>,
     action: string,
-    actionId: string | undefined,  // P0.4: Canonical action ID
+    actionId: string,  // P0.4: Canonical action ID (now required)
     handler: (sanitizedRequest: TRequest, proof: GovernanceProofBuilder) => Promise<TResponse>
   ): Promise<TResponse> {
+    // P0.4: Validate action ID against registry (fail-closed if unregistered)
+    if (!actionRegistry.isRegistered(actionId)) {
+      const error: any = new Error(`UNREGISTERED_ACTION: Action ID "${actionId}" not in registry`);
+      error.code = grpc.status.PERMISSION_DENIED;
+      error.details = JSON.stringify({
+        reason_code: 'UNREGISTERED_ACTION',
+        action_id: actionId
+      });
+      throw error;
+    }
+
     // P0.1: Initialize governance proof
     const requestId = randomBytes(16).toString('hex');
     const requestHash = createHash('sha256')
@@ -255,7 +362,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'job_run', 'action:job:run', async (req, proof) => {
+      const response = await this.withGovernance(call, 'job_run', GRPC_ACTION_IDS.RUN_JOB, async (req, proof) => {
         if (!this.config.jobExecutor) {
           throw new Error('Job executor not initialized');
         }
@@ -330,7 +437,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'job_status', 'action:job:status', async (req, proof) => {
+      const response = await this.withGovernance(call, 'job_status', GRPC_ACTION_IDS.GET_JOB_STATUS, async (req, proof) => {
         if (!this.config.jobExecutor) {
           throw new Error('Job executor not initialized');
         }
@@ -398,7 +505,7 @@ export class MathisonGRPCServer {
       const actionInput = {
         actor: clientId,
         action: 'job_stream_status',
-        action_id: 'action:job:stream_status',
+        action_id: GRPC_ACTION_IDS.STREAM_JOB_STATUS,
         payload: ingressResult.sanitizedPayload,
         route: '/mathison.MathisonService/StreamJobStatus',
         method: 'gRPC'
@@ -501,7 +608,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'oi_interpret', 'action:oi:interpret', async (req, proof) => {
+      const response = await this.withGovernance(call, 'oi_interpret', GRPC_ACTION_IDS.INTERPRET_TEXT, async (req, proof) => {
         if (!this.config.interpreter) {
           throw new Error('OI interpreter not initialized');
         }
@@ -531,7 +638,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'memory_node_create', 'action:memory:create', async (req, proof) => {
+      const response = await this.withGovernance(call, 'memory_node_create', GRPC_ACTION_IDS.CREATE_MEMORY_NODE, async (req, proof) => {
         if (!this.config.memoryGraph) {
           throw new Error('Memory graph not initialized');
         }
@@ -601,7 +708,7 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'memory_read_node', 'action:read:memory', async (req, proof) => {
+      const response = await this.withGovernance(call, 'memory_read_node', GRPC_ACTION_IDS.READ_MEMORY_NODE, async (req, proof) => {
         if (!this.config.memoryGraph) {
           throw new Error('Memory graph not initialized');
         }
@@ -663,7 +770,7 @@ export class MathisonGRPCServer {
       const actionInput = {
         actor: clientId,
         action: 'memory_search',
-        action_id: 'action:read:memory',
+        action_id: GRPC_ACTION_IDS.SEARCH_MEMORY,
         payload: ingressResult.sanitizedPayload,
         route: '/mathison.MathisonService/SearchMemory',
         method: 'gRPC'
@@ -742,7 +849,7 @@ export class MathisonGRPCServer {
       await this.withGovernance(
         call,
         'knowledge_ingest',
-        'action:knowledge:ingest',
+        GRPC_ACTION_IDS.INGEST_KNOWLEDGE,
         async (sanitizedRequest, proof) => {
           // Fail-closed: require knowledge gate
           if (!this.config.knowledgeGate) {

@@ -60,6 +60,9 @@ export interface GovernanceConfig {
   treatyPath: string;
   treatyVersion: string;
   authority: string;
+  genomePath?: string;
+  storeBackend?: string;
+  storePath?: string;
   rules: Record<string, unknown>;
   consent?: ConsentConfig;
 }
@@ -162,9 +165,13 @@ export async function validateTreaty(configPath: string): Promise<{ treaty: Trea
 
 /**
  * Validate genome file exists, is readable, and signature valid
+ * Precedence: env MATHISON_GENOME_PATH > config.genomePath > fallback
  */
-export async function validateGenome(): Promise<{ genome: Genome | null; genomeId: string | null; error: PrerequisiteError | null }> {
-  const genomePathRaw = process.env.MATHISON_GENOME_PATH || './genomes/TOTK_ROOT_v1.0.0/genome.json';
+export async function validateGenome(config?: GovernanceConfig): Promise<{ genome: Genome | null; genomeId: string | null; error: PrerequisiteError | null }> {
+  // Apply precedence: env > config > fallback
+  const genomePathRaw = process.env.MATHISON_GENOME_PATH
+    || config?.genomePath
+    || './genomes/TOTK_ROOT_v1.0.0/genome.json';
   const isProduction = process.env.MATHISON_ENV === 'production';
   const verifyManifest = process.env.MATHISON_VERIFY_MANIFEST === 'true' || isProduction;
 
@@ -313,17 +320,19 @@ export async function validateConfig(configPath: string): Promise<{ config: Gove
 
 /**
  * Validate storage adapter configuration
+ * Precedence: env MATHISON_STORE_BACKEND > config.storeBackend, env MATHISON_STORE_PATH > config.storePath
  */
-export async function validateAdapter(): Promise<{ ok: boolean; error: PrerequisiteError | null }> {
-  const backend = process.env.MATHISON_STORE_BACKEND;
-  const storePath = process.env.MATHISON_STORE_PATH;
+export async function validateAdapter(config?: GovernanceConfig): Promise<{ ok: boolean; error: PrerequisiteError | null }> {
+  // Apply precedence: env > config > fail-closed (no hard fallback for adapter)
+  const backend = process.env.MATHISON_STORE_BACKEND || config?.storeBackend;
+  const storePath = process.env.MATHISON_STORE_PATH || config?.storePath;
 
   if (!backend) {
     return {
       ok: false,
       error: {
         code: PrerequisiteCode.ADAPTER_MISSING,
-        message: 'MATHISON_STORE_BACKEND environment variable not set',
+        message: 'Storage backend not configured (set MATHISON_STORE_BACKEND or config.storeBackend)',
         details: { required: 'FILE or SQLITE' }
       }
     };
@@ -345,7 +354,7 @@ export async function validateAdapter(): Promise<{ ok: boolean; error: Prerequis
       ok: false,
       error: {
         code: PrerequisiteCode.ADAPTER_MISSING,
-        message: 'MATHISON_STORE_PATH environment variable not set',
+        message: 'Storage path not configured (set MATHISON_STORE_PATH or config.storePath)',
         details: { backend }
       }
     };
@@ -362,7 +371,7 @@ export async function validateAllPrerequisites(configPath: string = './config/go
   const errors: PrerequisiteError[] = [];
   const warnings: string[] = [];
 
-  // 1. Validate config
+  // 1. Validate config first (required for subsequent validations)
   const { config, error: configError } = await validateConfig(configPath);
   if (configError) {
     errors.push(configError);
@@ -370,20 +379,20 @@ export async function validateAllPrerequisites(configPath: string = './config/go
     return { ok: false, errors, warnings };
   }
 
-  // 2. Validate treaty
+  // 2. Validate treaty (uses config for treaty path)
   const { treaty, error: treatyError } = await validateTreaty(configPath);
   if (treatyError) {
     errors.push(treatyError);
   }
 
-  // 3. Validate genome
-  const { genome, genomeId, error: genomeError } = await validateGenome();
+  // 3. Validate genome (uses config for genome path defaults)
+  const { genome, genomeId, error: genomeError } = await validateGenome(config ?? undefined);
   if (genomeError) {
     errors.push(genomeError);
   }
 
-  // 4. Validate adapter
-  const { ok: adapterOk, error: adapterError } = await validateAdapter();
+  // 4. Validate adapter (uses config for storage defaults)
+  const { ok: adapterOk, error: adapterError } = await validateAdapter(config ?? undefined);
   if (adapterError) {
     errors.push(adapterError);
   }
@@ -415,7 +424,7 @@ export async function loadPrerequisites(configPath: string = './config/governanc
     throw new Error(`Treaty validation failed: ${treatyResult.error?.message}`);
   }
 
-  const genomeResult = await validateGenome();
+  const genomeResult = await validateGenome(configResult.config);
   if (genomeResult.error || !genomeResult.genome || !genomeResult.genomeId) {
     throw new Error(`Genome validation failed: ${genomeResult.error?.message}`);
   }

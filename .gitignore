@@ -83,6 +83,10 @@ logs/
 # Demo/test data
 data/
 
+# Mathison runtime
+.mathison-store/
+.mathison/
+
 # OS
 .DS_Store
 Thumbs.db

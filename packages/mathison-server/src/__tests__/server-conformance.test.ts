@@ -90,12 +90,27 @@ describe('Phase 3 Server Conformance', () => {
   });
 
   describe('P3-A: Fail-Closed Boot', () => {
-    it('refuses to start if MATHISON_STORE_BACKEND missing', async () => {
+    it('uses config defaults when env vars not set', async () => {
+      // Clear env vars to force use of governance.json defaults
       delete process.env.MATHISON_STORE_BACKEND;
+      delete process.env.MATHISON_STORE_PATH;
 
       const server = new MathisonServer({ port: 0 });
 
-      await expect(server.start()).rejects.toThrow('MATHISON_STORE_BACKEND');
+      // Should succeed using config defaults (FILE backend, .mathison-store path)
+      await server.start();
+
+      const app = server.getApp();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/health'
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.status).toBe('healthy');
+
+      await server.stop();
     });
 
     it('refuses to start if MATHISON_STORE_BACKEND invalid', async () => {
@@ -104,14 +119,6 @@ describe('Phase 3 Server Conformance', () => {
       const server = new MathisonServer({ port: 0 });
 
       await expect(server.start()).rejects.toThrow();
-    });
-
-    it('refuses to start if MATHISON_STORE_PATH missing', async () => {
-      delete process.env.MATHISON_STORE_PATH;
-
-      const server = new MathisonServer({ port: 0 });
-
-      await expect(server.start()).rejects.toThrow('MATHISON_STORE_PATH');
     });
 
     it('starts successfully with valid config', async () => {

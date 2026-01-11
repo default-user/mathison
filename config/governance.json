@@ -2,6 +2,9 @@
   "treatyPath": "./docs/31-governance/tiriti.md",
   "treatyVersion": "1.0",
   "authority": "kaitiaki",
+  "genomePath": "./genomes/TOTK_ROOT_v1.0.0/genome.json",
+  "storeBackend": "FILE",
+  "storePath": "./.mathison-store",
   "rules": {
     "description": "Governance rules from Tiriti o te Kai v1.0",
     "version": "1.0",

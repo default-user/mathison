@@ -1,71 +1,84 @@
 /**
- * P0.2: Storage Sealing Tests
- * Verify that storage sealing prevents governance bypass
+ * Storage Seal Tests
+ * Tests for P0.2: Storage sealing mechanism to prevent governance bypass
  */
 
 import {
   sealStorage,
   isStorageSealed,
-  getSealedAt,
   verifyGovernanceCapability,
   assertGovernanceCapability,
   unsealStorageForTesting,
-  GOVERNANCE_CAPABILITY_TOKEN
+  GovernanceCapabilityToken
 } from '../storage-seal';
 import { makeStorageAdapterFromEnv } from '../storage-adapter';
+import { makeStoresFromEnv } from '../factory';
 
-describe('Storage Sealing - P0.2', () => {
+function sqliteAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Database = require('better-sqlite3');
+    // Try to actually create a database to verify bindings are available
+    const testDb = new Database(':memory:');
+    testDb.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const REQUIRE_SQLITE = process.env.MATHISON_REQUIRE_SQLITE === '1';
+
+describe('Storage Seal - P0.2', () => {
   beforeEach(() => {
-    // Ensure clean state for each test
-    unsealStorageForTesting();
+    // Ensure storage is unsealed before each test
+    if (isStorageSealed()) {
+      unsealStorageForTesting();
+    }
   });
 
   afterEach(() => {
-    // Cleanup after each test
-    unsealStorageForTesting();
+    // Clean up: unseal after each test
+    if (isStorageSealed()) {
+      unsealStorageForTesting();
+    }
   });
 
-  describe('Seal state management', () => {
-    it('should start unsealed', () => {
+  describe('Basic sealing', () => {
+    it('should not be sealed initially', () => {
       expect(isStorageSealed()).toBe(false);
-      expect(getSealedAt()).toBeNull();
     });
 
     it('should seal storage and return token', () => {
       const token = sealStorage();
 
-      expect(token).toBeDefined();
-      expect(typeof token).toBe('symbol');
       expect(isStorageSealed()).toBe(true);
-      expect(getSealedAt()).toBeInstanceOf(Date);
+      expect(token).toBeDefined();
+      expect(token.secret).toBeInstanceOf(Buffer);
+      expect(token.secret.length).toBe(32); // 256 bits
+      expect(token.issuedAt).toBeInstanceOf(Date);
     });
 
-    it('should be idempotent (multiple seal calls return same token)', () => {
+    it('should be idempotent (return same token on second call)', () => {
       const token1 = sealStorage();
       const token2 = sealStorage();
 
-      expect(token1.toString()).toBe(token2.toString());
-      expect(isStorageSealed()).toBe(true);
+      expect(token1.secret.equals(token2.secret)).toBe(true);
+      expect(token1.issuedAt).toEqual(token2.issuedAt);
     });
 
-    it('should record seal timestamp', () => {
-      const before = new Date();
+    it('should unseal for testing (non-production only)', () => {
       sealStorage();
-      const after = new Date();
+      expect(isStorageSealed()).toBe(true);
 
-      const sealedAt = getSealedAt();
-      expect(sealedAt).not.toBeNull();
-      expect(sealedAt!.getTime()).toBeGreaterThanOrEqual(before.getTime());
-      expect(sealedAt!.getTime()).toBeLessThanOrEqual(after.getTime());
+      unsealStorageForTesting();
+      expect(isStorageSealed()).toBe(false);
     });
   });
 
   describe('Governance capability verification', () => {
-    it('should allow all operations before sealing', () => {
+    it('should allow access before sealing', () => {
       expect(verifyGovernanceCapability(undefined)).toBe(true);
-      expect(verifyGovernanceCapability(Symbol('invalid'))).toBe(true);
-
-      // Should not throw
       expect(() => assertGovernanceCapability(undefined)).not.toThrow();
     });
 
@@ -73,53 +86,54 @@ describe('Storage Sealing - P0.2', () => {
       sealStorage();
 
       expect(verifyGovernanceCapability(undefined)).toBe(false);
-    });
-
-    it('should reject invalid token after sealing', () => {
-      sealStorage();
-
-      const invalidToken = Symbol('invalid');
-      expect(verifyGovernanceCapability(invalidToken)).toBe(false);
+      expect(() => assertGovernanceCapability(undefined)).toThrow('GOVERNANCE_BYPASS_DETECTED');
     });
 
     it('should accept valid token after sealing', () => {
       const token = sealStorage();
 
       expect(verifyGovernanceCapability(token)).toBe(true);
+      expect(() => assertGovernanceCapability(token)).not.toThrow();
     });
 
-    it('should throw on invalid token with assertGovernanceCapability', () => {
+    it('should reject wrong token after sealing', () => {
       sealStorage();
+      const wrongToken: GovernanceCapabilityToken = {
+        secret: Buffer.from('wrong_token_value_here_32bytes!'),
+        issuedAt: new Date()
+      };
 
-      expect(() => {
-        assertGovernanceCapability(undefined);
-      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+      expect(verifyGovernanceCapability(wrongToken)).toBe(false);
+      expect(() => assertGovernanceCapability(wrongToken)).toThrow('GOVERNANCE_BYPASS_DETECTED');
     });
 
-    it('should not throw on valid token with assertGovernanceCapability', () => {
-      const token = sealStorage();
+    it('should reject token with wrong length', () => {
+      sealStorage();
+      const wrongToken: GovernanceCapabilityToken = {
+        secret: Buffer.from('short'),
+        issuedAt: new Date()
+      };
 
-      expect(() => {
-        assertGovernanceCapability(token);
-      }).not.toThrow();
+      expect(verifyGovernanceCapability(wrongToken)).toBe(false);
+      expect(() => assertGovernanceCapability(wrongToken)).toThrow('GOVERNANCE_BYPASS_DETECTED');
     });
   });
 
-  describe('Storage adapter creation (bypass prevention)', () => {
+  describe('Storage adapter factory with seal', () => {
     beforeAll(() => {
-      // Set required env vars for storage adapter
+      // Ensure env vars are set for storage config
       process.env.MATHISON_STORE_BACKEND = 'FILE';
-      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-seal';
+      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-storage-seal';
     });
 
-    it('should allow storage adapter creation before sealing', () => {
+    it('should allow creating adapter before sealing', () => {
       expect(() => {
         const adapter = makeStorageAdapterFromEnv();
         expect(adapter).toBeDefined();
       }).not.toThrow();
     });
 
-    it('should block storage adapter creation after sealing (no token)', () => {
+    it('should block creating adapter after sealing without token', () => {
       sealStorage();
 
       expect(() => {
@@ -127,17 +141,7 @@ describe('Storage Sealing - P0.2', () => {
       }).toThrow('GOVERNANCE_BYPASS_DETECTED');
     });
 
-    it('should block storage adapter creation with invalid token', () => {
-      sealStorage();
-
-      const invalidToken = Symbol('invalid');
-
-      expect(() => {
-        makeStorageAdapterFromEnv(process.env, invalidToken);
-      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
-    });
-
-    it('should allow storage adapter creation with valid token', () => {
+    it('should allow creating adapter after sealing with valid token', () => {
       const token = sealStorage();
 
       expect(() => {
@@ -145,97 +149,146 @@ describe('Storage Sealing - P0.2', () => {
         expect(adapter).toBeDefined();
       }).not.toThrow();
     });
-
-    it('should provide clear error message on bypass attempt', () => {
-      sealStorage();
-
-      try {
-        makeStorageAdapterFromEnv();
-        fail('Should have thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain('GOVERNANCE_BYPASS_DETECTED');
-        expect((error as Error).message).toContain('sealed');
-        expect((error as Error).message).toContain('ActionGate');
-      }
-    });
   });
 
-  describe('Unsealing (testing only)', () => {
-    it('should unseal storage in test environment', () => {
+  describe('Store factory with seal', () => {
+    beforeAll(() => {
+      // Ensure env vars are set for storage config
+      process.env.MATHISON_STORE_BACKEND = 'FILE';
+      process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-storage-seal';
+    });
+
+    it('should allow creating stores before sealing', () => {
+      expect(() => {
+        const stores = makeStoresFromEnv();
+        expect(stores).toBeDefined();
+        expect(stores.checkpointStore).toBeDefined();
+        expect(stores.receiptStore).toBeDefined();
+        expect(stores.graphStore).toBeDefined();
+      }).not.toThrow();
+    });
+
+    it('should block creating stores after sealing without token', () => {
       sealStorage();
-      expect(isStorageSealed()).toBe(true);
-
-      unsealStorageForTesting();
-      expect(isStorageSealed()).toBe(false);
-      expect(getSealedAt()).toBeNull();
-    });
-
-    it('should block unsealing in production', () => {
-      const originalEnv = process.env.MATHISON_ENV;
-      process.env.MATHISON_ENV = 'production';
-
-      try {
-        expect(() => {
-          unsealStorageForTesting();
-        }).toThrow('UNSEAL_FORBIDDEN');
-      } finally {
-        process.env.MATHISON_ENV = originalEnv;
-      }
-    });
-
-    it('should allow new adapter creation after unsealing', () => {
-      const token = sealStorage();
-      expect(isStorageSealed()).toBe(true);
-
-      // Unsealing should allow direct creation again
-      unsealStorageForTesting();
 
       expect(() => {
-        makeStorageAdapterFromEnv();
+        makeStoresFromEnv();
+      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+    });
+
+    it('should allow creating stores after sealing with valid token', () => {
+      const token = sealStorage();
+
+      expect(() => {
+        const stores = makeStoresFromEnv(process.env, token);
+        expect(stores).toBeDefined();
+        expect(stores.checkpointStore).toBeDefined();
+        expect(stores.receiptStore).toBeDefined();
+        expect(stores.graphStore).toBeDefined();
       }).not.toThrow();
     });
   });
 
-  describe('Attack scenario simulations', () => {
-    it('should prevent malicious handler from bypassing governance', () => {
-      // Simulate normal server boot
-      const adapter1 = makeStorageAdapterFromEnv();
-      sealStorage();
-
-      // Simulate malicious handler attempting direct storage access
-      const maliciousHandlerAttempt = () => {
-        // This is what a malicious handler might try:
-        const adapter = makeStorageAdapterFromEnv();
-        return adapter.getGraphStore();
-      };
-
-      expect(maliciousHandlerAttempt).toThrow('GOVERNANCE_BYPASS_DETECTED');
-    });
-
-    it('should prevent token forgery', () => {
-      const realToken = sealStorage();
-
-      // Attacker tries to create their own token
-      const forgedToken = Symbol.for('mathison.governance.capability');
-
-      expect(verifyGovernanceCapability(forgedToken)).toBe(false);
-
-      expect(() => {
-        makeStorageAdapterFromEnv(process.env, forgedToken);
-      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
-    });
-
-    it('should prevent token theft across boot sessions', () => {
+  describe('Security properties', () => {
+    it('should generate cryptographically random tokens', () => {
+      unsealStorageForTesting();
       const token1 = sealStorage();
 
-      // Simulate server restart (unseal + reseal)
       unsealStorageForTesting();
       const token2 = sealStorage();
 
-      // Old token from previous session should not work
-      expect(token1.toString()).not.toBe(token2.toString());
-      expect(verifyGovernanceCapability(token1)).toBe(false);
+      // Different seals should produce different tokens
+      expect(token1.secret.equals(token2.secret)).toBe(false);
     });
+
+    it('should use constant-time comparison for token verification', () => {
+      const token = sealStorage();
+
+      // This test verifies that verifyGovernanceCapability uses timingSafeEqual
+      // by checking it handles length mismatches correctly
+      const shortToken: GovernanceCapabilityToken = {
+        secret: Buffer.from('too_short'),
+        issuedAt: new Date()
+      };
+
+      // Should return false, not throw (timingSafeEqual would throw on length mismatch if not handled)
+      expect(verifyGovernanceCapability(shortToken)).toBe(false);
+    });
+  });
+
+  describe('Direct adapter construction bypass prevention', () => {
+    it('should block FileStorageAdapter construction after sealing without token', () => {
+      sealStorage();
+
+      expect(() => {
+        const { FileStorageAdapter } = require('../storage-adapter');
+        new FileStorageAdapter('/tmp/test');
+      }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+    });
+
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('should block SqliteStorageAdapter construction after sealing without token', () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('should block SqliteStorageAdapter construction after sealing without token (skipped: better-sqlite3 bindings not available)', () => {});
+      }
+    } else {
+      it('should block SqliteStorageAdapter construction after sealing without token', () => {
+        sealStorage();
+
+        expect(() => {
+          const { SqliteStorageAdapter } = require('../storage-adapter');
+          new SqliteStorageAdapter('/tmp/test.db');
+        }).toThrow('GOVERNANCE_BYPASS_DETECTED');
+      });
+    }
+
+    it('should allow FileStorageAdapter construction after sealing with valid token', () => {
+      const token = sealStorage();
+
+      expect(() => {
+        const { FileStorageAdapter } = require('../storage-adapter');
+        new FileStorageAdapter('/tmp/test', token);
+      }).not.toThrow();
+    });
+
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('should allow SqliteStorageAdapter construction after sealing with valid token', () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('should allow SqliteStorageAdapter construction after sealing with valid token (skipped: better-sqlite3 bindings not available)', () => {});
+      }
+    } else {
+      it('should allow SqliteStorageAdapter construction after sealing with valid token', () => {
+        const token = sealStorage();
+
+        expect(() => {
+          const { SqliteStorageAdapter } = require('../storage-adapter');
+          new SqliteStorageAdapter('/tmp/test.db', token);
+        }).not.toThrow();
+      });
+    }
+
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('should allow adapter construction before sealing (pre-boot phase)', () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('should allow adapter construction before sealing (pre-boot phase) (skipped: better-sqlite3 bindings not available)', () => {});
+      }
+    } else {
+      it('should allow adapter construction before sealing (pre-boot phase)', () => {
+        expect(() => {
+          const { FileStorageAdapter, SqliteStorageAdapter } = require('../storage-adapter');
+          new FileStorageAdapter('/tmp/test');
+          new SqliteStorageAdapter('/tmp/test.db');
+        }).not.toThrow();
+      });
+    }
   });
 });

@@ -117,6 +117,142 @@ const ACTION_DEFINITIONS: ActionDefinition[] = [
     side_effect: false, // Side effects determined by nested action
     description: 'Handle HTTP request through governance pipeline',
     requires_governance: true
+  },
+
+  // Knowledge ingestion actions
+  {
+    id: 'action:knowledge:ingest',
+    risk_class: RiskClass.HIGH,
+    side_effect: true,
+    description: 'Ingest grounded knowledge claims via CPACK',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:read_claim',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Read knowledge claim by ID',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:read_conflicts',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: false,
+    description: 'Read knowledge conflicts',
+    requires_governance: true
+  },
+  {
+    id: 'action:knowledge:fetch_chunk',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Fetch chunk for verification',
+    requires_governance: true
+  },
+
+  // Job execution actions
+  {
+    id: 'action:job:run',
+    risk_class: RiskClass.HIGH,
+    side_effect: true,
+    description: 'Run a new job or execute job stages',
+    requires_governance: true
+  },
+  {
+    id: 'action:job:status',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Get job status or list jobs',
+    requires_governance: true
+  },
+  {
+    id: 'action:job:resume',
+    risk_class: RiskClass.HIGH,
+    side_effect: true,
+    description: 'Resume a paused or failed job',
+    requires_governance: true
+  },
+  {
+    id: 'action:job:stream_status',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Stream job status updates (gRPC streaming)',
+    requires_governance: true
+  },
+
+  // OI interpretation actions
+  {
+    id: 'action:oi:interpret',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: false,
+    description: 'Interpret text using OI',
+    requires_governance: true
+  },
+
+  // Memory actions
+  {
+    id: 'action:memory:create',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: true,
+    description: 'Create a memory node',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:read',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Read a memory node by ID',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:search',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Search memory graph',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:create_edge',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: true,
+    description: 'Create a memory edge',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:create_hyperedge',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: true,
+    description: 'Create a memory hyperedge',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:update',
+    risk_class: RiskClass.MEDIUM,
+    side_effect: true,
+    description: 'Update a memory node',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:read_edges',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Read edges for a memory node',
+    requires_governance: true
+  },
+  {
+    id: 'action:memory:read_hyperedges',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Read hyperedges for a memory node',
+    requires_governance: true
+  },
+
+  // Health check action
+  {
+    id: 'action:health:check',
+    risk_class: RiskClass.LOW,
+    side_effect: false,
+    description: 'Health check endpoint',
+    requires_governance: true
   }
 ];
 

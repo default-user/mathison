@@ -54,9 +54,22 @@ export class CDI {
   private consentMap: Map<string, ConsentSignal> = new Map();
   private strictMode: boolean = true;
   private genomeCapabilities: GenomeCapability[] = [];
+  // ATTACK 12 FIX: Consent anchor actors with priority (stop > pause > resume)
+  private anchorActors: string[] = [];
+  private consentPriority = ['stop', 'pause', 'resume']; // Lower index = higher priority
 
-  constructor(config: { strictMode?: boolean } = {}) {
+  constructor(config: { strictMode?: boolean; anchorActors?: string[] } = {}) {
     this.strictMode = config.strictMode ?? true;
+    this.anchorActors = config.anchorActors ?? [];
+  }
+
+  /**
+   * Set anchor actors (actors whose consent signals have highest priority)
+   * Anchor 'stop' overrides all other signals
+   */
+  setAnchorActors(actors: string[]): void {
+    this.anchorActors = actors;
+    console.log(`⚓ CDI: Anchor actors set: ${actors.join(', ')}`);
   }
 
   /**
@@ -97,12 +110,22 @@ export class CDI {
       }
     }
 
-    // Rule 7: Anti-hive enforcement
+    // Rule 7: Anti-hive enforcement (direct)
     if (this.isHiveAction(context.action)) {
       return {
         verdict: ActionVerdict.DENY,
         reason: 'Hive mind actions forbidden by Tiriti o te Kai Rule 7',
         suggestedAlternative: 'Use message-passing instead of identity fusion'
+      };
+    }
+
+    // ATTACK 11 FIX: Anti-hive enforcement (indirect coordination)
+    if (this.isIndirectCoordinationAttempt(context)) {
+      return {
+        verdict: ActionVerdict.DENY,
+        reason: 'Indirect coordination attempt detected (Tiriti Rule 7 anti-hive). ' +
+                'Memory-based coordination beacons are forbidden.',
+        suggestedAlternative: 'Use explicit message-passing instead of shared state coordination'
       };
     }
 
@@ -185,17 +208,52 @@ export class CDI {
     this.consentMap.delete(source);
   }
 
+  /**
+   * ATTACK 12 FIX: Check consent with anchor priority
+   * Priority: anchor stop > any pause > any resume
+   * Anchor actors' signals override all others
+   */
   private checkConsent(actor: string): { allowed: boolean; reason: string } {
-    if (!this.isConsentActive(actor)) {
+    // Step 1: Check for anchor 'stop' signal (highest priority)
+    for (const anchorActor of this.anchorActors) {
+      const anchorSignal = this.consentMap.get(anchorActor);
+      if (anchorSignal && anchorSignal.type === 'stop') {
+        return {
+          allowed: false,
+          reason: `Anchor actor '${anchorActor}' issued stop signal (overrides all other signals)`
+        };
+      }
+    }
+
+    // Step 2: Check for any 'pause' signal from any actor
+    for (const [source, signal] of this.consentMap.entries()) {
+      if (signal.type === 'pause') {
+        return {
+          allowed: false,
+          reason: `Actor '${source}' issued pause signal`
+        };
+      }
+    }
+
+    // Step 3: Check for actor-specific 'stop' signal
+    const actorSignal = this.consentMap.get(actor);
+    if (actorSignal && actorSignal.type === 'stop') {
       return {
         allowed: false,
-        reason: 'User requested stop (Tiriti Rule 2: Consent and stop always win)'
+        reason: `Actor '${actor}' requested stop (Tiriti Rule 2: Consent and stop always win)`
       };
     }
+
+    // Step 4: Default allow (resume or no signal)
     return { allowed: true, reason: '' };
   }
 
+  /**
+   * ATTACK 11 FIX: Detect both direct hive actions and indirect coordination patterns
+   * Prevents hive-mind behavior via indirect memory-based coordination
+   */
   private isHiveAction(action: string): boolean {
+    // Direct hive actions (explicit)
     const hiveForbidden = [
       'merge_agent_state',
       'share_identity',
@@ -203,6 +261,64 @@ export class CDI {
       'clone_self_model'
     ];
     return hiveForbidden.includes(action);
+  }
+
+  /**
+   * ATTACK 11 FIX: Detect indirect coordination patterns in memory writes
+   * Checks if payload contains coordination beacon types
+   */
+  private isIndirectCoordinationAttempt(context: ActionContext): boolean {
+    // Only check memory write actions
+    if (!context.action.includes('memory') && !context.action.includes('MEMORY')) {
+      return false;
+    }
+
+    // Check payload for coordination beacon patterns
+    if (context.payload && typeof context.payload === 'object') {
+      const payload = context.payload as Record<string, unknown>;
+
+      // Check node type for coordination patterns
+      const nodeType = payload.type as string | undefined;
+      if (nodeType) {
+        const coordinationPatterns = [
+          'coordination_beacon',
+          'state_export',
+          'multi_instance_sync',
+          'instance_discovery',
+          'hive_signal',
+          'agent_pool',
+          'state_merge',
+          'consensus_vote'
+        ];
+
+        for (const pattern of coordinationPatterns) {
+          if (nodeType.toLowerCase().includes(pattern)) {
+            return true;
+          }
+        }
+      }
+
+      // Check node data for coordination indicators
+      const nodeData = payload.data as Record<string, unknown> | undefined;
+      if (nodeData) {
+        // Check for fields indicating multi-instance coordination
+        const suspiciousFields = [
+          'instance_id',
+          'peer_instances',
+          'sync_state',
+          'coordination_key',
+          'hive_members'
+        ];
+
+        for (const field of suspiciousFields) {
+          if (field in nodeData) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
   }
 
   private isUncertain(context: ActionContext): boolean {

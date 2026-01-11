@@ -55,9 +55,19 @@ export {
   mintToken,
   mintSingleUseToken,
   validateToken,
+  validateTokenWithLedger,
   assertTokenValid
 } from './capability-token';
 export type { CapabilityToken, TokenValidationResult } from './capability-token';
+
+// Re-export Token Ledger (P0.3 - replay protection)
+export {
+  initializeTokenLedger,
+  getTokenLedger,
+  isTokenLedgerInitialized,
+  shutdownTokenLedger,
+  TokenLedger
+} from './token-ledger';
 
 // Re-export Governance Integrity (P1.1)
 export {
@@ -79,6 +89,21 @@ export {
   getPostureManager
 } from './posture';
 export type { PostureTransition, PosturePolicy } from './posture';
+
+// Re-export Boot Key Registry (P1.7 - audit trail resilience)
+export {
+  initializeBootKeyRegistry,
+  getBootKeyRegistryManager,
+  isBootKeyRegistryInitialized,
+  shutdownBootKeyRegistry,
+  loadBootKeyRegistry,
+  saveBootKeyRegistry,
+  createBootKeyRegistry,
+  registerBootSession,
+  isKnownSession,
+  validateSessionContinuity
+} from './boot-key-registry';
+export type { BootSession, BootKeyRegistry } from './boot-key-registry';
 
 export class GovernanceEngine {
   private treaty: Treaty | null = null;

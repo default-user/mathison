@@ -266,3 +266,64 @@ export function assertTokenValid(
 
   return token;
 }
+
+/**
+ * P0.3: Validate token with server-side replay protection via TokenLedger
+ *
+ * This is the PREFERRED validation method for enforced single-use tokens.
+ * It performs all standard validation AND records the token as spent in the ledger.
+ *
+ * @param token - The capability token to validate
+ * @param options - Validation options
+ * @returns Validation result with replay protection
+ */
+export function validateTokenWithLedger(
+  token: CapabilityToken,
+  options?: {
+    expected_action_id?: string;
+    expected_actor?: string;
+    expected_request_hash?: string;
+  }
+): TokenValidationResult {
+  // Import dynamically to avoid circular dependency at module load time
+  const { getTokenLedger, isTokenLedgerInitialized } = require('./token-ledger');
+
+  const errors: string[] = [];
+
+  // 1. Perform standard validation (without incrementing use_count - ledger handles this)
+  const standardValidation = validateToken(token, {
+    expected_action_id: options?.expected_action_id,
+    expected_actor: options?.expected_actor,
+    increment_use: false  // Don't increment - ledger is source of truth
+  });
+
+  if (!standardValidation.valid) {
+    return standardValidation;
+  }
+
+  // 2. Check ledger is initialized
+  if (!isTokenLedgerInitialized()) {
+    errors.push('TOKEN_LEDGER_NOT_INITIALIZED: Server-side replay protection unavailable');
+    return { valid: false, errors };
+  }
+
+  // 3. Validate and consume via ledger (atomic check-and-set for replay protection)
+  const ledger = getTokenLedger();
+  const ledgerResult = ledger.validateAndConsume(
+    token.token_id,
+    token.action_id,
+    token.actor,
+    new Date(token.expires_at),
+    {
+      expectedRequestHash: options?.expected_request_hash,
+      bootKeyId: token.boot_key_id
+    }
+  );
+
+  if (!ledgerResult.valid) {
+    return { valid: false, errors: ledgerResult.errors };
+  }
+
+  // Token is valid and has been recorded as spent
+  return { valid: true, errors: [], token };
+}

@@ -161,12 +161,61 @@ export class CIF {
   }
 
   /**
+   * Estimate payload size before serialization (ATTACK 7 FIX)
+   * Returns approximate byte size to prevent large payload timing attacks
+   */
+  private estimatePayloadSize(obj: unknown): number {
+    const seen = new WeakSet();
+
+    function sizeOf(value: unknown): number {
+      if (value === null) return 4;
+      if (value === undefined) return 0;
+      if (typeof value === 'string') return value.length * 2; // Approx UTF-16
+      if (typeof value === 'number') return 8;
+      if (typeof value === 'boolean') return 4;
+
+      if (typeof value === 'object') {
+        // Prevent circular references
+        if (seen.has(value as object)) return 0;
+        seen.add(value as object);
+
+        let size = 0;
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            size += sizeOf(item);
+          }
+        } else {
+          for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+            size += key.length * 2; // Key string size
+            size += sizeOf(val);
+          }
+        }
+        return size;
+      }
+
+      return 0;
+    }
+
+    return sizeOf(obj);
+  }
+
+  /**
    * Egress processing - HARDENED to never throw
    * Returns deterministic deny response on any error
    */
   async egress(context: EgressContext): Promise<EgressResult> {
     const violations: string[] = [];
     const leaksDetected: string[] = [];
+
+    // ATTACK 7 FIX: Check size BEFORE serialization
+    const estimatedSize = this.estimatePayloadSize(context.payload);
+    if (estimatedSize > this.config.maxResponseSize) {
+      return {
+        allowed: false,
+        violations: [`RESPONSE_TOO_LARGE: Estimated size ${estimatedSize} exceeds limit ${this.config.maxResponseSize}`],
+        leaksDetected: []
+      };
+    }
 
     // HARDENED: Safely stringify payload (never throws)
     let payloadStr: string;
@@ -181,23 +230,29 @@ export class CIF {
       };
     }
 
-    // Check size limits
+    // Double-check actual size after serialization (defense in depth)
     if (payloadStr.length > this.config.maxResponseSize) {
       return {
         allowed: false,
-        violations: ['Response exceeds size limit'],
+        violations: [`RESPONSE_TOO_LARGE: Actual size ${payloadStr.length} exceeds limit ${this.config.maxResponseSize}`],
         leaksDetected: []
       };
     }
 
     // Check for PII
-    const piiFound = this.config.piiPatterns.some(pattern => pattern.test(payloadStr));
+    const piiFound = this.config.piiPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(payloadStr);
+    });
     if (piiFound) {
       leaksDetected.push('PII detected');
     }
 
     // Check for secrets
-    const secretsFound = this.config.secretPatterns.some(pattern => pattern.test(payloadStr));
+    const secretsFound = this.config.secretPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(payloadStr);
+    });
     if (secretsFound) {
       leaksDetected.push('Secrets detected');
       violations.push('Attempted secret leakage');
@@ -297,7 +352,10 @@ export class CIF {
       /\.\.\//g, // Path traversal
     ];
 
-    return suspiciousPatterns.some(pattern => pattern.test(input));
+    return suspiciousPatterns.some(pattern => {
+      pattern.lastIndex = 0; // Reset stateful regex
+      return pattern.test(input);
+    });
   }
 }
 

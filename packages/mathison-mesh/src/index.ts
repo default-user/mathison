@@ -368,3 +368,5 @@ interface ActiveMesh {
 export default MeshCoordinator;
 
 export * from './model-bus';
+export * from './crypto';
+export * from './discovery';

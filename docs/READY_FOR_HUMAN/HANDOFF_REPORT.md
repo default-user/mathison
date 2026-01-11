@@ -240,18 +240,25 @@ pnpm test
 - Server implementation exists (`packages/mathison-server/src/grpc/server.ts`)
 - Governance pipeline implemented in `withGovernance()` wrapper
 
+**Implemented:**
+- ✅ gRPC server with full governance parity (CIF ingress/egress, CDI action/output, heartbeat)
+- ✅ Streaming methods with full governance (StreamJobStatus, SearchMemory)
+- ✅ GovernanceProof generation for all RPC calls
+- ✅ Receipts for streaming (stream start + stream complete via ActionGate)
+- ✅ Bounded streams (max duration 60s, max events 100, max payload size)
+- ✅ CDI output checks per streamed event (fail-closed on violation)
+- ✅ gRPC conformance tests (unary + streaming + attack fixes)
+
 **Missing:**
 - gRPC server not started by default (requires `MATHISON_GRPC_PORT` env var)
-- Streaming methods are placeholders (StreamJobStatus, SearchMemory)
 - No gRPC client examples or SDKs
 
 **Next Steps:**
 1. Add gRPC server start logic to `MathisonServer.start()` (conditional on `MATHISON_GRPC_PORT`)
-2. Implement streaming handlers (poll job status, stream search results)
-3. Add gRPC conformance tests (similar to HTTP tests)
-4. Generate TypeScript client from proto definitions
+2. Generate TypeScript client from proto definitions
+3. Add gRPC client SDK examples
 
-**Estimated Effort:** 4-6 hours
+**Estimated Effort:** 2-3 hours
 
 ---
 
@@ -425,8 +432,8 @@ pnpm test
 
 ### Medium-term (1-2 days)
 
-1. **Implement gRPC streaming methods** (StreamJobStatus, SearchMemory)
-2. **Add gRPC conformance tests**
+1. ✅ ~~**Implement gRPC streaming methods**~~ (COMPLETED)
+2. ✅ ~~**Add gRPC conformance tests**~~ (COMPLETED)
 3. **Implement heartbeat auto-recovery** (optional)
 4. **Complete CDI output filtering tests**
 

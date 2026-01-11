@@ -14,13 +14,27 @@ import * as os from 'os';
 import {
   StorageAdapter,
   FileStorageAdapter,
-  SqliteStorageAdapter,
   makeStorageAdapterFromEnv
 } from '../storage-adapter';
 import { JobCheckpoint } from '../checkpoint_store';
 import { Receipt } from '../receipt_store';
 import { GraphNode, GraphEdge } from '../graph_store';
 import { StoreMisconfiguredError } from '../types';
+
+function sqliteAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Database = require('better-sqlite3');
+    // Try to actually create a database to verify bindings are available
+    const testDb = new Database(':memory:');
+    testDb.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const REQUIRE_SQLITE = process.env.MATHISON_REQUIRE_SQLITE === '1';
 
 describe('StorageAdapter Conformance Suite', () => {
   let tempDirs: string[] = [];
@@ -72,15 +86,22 @@ describe('StorageAdapter Conformance Suite', () => {
       };
       await receiptStore.append(receipt);
 
-      // Write graph node
-      const node: GraphNode = {
+      // Write graph nodes
+      const node1: GraphNode = {
         id: 'node-001',
         type: 'test',
         data: { value: 42 }
       };
-      await graphStore.writeNode(node);
+      await graphStore.writeNode(node1);
 
-      // Write graph edge
+      const node2: GraphNode = {
+        id: 'node-002',
+        type: 'test',
+        data: { value: 43 }
+      };
+      await graphStore.writeNode(node2);
+
+      // Write graph edge (requires both source and target nodes to exist for SQLite foreign keys)
       const edge: GraphEdge = {
         id: 'edge-001',
         source: 'node-001',
@@ -118,12 +139,24 @@ describe('StorageAdapter Conformance Suite', () => {
       await testWriteReadCycle(adapter, 'FILE');
     });
 
-    it('SQLITE backend: write/read cycle', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'test.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
-      await testWriteReadCycle(adapter, 'SQLITE');
-    });
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE backend: write/read cycle', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE backend: write/read cycle (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE backend: write/read cycle', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'test.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
+        await testWriteReadCycle(adapter, 'SQLITE');
+      });
+    }
   });
 
   describe('Crash/Restart Simulation', () => {
@@ -168,50 +201,62 @@ describe('StorageAdapter Conformance Suite', () => {
       await adapter2.close();
     });
 
-    it('SQLITE: write, close, re-init, read', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'restart-test.db');
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: write, close, re-init, read', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: write, close, re-init, read (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: write, close, re-init, read', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'restart-test.db');
 
-      // First session: write data
-      const adapter1 = new SqliteStorageAdapter(dbPath);
-      await adapter1.init();
+        // First session: write data
+        const adapter1 = new SqliteStorageAdapter(dbPath);
+        await adapter1.init();
 
-      const checkpoint: JobCheckpoint = {
-        job_id: 'job-restart-sqlite-001',
-        job_type: 'test',
-        status: 'completed',
-        current_stage: null,
-        completed_stages: ['stage1', 'stage2']
-      };
-      await adapter1.getCheckpointStore().create(checkpoint);
+        const checkpoint: JobCheckpoint = {
+          job_id: 'job-restart-sqlite-001',
+          job_type: 'test',
+          status: 'completed',
+          current_stage: null,
+          completed_stages: ['stage1', 'stage2']
+        };
+        await adapter1.getCheckpointStore().create(checkpoint);
 
-      const receipt: Receipt = {
-        timestamp: new Date().toISOString(),
-        job_id: 'job-restart-sqlite-001',
-        stage: 'stage2',
-        action: 'complete',
-        store_backend: 'SQLITE'
-      };
-      await adapter1.getReceiptStore().append(receipt);
+        const receipt: Receipt = {
+          timestamp: new Date().toISOString(),
+          job_id: 'job-restart-sqlite-001',
+          stage: 'stage2',
+          action: 'complete',
+          store_backend: 'SQLITE'
+        };
+        await adapter1.getReceiptStore().append(receipt);
 
-      await adapter1.close();
+        await adapter1.close();
 
-      // Simulate crash/restart
-      const adapter2 = new SqliteStorageAdapter(dbPath);
-      await adapter2.init();
+        // Simulate crash/restart
+        const adapter2 = new SqliteStorageAdapter(dbPath);
+        await adapter2.init();
 
-      // Verify data persisted
-      const loadedCheckpoint = await adapter2.getCheckpointStore().load('job-restart-sqlite-001');
-      expect(loadedCheckpoint).not.toBeNull();
-      expect(loadedCheckpoint?.status).toBe('completed');
-      expect(loadedCheckpoint?.completed_stages).toEqual(['stage1', 'stage2']);
+        // Verify data persisted
+        const loadedCheckpoint = await adapter2.getCheckpointStore().load('job-restart-sqlite-001');
+        expect(loadedCheckpoint).not.toBeNull();
+        expect(loadedCheckpoint?.status).toBe('completed');
+        expect(loadedCheckpoint?.completed_stages).toEqual(['stage1', 'stage2']);
 
-      const receipts = await adapter2.getReceiptStore().readByJob('job-restart-sqlite-001');
-      expect(receipts).toHaveLength(1);
-      expect(receipts[0].action).toBe('complete');
+        const receipts = await adapter2.getReceiptStore().readByJob('job-restart-sqlite-001');
+        expect(receipts).toHaveLength(1);
+        expect(receipts[0].action).toBe('complete');
 
-      await adapter2.close();
-    });
+        await adapter2.close();
+      });
+    }
   });
 
   describe('Invalid Backend (Fail-Closed)', () => {
@@ -260,27 +305,39 @@ describe('StorageAdapter Conformance Suite', () => {
       await adapter.close();
     });
 
-    it('SQLITE: init is idempotent', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'idempotent.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: init is idempotent', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: init is idempotent (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: init is idempotent', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'idempotent.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
 
-      await adapter.init();
-      await adapter.init(); // Second init should be safe
+        await adapter.init();
+        await adapter.init(); // Second init should be safe
 
-      const checkpoint: JobCheckpoint = {
-        job_id: 'job-idempotent',
-        job_type: 'test',
-        status: 'running',
-        completed_stages: []
-      };
-      await adapter.getCheckpointStore().create(checkpoint);
+        const checkpoint: JobCheckpoint = {
+          job_id: 'job-idempotent',
+          job_type: 'test',
+          status: 'running',
+          completed_stages: []
+        };
+        await adapter.getCheckpointStore().create(checkpoint);
 
-      const loaded = await adapter.getCheckpointStore().load('job-idempotent');
-      expect(loaded).not.toBeNull();
+        const loaded = await adapter.getCheckpointStore().load('job-idempotent');
+        expect(loaded).not.toBeNull();
 
-      await adapter.close();
-    });
+        await adapter.close();
+      });
+    }
 
     it('FILE: close is idempotent', async () => {
       const tempDir = makeTempDir();
@@ -291,15 +348,27 @@ describe('StorageAdapter Conformance Suite', () => {
       await adapter.close(); // Second close should be safe
     });
 
-    it('SQLITE: close is idempotent', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'close-test.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: close is idempotent', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: close is idempotent (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: close is idempotent', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'close-test.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
 
-      await adapter.init();
-      await adapter.close();
-      await adapter.close(); // Second close should be safe
-    });
+        await adapter.init();
+        await adapter.close();
+        await adapter.close(); // Second close should be safe
+      });
+    }
 
     it('FILE: throws error when accessing stores before init', async () => {
       const tempDir = makeTempDir();
@@ -318,15 +387,27 @@ describe('StorageAdapter Conformance Suite', () => {
       }).toThrow('not initialized');
     });
 
-    it('SQLITE: throws error when accessing stores before init', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'uninit.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: throws error when accessing stores before init', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: throws error when accessing stores before init (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: throws error when accessing stores before init', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'uninit.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
 
-      expect(() => {
-        adapter.getCheckpointStore();
-      }).toThrow('not initialized');
-    });
+        expect(() => {
+          adapter.getCheckpointStore();
+        }).toThrow('not initialized');
+      });
+    }
 
     it('FILE: throws error when accessing stores after close', async () => {
       const tempDir = makeTempDir();
@@ -340,18 +421,30 @@ describe('StorageAdapter Conformance Suite', () => {
       }).toThrow('closed');
     });
 
-    it('SQLITE: throws error when accessing stores after close', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'closed.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: throws error when accessing stores after close', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: throws error when accessing stores after close (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: throws error when accessing stores after close', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'closed.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
 
-      await adapter.init();
-      await adapter.close();
+        await adapter.init();
+        await adapter.close();
 
-      expect(() => {
-        adapter.getCheckpointStore();
-      }).toThrow('closed');
-    });
+        expect(() => {
+          adapter.getCheckpointStore();
+        }).toThrow('closed');
+      });
+    }
 
     it('FILE: throws error when re-initializing after close', async () => {
       const tempDir = makeTempDir();
@@ -363,16 +456,28 @@ describe('StorageAdapter Conformance Suite', () => {
       await expect(adapter.init()).rejects.toThrow('closed');
     });
 
-    it('SQLITE: throws error when re-initializing after close', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 're-init.db');
-      const adapter = new SqliteStorageAdapter(dbPath);
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('SQLITE: throws error when re-initializing after close', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('SQLITE: throws error when re-initializing after close (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('SQLITE: throws error when re-initializing after close', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 're-init.db');
+        const adapter = new SqliteStorageAdapter(dbPath);
 
-      await adapter.init();
-      await adapter.close();
+        await adapter.init();
+        await adapter.close();
 
-      await expect(adapter.init()).rejects.toThrow('closed');
-    });
+        await expect(adapter.init()).rejects.toThrow('closed');
+      });
+    }
   });
 
   describe('Factory Function', () => {
@@ -401,31 +506,43 @@ describe('StorageAdapter Conformance Suite', () => {
       await adapter.close();
     });
 
-    it('creates SQLITE adapter from env', async () => {
-      const tempDir = makeTempDir();
-      const dbPath = path.join(tempDir, 'factory.db');
-      const adapter = makeStorageAdapterFromEnv({
-        MATHISON_STORE_BACKEND: 'SQLITE',
-        MATHISON_STORE_PATH: dbPath
+    if (!sqliteAvailable()) {
+      if (REQUIRE_SQLITE) {
+        it('creates SQLITE adapter from env', async () => {
+          throw new Error('SQLite required but better-sqlite3 bindings not available. Ensure CI installs build tools and runs `pnpm rebuild better-sqlite3`.');
+        });
+      } else {
+        it.skip('creates SQLITE adapter from env (skipped: better-sqlite3 bindings not available)', async () => {});
+      }
+    } else {
+      it('creates SQLITE adapter from env', async () => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SqliteStorageAdapter } = require('../storage-adapter');
+        const tempDir = makeTempDir();
+        const dbPath = path.join(tempDir, 'factory.db');
+        const adapter = makeStorageAdapterFromEnv({
+          MATHISON_STORE_BACKEND: 'SQLITE',
+          MATHISON_STORE_PATH: dbPath
+        });
+
+        expect(adapter.getBackend()).toBe('SQLITE');
+        expect(adapter).toBeInstanceOf(SqliteStorageAdapter);
+
+        await adapter.init();
+
+        const checkpoint: JobCheckpoint = {
+          job_id: 'job-factory-sqlite',
+          job_type: 'test',
+          status: 'completed',
+          completed_stages: []
+        };
+        await adapter.getCheckpointStore().create(checkpoint);
+
+        const loaded = await adapter.getCheckpointStore().load('job-factory-sqlite');
+        expect(loaded?.status).toBe('completed');
+
+        await adapter.close();
       });
-
-      expect(adapter.getBackend()).toBe('SQLITE');
-      expect(adapter).toBeInstanceOf(SqliteStorageAdapter);
-
-      await adapter.init();
-
-      const checkpoint: JobCheckpoint = {
-        job_id: 'job-factory-sqlite',
-        job_type: 'test',
-        status: 'completed',
-        completed_stages: []
-      };
-      await adapter.getCheckpointStore().create(checkpoint);
-
-      const loaded = await adapter.getCheckpointStore().load('job-factory-sqlite');
-      expect(loaded?.status).toBe('completed');
-
-      await adapter.close();
-    });
+    }
   });
 });

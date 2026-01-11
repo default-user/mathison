@@ -9,19 +9,11 @@ import {
   computeReceiptHash,
   signReceipt,
   verifyReceiptSignature,
-  initializeChainKey,
   GENESIS_HASH
 } from '../receipt-chain';
 import { Receipt } from '../receipt_store';
-import { randomBytes } from 'crypto';
 
 describe('Receipt Chain - P0.3', () => {
-  beforeAll(() => {
-    // Initialize chain key for tests
-    const testKey = randomBytes(32);
-    const testKeyId = 'test_key_id';
-    initializeChainKey(testKey, testKeyId);
-  });
 
   describe('Receipt hashing', () => {
     it('should compute hash excluding chain fields', () => {

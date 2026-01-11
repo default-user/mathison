@@ -1,3 +1,109 @@
+# Mathison OI v1.0.x — Production Release Series
+
+---
+
+## v1.0.1 — Governance Hardening (P0/P1 Red-Team Fixes)
+
+**Release Date:** January 10, 2026
+**Governance:** Tiriti o te Kai v1.0
+**Status:** Production Ready
+
+### Summary
+
+This release closes critical governance gaps identified in red-team analysis. All changes maintain backward compatibility while strengthening the fail-closed security posture.
+
+### P0 Fixes (Critical)
+
+#### gRPC Server Startup (Reliable)
+- Fixed `start()` to properly await `bindAsync` completion using Promise wrapper
+- Added `server.start()` call after successful bind
+- Errors now reject Promise instead of throwing inside callback
+- Added reliable proto path resolution (supports `MATHISON_REPO_ROOT` env var, `__dirname`-based fallback)
+- Added `isStarted()` and `getPort()` accessors for server state
+
+#### Action Registry Canonical Everywhere
+- All action IDs now use canonical `action:*` format from registry
+- Added action IDs for job, memory, OI, knowledge, and health operations
+- HTTP routes map to canonical IDs via `HTTP_ACTION_IDS` constants
+- gRPC handlers use `GRPC_ACTION_IDS` constants
+- Unknown/unregistered action IDs fail-closed with `UNREGISTERED_ACTION` reason code
+- ActionGate context includes `action_id` for consistent auditing
+
+#### Capability Tokens: Non-Replayable
+- New `TokenLedger` class for server-side replay protection
+- Tokens recorded as "spent" on first valid use
+- Subsequent uses denied with `TOKEN_REPLAYED` error
+- Ledger entries expire after token expiry + grace window
+- `validateTokenWithLedger()` for enforced single-use validation
+- Ledger scoped to boot session (cleared on restart)
+
+#### JobExecutor Concurrency Enforcement
+- `ConcurrencySemaphore` enforces `maxConcurrentJobs` limit
+- Per-actor limits (default: 25% of global limit)
+- Denial with `JOB_CONCURRENCY_LIMIT` reason code when limit reached
+- `getConcurrencyStatus()` for monitoring current/max counts
+- Slots released on job completion (even on error)
+
+### P1 Fixes (Important)
+
+#### Storage Seal Bypass Hardening
+- Added `exports` field to `mathison-storage/package.json`
+- Only public API exportable (prevents subpath bypass like `mathison-storage/src/...`)
+- Bump to v1.0.3
+
+#### Genome Release Pipeline
+- New `scripts/release-genome.ts` for deterministic releases
+- Steps: build packages → generate manifest hashes → sign → verify
+- Supports `--dist` mode for production (hashes `dist/*.js` not `src/*.ts`)
+- Integrates with `verifyGovernanceIntegrity()` for integrity checks
+- Clear documentation of signing with `GENOME_SIGNING_PRIVATE_KEY`
+
+#### Boot Key Registry (Audit Trail Resilience)
+- New `BootKeyRegistry` for session tracking across restarts
+- Stores public metadata only (no secret key persistence)
+- Enables detection of receipts from unknown/forged sessions
+- Session continuity chain via `parent_session_id`
+- Explicit documentation: proofs are SESSION-SCOPED, not verifiable across restarts
+- `validateSessionContinuity()` for integrity checks
+
+### Security Improvements
+
+- Action ID validation in both HTTP and gRPC pipelines
+- Token replay attacks blocked via server-side ledger
+- Job DoS attacks mitigated via concurrency limits
+- Import bypass attacks blocked via package exports
+
+### Files Changed
+
+```
+packages/mathison-governance/src/
+├── action-registry.ts    # Added action IDs for all operations
+├── boot-key-registry.ts  # NEW: Session tracking
+├── capability-token.ts   # Added validateTokenWithLedger()
+├── index.ts              # New exports
+└── token-ledger.ts       # NEW: Replay protection
+
+packages/mathison-server/src/
+├── grpc/server.ts        # Fixed startup, canonical action IDs
+├── index.ts              # Canonical action IDs, ledger init
+└── job-executor/index.ts # Concurrency enforcement
+
+packages/mathison-storage/
+└── package.json          # Added exports field
+
+scripts/
+└── release-genome.ts     # NEW: Release pipeline
+```
+
+### Upgrade Notes
+
+- No breaking changes
+- New env var: `MATHISON_REPO_ROOT` (optional, for proto path resolution)
+- Token ledger auto-initializes on server start
+- Boot key registry persists to `$MATHISON_STORE_PATH/boot-key-registry.json`
+
+---
+
 # Mathison OI v1.0.0 — Production Release
 
 **Release Date:** December 30, 2025

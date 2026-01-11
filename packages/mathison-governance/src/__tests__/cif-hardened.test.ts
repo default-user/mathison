@@ -219,7 +219,72 @@ describe('CIF Hardened Egress', () => {
       });
 
       expect(result.allowed).toBe(false);
-      expect(result.violations).toContain('Response exceeds size limit');
+      // ATTACK 7 FIX: Size check happens BEFORE serialization with estimated size
+      expect(result.violations.some(v => v.includes('RESPONSE_TOO_LARGE') || v.includes('exceeds'))).toBe(true);
     });
+
+    it('should detect PII and secrets consistently across 50+ iterations (regression test for regex statefulness)', async () => {
+      // Payload containing both PII (email) and secrets (API key)
+      const payload = {
+        userEmail: 'test@example.com',
+        apiKey: 'sk-1234567890123456789012345678901234',
+        message: 'Hello world'
+      };
+
+      // Run egress 50 times and verify leaksDetected is consistent
+      for (let i = 0; i < 50; i++) {
+        const result = await cif.egress({
+          clientId: 'test-client',
+          endpoint: '/test',
+          payload
+        });
+
+        // MUST detect both PII and Secrets on EVERY iteration
+        expect(result.leaksDetected).toContain('PII detected');
+        expect(result.leaksDetected).toContain('Secrets detected');
+        expect(result.allowed).toBe(false);
+        expect(result.violations).toContain('Attempted secret leakage');
+      }
+    });
+  });
+});
+
+describe('CIF Hardened Ingress - Quarantine Pattern Regression', () => {
+  let cif: CIF;
+
+  beforeEach(async () => {
+    cif = new CIF({
+      maxRequestSize: 10240,
+      maxResponseSize: 10240,
+      rateLimit: { windowMs: 60000, maxRequests: 1000 }
+    });
+    await cif.initialize();
+  });
+
+  afterEach(async () => {
+    await cif.shutdown();
+  });
+
+  it('should quarantine suspicious patterns consistently across 50+ iterations (regression test for regex statefulness)', async () => {
+    // Payload containing suspicious patterns
+    const payload = {
+      content: '<iframe src="evil.com"></iframe>',
+      code: 'eval("malicious")'
+    };
+
+    // Run ingress 50 times and verify quarantine is consistent
+    for (let i = 0; i < 50; i++) {
+      const result = await cif.ingress({
+        clientId: `test-client-${i}`,
+        endpoint: '/test',
+        payload,
+        timestamp: Date.now()
+      });
+
+      // MUST quarantine on EVERY iteration
+      expect(result.quarantined).toBe(true);
+      expect(result.allowed).toBe(false);
+      expect(result.violations).toContain('Suspicious pattern detected');
+    }
   });
 });

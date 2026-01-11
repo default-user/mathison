@@ -5,7 +5,7 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry } from 'mathison-governance';
 import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
@@ -17,6 +17,39 @@ import { Interpreter } from 'mathison-oi';
 import { HeartbeatMonitor, createHeartbeatFromEnv, HeartbeatStatus } from './heartbeat';
 import { loadPrerequisites, ValidatedPrerequisites } from './prerequisites';
 import { randomBytes } from 'crypto';
+import { KnowledgeIngestionGate } from './knowledge/ingestion-gate';
+import { makeChunkRetrieverFromEnv } from './knowledge/chunk-retriever';
+import { MathisonGRPCServer } from './grpc/server';
+
+/**
+ * P0.4: Canonical Action IDs for HTTP routes
+ * Single source of truth from action-registry, not duplicated strings
+ */
+const HTTP_ACTION_IDS = {
+  // Read actions
+  GENOME_READ: 'action:read:genome',
+  JOB_STATUS: 'action:job:status',
+  JOB_RUN: 'action:job:run',
+  JOB_RESUME: 'action:job:resume',
+  RECEIPTS_READ: 'action:read:receipts',
+  HEALTH_CHECK: 'action:health:check',
+
+  // Memory actions
+  MEMORY_READ_NODE: 'action:memory:read',
+  MEMORY_READ_EDGES: 'action:memory:read_edges',
+  MEMORY_READ_HYPEREDGES: 'action:memory:read_hyperedges',
+  MEMORY_SEARCH: 'action:memory:search',
+  MEMORY_CREATE_NODE: 'action:memory:create',
+  MEMORY_CREATE_EDGE: 'action:memory:create_edge',
+  MEMORY_CREATE_HYPEREDGE: 'action:memory:create_hyperedge',
+  MEMORY_UPDATE_NODE: 'action:memory:update',
+
+  // OI actions
+  OI_INTERPRET: 'action:oi:interpret',
+
+  // Knowledge actions
+  KNOWLEDGE_INGEST: 'action:knowledge:ingest',
+} as const;
 
 export interface MathisonServerConfig {
   port?: number;
@@ -47,6 +80,10 @@ export class MathisonServer {
   // Heartbeat monitor (self-audit loop)
   private heartbeat: HeartbeatMonitor | null = null;
   private heartbeatFailClosed: boolean = false;
+  // Knowledge ingestion gate (P2.1)
+  private knowledgeGate: KnowledgeIngestionGate | null = null;
+  // gRPC server (optional, started if MATHISON_GRPC_PORT is set)
+  private grpcServer: MathisonGRPCServer | null = null;
 
   constructor(config: MathisonServerConfig = {}) {
     this.config = {
@@ -92,11 +129,35 @@ export class MathisonServer {
       // Register routes
       this.registerRoutes();
 
-      // Start server
+      // Start HTTP server
       await this.app.listen({
         port: this.config.port,
         host: this.config.host
       });
+
+      // P1: Start gRPC server if MATHISON_GRPC_PORT is set
+      if (process.env.MATHISON_GRPC_PORT) {
+        const grpcPort = parseInt(process.env.MATHISON_GRPC_PORT, 10);
+        const grpcHost = process.env.MATHISON_GRPC_HOST ?? this.config.host;
+
+        this.grpcServer = new MathisonGRPCServer({
+          port: grpcPort,
+          host: grpcHost,
+          cif: this.cif,
+          cdi: this.cdi,
+          actionGate: this.actionGate,
+          memoryGraph: this.memoryGraph,
+          interpreter: this.interpreter,
+          jobExecutor: this.jobExecutor,
+          genome: this.genome,
+          genomeId: this.genomeId,
+          heartbeat: this.heartbeat,
+          knowledgeGate: this.knowledgeGate
+        });
+
+        await this.grpcServer.start();
+        console.log(`🔌 gRPC server listening on ${grpcHost}:${grpcPort}`);
+      }
 
       // P0.2: Seal storage after boot completes successfully
       // From this point on, only governance-authorized components can create storage adapters
@@ -104,7 +165,7 @@ export class MathisonServer {
 
       this.bootStatus = 'ready';
       console.log('✅ Mathison Server started successfully');
-      console.log(`🌐 Listening on http://${this.config.host}:${this.config.port}`);
+      console.log(`🌐 HTTP listening on http://${this.config.host}:${this.config.port}`);
     } catch (error) {
       this.bootStatus = 'failed';
       this.bootError = error instanceof Error ? error.message : String(error);
@@ -115,6 +176,9 @@ export class MathisonServer {
 
   async stop(): Promise<void> {
     console.log('🛑 Stopping Mathison Server...');
+    if (this.grpcServer) {
+      await this.grpcServer.stop();
+    }
     if (this.heartbeat) {
       this.heartbeat.stop();
     }
@@ -145,6 +209,13 @@ export class MathisonServer {
       // P0.4: Initialize token key for capability tokens (uses same boot key)
       initializeTokenKey(key, id);
 
+      // P0.3: Initialize token ledger for replay protection
+      initializeTokenLedger();
+
+      // P1.7: Initialize boot key registry for audit trail resilience
+      initializeBootKeyRegistry();
+      getBootKeyRegistryManager().registerSession(id);
+
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
@@ -157,6 +228,13 @@ export class MathisonServer {
       // Configure CDI with genome capabilities for capability ceiling enforcement
       if (this.genome) {
         this.cdi.setGenomeCapabilities(this.genome.capabilities);
+      }
+
+      // ATTACK 12 FIX: Load anchor actors from governance config for consent priority
+      const prereqs = await loadPrerequisites();
+      if (prereqs.config.consent?.anchorActors) {
+        this.cdi.setAnchorActors(prereqs.config.consent.anchorActors);
+        console.log(`⚓ Configured ${prereqs.config.consent.anchorActors.length} consent anchor actors`);
       }
 
       await this.cif.initialize();
@@ -208,12 +286,15 @@ export class MathisonServer {
     const isProduction = process.env.MATHISON_ENV === 'production';
     const strictMode = isProduction || process.env.MATHISON_INTEGRITY_STRICT === 'true';
 
-    console.log(`🔒 Verifying governance integrity (strict: ${strictMode})...`);
+    // Resolve repo root: use MATHISON_REPO_ROOT env var if set, else process.cwd()
+    const repoRoot = process.env.MATHISON_REPO_ROOT ?? process.cwd();
+
+    console.log(`🔒 Verifying governance integrity (strict: ${strictMode}, root: ${repoRoot})...`);
 
     try {
       const result = await verifyGovernanceIntegrity(
         this.genome.build_manifest.files,
-        process.cwd(),
+        repoRoot,
         strictMode
       );
 
@@ -298,6 +379,14 @@ export class MathisonServer {
         this.genome?.version
       );
       console.log('✓ OI Interpreter initialized');
+
+      // P2.1: Initialize Knowledge Ingestion Gate
+      const chunkRetriever = makeChunkRetrieverFromEnv();
+      this.knowledgeGate = new KnowledgeIngestionGate({
+        knowledgeStore: this.storageAdapter.getKnowledgeStore(),
+        chunkRetriever,
+      });
+      console.log('✓ Knowledge Ingestion Gate initialized');
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
@@ -374,32 +463,33 @@ export class MathisonServer {
     // Pre-handler: CDI action check (FAIL-CLOSED)
     // All routes MUST declare an action unless in allowlist
     this.app.addHook('preHandler', async (request, reply) => {
-      // Route-to-action mapping (static, declared at route definition time)
+      // P0.4: Route-to-action mapping using canonical action IDs from registry
       const ROUTE_ACTIONS: Record<string, Record<string, string>> = {
         'GET': {
-          '/genome': 'genome_read',
-          '/jobs/status': 'job_status',
-          '/jobs/logs': 'receipts_read',
-          '/memory/search': 'memory_search',
+          '/genome': HTTP_ACTION_IDS.GENOME_READ,
+          '/jobs/status': HTTP_ACTION_IDS.JOB_STATUS,
+          '/jobs/logs': HTTP_ACTION_IDS.RECEIPTS_READ,
+          '/memory/search': HTTP_ACTION_IDS.MEMORY_SEARCH,
         },
         'POST': {
-          '/jobs/run': 'job_run',
-          '/jobs/resume': 'job_resume',
-          '/memory/nodes': 'memory_create_node',
-          '/memory/edges': 'memory_create_edge',
-          '/memory/hyperedges': 'memory_create_hyperedge',
-          '/oi/interpret': 'oi_interpret',
+          '/jobs/run': HTTP_ACTION_IDS.JOB_RUN,
+          '/jobs/resume': HTTP_ACTION_IDS.JOB_RESUME,
+          '/memory/nodes': HTTP_ACTION_IDS.MEMORY_CREATE_NODE,
+          '/memory/edges': HTTP_ACTION_IDS.MEMORY_CREATE_EDGE,
+          '/memory/hyperedges': HTTP_ACTION_IDS.MEMORY_CREATE_HYPEREDGE,
+          '/oi/interpret': HTTP_ACTION_IDS.OI_INTERPRET,
+          '/v1/knowledge/ingest': HTTP_ACTION_IDS.KNOWLEDGE_INGEST,
         },
       };
 
-      // Pattern-based route-to-action mapping for parameterized routes
+      // P0.4: Pattern-based route-to-action mapping using canonical action IDs
       const PATTERN_ACTIONS: Array<{ method: string; pattern: RegExp; action: string }> = [
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_read_node' },
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: 'memory_read_edges' },
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: 'memory_read_hyperedges' },
-        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: 'memory_read_edge' },
-        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: 'memory_read_hyperedge' },
-        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: 'memory_update_node' },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: HTTP_ACTION_IDS.MEMORY_READ_EDGES },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: HTTP_ACTION_IDS.MEMORY_READ_HYPEREDGES },
+        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },  // Edge read uses same action
+        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },  // Hyperedge read uses same action
+        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_UPDATE_NODE },
       ];
 
       // Allowlist: endpoints that bypass action requirement entirely
@@ -453,11 +543,27 @@ export class MathisonServer {
         return;
       }
 
+      // P0.4: Validate action ID is registered (fail-closed on unknown actions)
+      if (!actionRegistry.isRegistered(action)) {
+        reply.code(403).send({
+          reason_code: 'UNREGISTERED_ACTION',
+          message: `Action ID "${action}" not found in registry`,
+          details: {
+            url: request.url,
+            method: request.method,
+            action_id: action
+          }
+        });
+        return reply;
+      }
+
       const clientId = request.ip;
 
+      // P0.4: Include action_id in context for consistent auditing
       const actionInput = {
         actor: clientId,
         action,
+        action_id: action,  // P0.4: Canonical action ID
         payload: (request as any).sanitizedBody
       };
 
@@ -1422,7 +1528,8 @@ export class MathisonServer {
           genome_version: this.genome?.version
         },
         async () => {
-          this.memoryGraph!.addNode(updatedNode);
+          // ATTACK 6 FIX: Use updateNode() for updates (not addNode() which prevents overwrite)
+          this.memoryGraph!.updateNode(updatedNode);
           return updatedNode;
         }
       );
@@ -1513,6 +1620,61 @@ export class MathisonServer {
         return reply.code(500).send({
           reason_code: 'GOVERNANCE_INIT_FAILED',
           message: error instanceof Error ? error.message : 'Interpretation failed'
+        });
+      }
+    });
+
+    // P2.1: POST /v1/knowledge/ingest - Knowledge ingestion via CPACK
+    this.app.post('/v1/knowledge/ingest', async (request, reply) => {
+      (request as any).action = 'knowledge_ingest';
+      const body = (request as any).sanitizedBody as any;
+
+      // Fail-closed: require knowledge ingestion gate
+      if (!this.knowledgeGate) {
+        return reply.code(503).send({
+          reason_code: 'GOVERNANCE_INIT_FAILED',
+          message: 'Knowledge ingestion gate not initialized'
+        });
+      }
+
+      // Validate required fields
+      if (!body.cpack_yaml && !body.cpack) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing required field: cpack_yaml or cpack'
+        });
+      }
+
+      if (!body.llm_output || !body.llm_output.claims) {
+        return reply.code(400).send({
+          reason_code: 'MALFORMED_REQUEST',
+          message: 'Missing required field: llm_output.claims'
+        });
+      }
+
+      try {
+        // Process ingestion through the gate
+        const result = await this.knowledgeGate.processIngestion({
+          cpack_yaml: body.cpack_yaml,
+          cpack: body.cpack,
+          llm_output: body.llm_output,
+          mode: body.mode,
+          context: {
+            posture: 'NORMAL',
+            task_id: body.context?.task_id,
+            user_id: body.context?.user_id,
+            oi_id: this.genomeId || undefined,
+          },
+        });
+
+        // Return result with appropriate status code
+        const statusCode = result.success ? 200 : 400;
+        return reply.code(statusCode).send(result);
+      } catch (error) {
+        // Handle ingestion errors (fail-closed)
+        return reply.code(500).send({
+          reason_code: 'INGESTION_FAILED',
+          message: error instanceof Error ? error.message : 'Knowledge ingestion failed'
         });
       }
     });

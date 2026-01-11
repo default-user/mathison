@@ -4,5 +4,6 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   collectCoverage: false,
-  verbose: true
+  verbose: true,
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/jest.setup.ts']
 };

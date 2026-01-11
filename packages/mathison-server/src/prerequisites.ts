@@ -7,6 +7,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadAndVerifyGenome, Genome } from 'mathison-genome';
+import { resolveRepoRoot, resolveFromRepoRoot } from './utils/repo-root';
 
 export enum PrerequisiteCode {
   TREATY_MISSING = 'PREREQ_TREATY_MISSING',
@@ -74,13 +75,28 @@ export interface ValidatedPrerequisites {
  * Validate treaty file exists and is readable
  */
 export async function validateTreaty(configPath: string): Promise<{ treaty: Treaty | null; error: PrerequisiteError | null }> {
+  let resolvedConfigPath: string;
+  try {
+    // Resolve config path relative to repo root
+    resolvedConfigPath = resolveFromRepoRoot(configPath);
+  } catch (error) {
+    return {
+      treaty: null,
+      error: {
+        code: PrerequisiteCode.CONFIG_UNREADABLE,
+        message: `Cannot resolve config path: ${error instanceof Error ? error.message : String(error)}`,
+        details: { path: configPath }
+      }
+    };
+  }
+
   try {
     // Read governance config
-    const configContent = await fs.readFile(configPath, 'utf-8');
+    const configContent = await fs.readFile(resolvedConfigPath, 'utf-8');
     const config: GovernanceConfig = JSON.parse(configContent);
 
-    // Resolve treaty path
-    const treatyPath = path.join(process.cwd(), config.treatyPath);
+    // Resolve treaty path relative to repo root
+    const treatyPath = resolveFromRepoRoot(config.treatyPath);
 
     // Check treaty exists
     try {
@@ -138,7 +154,7 @@ export async function validateTreaty(configPath: string): Promise<{ treaty: Trea
       error: {
         code: PrerequisiteCode.CONFIG_UNREADABLE,
         message: `Governance config unreadable: ${error instanceof Error ? error.message : String(error)}`,
-        details: { path: configPath }
+        details: { path: resolvedConfigPath }
       }
     };
   }
@@ -148,9 +164,26 @@ export async function validateTreaty(configPath: string): Promise<{ treaty: Trea
  * Validate genome file exists, is readable, and signature valid
  */
 export async function validateGenome(): Promise<{ genome: Genome | null; genomeId: string | null; error: PrerequisiteError | null }> {
-  const genomePath = process.env.MATHISON_GENOME_PATH || './genomes/TOTK_ROOT_v1.0.0/genome.json';
+  const genomePathRaw = process.env.MATHISON_GENOME_PATH || './genomes/TOTK_ROOT_v1.0.0/genome.json';
   const isProduction = process.env.MATHISON_ENV === 'production';
   const verifyManifest = process.env.MATHISON_VERIFY_MANIFEST === 'true' || isProduction;
+
+  let genomePath: string;
+  let repoRoot: string;
+  try {
+    genomePath = resolveFromRepoRoot(genomePathRaw);
+    repoRoot = resolveRepoRoot();
+  } catch (error) {
+    return {
+      genome: null,
+      genomeId: null,
+      error: {
+        code: PrerequisiteCode.GENOME_MISSING,
+        message: `Cannot resolve genome path: ${error instanceof Error ? error.message : String(error)}`,
+        details: { path: genomePathRaw }
+      }
+    };
+  }
 
   // Check genome file exists
   try {
@@ -161,7 +194,7 @@ export async function validateGenome(): Promise<{ genome: Genome | null; genomeI
       genomeId: null,
       error: {
         code: PrerequisiteCode.GENOME_MISSING,
-        message: `Genome file not found: ${genomePath}`,
+        message: `Genome file not found: ${genomePathRaw}`,
         details: { path: genomePath }
       }
     };
@@ -169,7 +202,6 @@ export async function validateGenome(): Promise<{ genome: Genome | null; genomeI
 
   // Load and verify genome
   try {
-    const repoRoot = process.env.MATHISON_REPO_ROOT || process.cwd();
     const { genome, genome_id } = await loadAndVerifyGenome(genomePath, {
       verifyManifest,
       repoRoot
@@ -220,23 +252,38 @@ export async function validateGenome(): Promise<{ genome: Genome | null; genomeI
  * Validate governance config exists and is readable
  */
 export async function validateConfig(configPath: string): Promise<{ config: GovernanceConfig | null; error: PrerequisiteError | null }> {
+  // Resolve config path relative to repo root
+  let resolvedConfigPath: string;
+  try {
+    resolvedConfigPath = resolveFromRepoRoot(configPath);
+  } catch (error) {
+    return {
+      config: null,
+      error: {
+        code: PrerequisiteCode.CONFIG_MISSING,
+        message: `Cannot resolve config path: ${error instanceof Error ? error.message : String(error)}`,
+        details: { path: configPath }
+      }
+    };
+  }
+
   // Check config exists
   try {
-    await fs.access(configPath);
+    await fs.access(resolvedConfigPath);
   } catch {
     return {
       config: null,
       error: {
         code: PrerequisiteCode.CONFIG_MISSING,
         message: `Governance config not found: ${configPath}`,
-        details: { path: configPath }
+        details: { path: resolvedConfigPath }
       }
     };
   }
 
   // Read and parse config
   try {
-    const content = await fs.readFile(configPath, 'utf-8');
+    const content = await fs.readFile(resolvedConfigPath, 'utf-8');
     const config: GovernanceConfig = JSON.parse(content);
 
     // Validate schema

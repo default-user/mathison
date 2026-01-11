@@ -7,9 +7,9 @@
   "authority": {
     "signers": [
       {
-        "key_id": "test-fixture-key",
+        "key_id": "dev-key-001",
         "alg": "ed25519",
-        "public_key": "MCowBQYDK2VwAyEAiENVzPT23crQdta+l7RPa+wy5LW8GraUMcP/sAL3mow="
+        "public_key": "MCowBQYDK2VwAyEApTgiv063BlxUQOAdz2zHRDsHdPbR5v+oeP774fqTS20="
       }
     ],
     "threshold": 1
@@ -52,7 +52,7 @@
   },
   "signature": {
     "alg": "ed25519",
-    "signer_key_id": "test-fixture-key",
-    "sig_base64": "A0YA7htgOfRgA2iMrMeditA/humff1XbzrgtYPfBn4HyX6/hXuJyZABEiwXTA3Xzl0f6g2LfpV4mj+o3ttELCw=="
+    "signer_key_id": "dev-key-001",
+    "sig_base64": "R/1xBmAtSj2EyWVoysO7GxLSe8awaACuxk8sAj0Jj5nU2onILK1FMQOcEiWOGXLXD3ARW/YIZiJWHjV+30WwCQ=="
   }
 }

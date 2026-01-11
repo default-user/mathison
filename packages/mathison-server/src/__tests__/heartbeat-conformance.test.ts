@@ -5,6 +5,7 @@
 
 import { HeartbeatMonitor } from '../heartbeat';
 import { CIF, CDI } from 'mathison-governance';
+import { getFixturePath } from './setup';
 
 describe('Heartbeat Conformance', () => {
   let heartbeat: HeartbeatMonitor;
@@ -15,7 +16,7 @@ describe('Heartbeat Conformance', () => {
     // Set up valid environment
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = '/tmp/mathison-test';
-    process.env.MATHISON_GENOME_PATH = './test-fixtures/test-genome.json';
+    process.env.MATHISON_GENOME_PATH = getFixturePath('test-genome.json');
 
     cif = new CIF();
     cdi = new CDI({ strictMode: true });

@@ -31,12 +31,27 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build quad.js
+      - name: Build site
         run: |
+          mkdir -p site
           npx esbuild packages/mathison-quadratic/quad.ts \
             --bundle --format=esm --platform=browser \
             --external:crypto --external:fs/promises --external:path --external:child_process \
-            --outfile=quad.js
+            --outfile=site/quad.js
+          touch site/.nojekyll
+          cat > site/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="UTF-8">
+              <title>Mathison Quadratic</title>
+            </head>
+            <body>
+              <h1>Mathison Quadratic</h1>
+              <script type="module" src="quad.js"></script>
+            </body>
+          </html>
+          EOF
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -44,7 +59,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: 'site'
 
       - name: Deploy to GitHub Pages
         id: deployment

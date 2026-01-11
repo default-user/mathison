@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import MathisonServer from '../index';
+import { getFixturePath } from './setup';
 
 describe('HTTP Governance Pipeline Conformance', () => {
   let server: MathisonServer;
@@ -14,7 +15,7 @@ describe('HTTP Governance Pipeline Conformance', () => {
     // Set up test environment
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-http';
-    process.env.MATHISON_GENOME_PATH = './test-fixtures/test-genome.json';
+    process.env.MATHISON_GENOME_PATH = getFixturePath('test-genome.json');
     process.env.MATHISON_ENV = 'development';
     process.env.MATHISON_HEARTBEAT_INTERVAL = '60000'; // Long interval for tests
 

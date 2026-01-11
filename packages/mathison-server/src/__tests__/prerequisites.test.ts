@@ -5,6 +5,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getFixturePath } from './setup';
 import {
   validateTreaty,
   validateGenome,
@@ -33,7 +34,7 @@ describe('Prerequisite Validation', () => {
   describe('validateGenome', () => {
     beforeEach(() => {
       // Set valid env vars for testing
-      process.env.MATHISON_GENOME_PATH = './test-fixtures/test-genome.json';
+      process.env.MATHISON_GENOME_PATH = getFixturePath('test-genome.json');
       process.env.MATHISON_ENV = 'development';
     });
 
@@ -123,7 +124,7 @@ describe('Prerequisite Validation', () => {
       // Set up minimal valid environment
       process.env.MATHISON_STORE_BACKEND = 'FILE';
       process.env.MATHISON_STORE_PATH = '/tmp/mathison-test';
-      process.env.MATHISON_GENOME_PATH = './test-fixtures/test-genome.json';
+      process.env.MATHISON_GENOME_PATH = getFixturePath('test-genome.json');
       process.env.MATHISON_ENV = 'development';
     });
 

@@ -172,6 +172,20 @@ mathison/
     └── governance.json    # Treaty configuration
 ```
 
+## GitHub Pages Configuration
+
+**Important:** If using GitHub Pages for the Mathison Quadratic demo:
+- Go to Repository Settings → Pages → Source → Select "GitHub Actions" (not "Deploy from branch")
+- The workflow creates a clean `site/` directory with just `quad.js`, `index.html`, and `.nojekyll`
+- Branch-based Pages deployment causes duplicate "pages build and deployment" checks
+
+## Test Fixtures
+
+**Server tests** use repo-root fixture resolution:
+- Test fixtures are located in `packages/mathison-server/src/__tests__/fixtures/`
+- Tests use `getFixturePath()` helper from `setup.ts` for deterministic paths across environments
+- No symlinks - all fixtures are real files to avoid CI issues
+
 ## Quick Start
 
 ### Prerequisites

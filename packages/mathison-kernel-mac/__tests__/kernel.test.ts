@@ -318,7 +318,7 @@ describe('Mathison Kernel Tests', () => {
 
     const cdi = new CDIStub({
       tombstone_budget: {
-        soft_per_24h: 20,
+        soft_per_24h: 60,
         hard_per_24h: 100,
       },
     });

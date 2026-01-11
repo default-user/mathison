@@ -3,6 +3,4 @@ packages:
   - sdks/*
 
 ignoredBuiltDependencies:
-  - better-sqlite3
-  - esbuild
   - libxmljs2

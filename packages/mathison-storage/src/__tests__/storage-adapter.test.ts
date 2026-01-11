@@ -86,15 +86,22 @@ describe('StorageAdapter Conformance Suite', () => {
       };
       await receiptStore.append(receipt);
 
-      // Write graph node
-      const node: GraphNode = {
+      // Write graph nodes
+      const node1: GraphNode = {
         id: 'node-001',
         type: 'test',
         data: { value: 42 }
       };
-      await graphStore.writeNode(node);
+      await graphStore.writeNode(node1);
 
-      // Write graph edge
+      const node2: GraphNode = {
+        id: 'node-002',
+        type: 'test',
+        data: { value: 43 }
+      };
+      await graphStore.writeNode(node2);
+
+      // Write graph edge (requires both source and target nodes to exist for SQLite foreign keys)
       const edge: GraphEdge = {
         id: 'edge-001',
         source: 'node-001',

@@ -61,7 +61,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
         onDisconnect?.();
 
         // Attempt reconnect after 3 seconds
-        reconnectTimeout.current = setTimeout(() => {
+        reconnectTimeout.current = window.setTimeout(() => {
           console.log('[WS] Reconnecting...');
           connect();
         }, 3000);
@@ -77,7 +77,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
   const disconnect = useCallback(() => {
     if (reconnectTimeout.current) {
-      clearTimeout(reconnectTimeout.current);
+      window.clearTimeout(reconnectTimeout.current);
     }
     ws.current?.close();
     ws.current = null;

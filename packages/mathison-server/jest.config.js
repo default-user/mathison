@@ -7,6 +7,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^mathison-storage/src/(.*)$': '<rootDir>/../mathison-storage/src/$1',
   },
   globals: {
     'ts-jest': {

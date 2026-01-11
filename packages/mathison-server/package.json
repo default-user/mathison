@@ -8,7 +8,7 @@
     "build": "tsc && node copy-test-fixtures.js",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "jest"
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "mathison-genome": "workspace:*",

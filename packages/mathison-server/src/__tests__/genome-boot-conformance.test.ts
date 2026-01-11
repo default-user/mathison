@@ -8,6 +8,7 @@ import MathisonServer from '../index';
 import { writeFileSync, mkdirSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { resolveFromRepoRoot } from './setup';
 
 describe('Genome Boot Conformance Tests', () => {
   const testGenomePath = join(__dirname, 'fixtures', 'test-genome.json');
@@ -189,7 +190,7 @@ describe('Genome Boot Conformance Tests', () => {
 
       process.env.MATHISON_GENOME_PATH = testGenomePath;
       process.env.MATHISON_ENV = 'production'; // Enable manifest verification
-      process.env.MATHISON_REPO_ROOT = join(__dirname, '../../../..');
+      process.env.MATHISON_REPO_ROOT = resolveFromRepoRoot('.');
       process.env.MATHISON_STORE_BACKEND = 'FILE';
       process.env.MATHISON_STORE_PATH = '/tmp/mathison-test';
 
@@ -241,7 +242,7 @@ describe('Genome Boot Conformance Tests', () => {
 
       process.env.MATHISON_GENOME_PATH = testGenomePath;
       process.env.MATHISON_ENV = 'production';
-      process.env.MATHISON_REPO_ROOT = join(__dirname, '../../../..');
+      process.env.MATHISON_REPO_ROOT = resolveFromRepoRoot('.');
       process.env.MATHISON_STORE_BACKEND = 'FILE';
       process.env.MATHISON_STORE_PATH = '/tmp/mathison-test';
 
@@ -402,7 +403,7 @@ describe('Genome Boot Conformance Tests', () => {
 
       process.env.MATHISON_GENOME_PATH = testGenomePath;
       process.env.MATHISON_ENV = 'production'; // Enable manifest verification
-      process.env.MATHISON_REPO_ROOT = join(__dirname, '../../../..');
+      process.env.MATHISON_REPO_ROOT = resolveFromRepoRoot('.');
       process.env.MATHISON_STORE_BACKEND = 'FILE';
       process.env.MATHISON_STORE_PATH = '/tmp/mathison-test-manifest-tamper';
 

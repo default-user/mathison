@@ -5,11 +5,12 @@
  */
 
 import { MathisonGRPCServer } from '../grpc/server';
-import { CIF, CDI } from 'mathison-governance';
+import { CIF, CDI, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger } from 'mathison-governance';
 import { MemoryGraph } from 'mathison-memory';
 import { JobExecutor } from '../job-executor';
 import { ActionGate } from '../action-gate';
 import { makeStoresFromEnv } from '../../../mathison-storage/src/factory';
+import { initializeChainKey } from 'mathison-storage';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
@@ -35,6 +36,15 @@ describe('gRPC Governance Conformance', () => {
     process.env.MATHISON_STORE_BACKEND = 'FILE';
     process.env.MATHISON_STORE_PATH = tempDir;
     process.env.MATHISON_REPO_ROOT = '/home/user/mathison';
+
+    // Initialize boot key for governance proofs
+    initializeBootKey();
+
+    // Initialize chain key and token key using boot key
+    const { key, id } = getBootKeyForChaining();
+    initializeChainKey(key, id);
+    initializeTokenKey(key, id);
+    initializeTokenLedger();
 
     // Initialize governance components
     cif = new CIF({

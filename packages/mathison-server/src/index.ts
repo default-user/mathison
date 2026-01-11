@@ -408,7 +408,8 @@ export class MathisonServer {
       (request as any).requestId = requestId;
 
       // Fail-closed: If heartbeat detected system unhealthy, deny all requests
-      if (this.heartbeat && !this.heartbeat.isHealthy()) {
+      // Only enforce after boot completes to avoid race condition with async first check
+      if (this.bootStatus === 'ready' && this.heartbeat && !this.heartbeat.isHealthy()) {
         const status = this.heartbeat.getStatus();
         reply.code(503).send({
           reason_code: 'HEARTBEAT_FAIL_CLOSED',

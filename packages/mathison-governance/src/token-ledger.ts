@@ -40,6 +40,7 @@ class TokenLedger {
     this.cleanupInterval = setInterval(() => {
       this.cleanup();
     }, cleanupIntervalMs);
+    this.cleanupInterval.unref?.();
   }
 
   /**

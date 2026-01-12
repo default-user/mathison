@@ -94,6 +94,7 @@ export class HeartbeatMonitor {
         console.error('❌ Heartbeat check failed:', error);
       });
     }, this.intervalMs);
+    this.timer.unref?.();
   }
 
   /**
@@ -119,13 +120,16 @@ export class HeartbeatMonitor {
    * Check if system is healthy (ok = true)
    */
   isHealthy(): boolean {
-    return this.lastStatus?.ok ?? false;
+    return this.lastStatus?.ok ?? true;
   }
 
   /**
    * Run a single heartbeat check
    */
   private async runCheck(): Promise<void> {
+    if (!this.running) {
+      return;
+    }
     const checks: HeartbeatCheck[] = [];
     const warnings: string[] = [];
     let allOk = true;
@@ -283,6 +287,10 @@ export class HeartbeatMonitor {
 
     // Detect state change
     const stateChanged = this.lastStatus?.ok !== status.ok;
+
+    if (!this.running) {
+      return;
+    }
 
     this.lastStatus = status;
 

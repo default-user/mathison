@@ -202,9 +202,16 @@ pnpm -r build
 
 ### Run Tests
 
+**Canonical test command** (used by CI and local development):
 ```bash
-pnpm -r test
+make test
 ```
+
+This runs the consolidated test suite from all packages. Tests are located in:
+- `packages/*/src/__tests__/**/*.test.ts`
+- `packages/*/__tests__/**/*.test.ts`
+
+**Important:** Legacy tests outside these locations are NOT executed and will cause CI to fail if present.
 
 ### Environment Variables
 

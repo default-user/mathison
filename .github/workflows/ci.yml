@@ -59,14 +59,11 @@ jobs:
       - name: Build all packages
         run: pnpm -r build
 
-      - name: Run tests
-        run: pnpm -r test
-        env:
-          # Set test environment
-          NODE_ENV: test
-          MATHISON_ENV: test
-          # Require SQLite bindings in CI
-          MATHISON_REQUIRE_SQLITE: "1"
+      - name: Guard against legacy test discovery
+        run: ./scripts/ci/guard-tests.sh
+
+      - name: Run consolidated test suite
+        run: make test
 
       - name: Verify supply chain
         run: |

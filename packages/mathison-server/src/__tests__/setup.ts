@@ -48,6 +48,10 @@ export function getFixturePath(fixtureName: string): string {
   return join(__dirname, 'fixtures', fixtureName);
 }
 
+if (!process.env.MATHISON_GENOME_PATH) {
+  process.env.MATHISON_GENOME_PATH = getFixturePath('test-genome.json');
+}
+
 /**
  * Reset global state before each test
  * This is critical for tests that involve storage sealing

@@ -25,31 +25,52 @@ import { MathisonGRPCServer } from './grpc/server';
  * P0.4: Canonical Action IDs for HTTP routes
  * Single source of truth from action-registry, not duplicated strings
  */
-const HTTP_ACTION_IDS = {
+type ActionMapping = { id: string; capability: string };
+
+const HTTP_ACTIONS: Record<string, ActionMapping> = {
   // Read actions
-  GENOME_READ: 'action:read:genome',
-  JOB_STATUS: 'action:job:status',
-  JOB_RUN: 'action:job:run',
-  JOB_RESUME: 'action:job:resume',
-  RECEIPTS_READ: 'action:read:receipts',
-  HEALTH_CHECK: 'action:health:check',
+  GENOME_READ: { id: 'action:read:genome', capability: 'genome_read' },
+  JOB_STATUS: { id: 'action:job:status', capability: 'job_status' },
+  JOB_RUN: { id: 'action:job:run', capability: 'job_run' },
+  JOB_RESUME: { id: 'action:job:resume', capability: 'job_resume' },
+  RECEIPTS_READ: { id: 'action:read:receipts', capability: 'receipts_read' },
+  HEALTH_CHECK: { id: 'action:health:check', capability: 'health_check' },
 
   // Memory actions
-  MEMORY_READ_NODE: 'action:memory:read',
-  MEMORY_READ_EDGES: 'action:memory:read_edges',
-  MEMORY_READ_HYPEREDGES: 'action:memory:read_hyperedges',
-  MEMORY_SEARCH: 'action:memory:search',
-  MEMORY_CREATE_NODE: 'action:memory:create',
-  MEMORY_CREATE_EDGE: 'action:memory:create_edge',
-  MEMORY_CREATE_HYPEREDGE: 'action:memory:create_hyperedge',
-  MEMORY_UPDATE_NODE: 'action:memory:update',
+  MEMORY_READ_NODE: { id: 'action:memory:read', capability: 'memory_read_node' },
+  MEMORY_READ_EDGE: { id: 'action:memory:read', capability: 'memory_read_edge' },
+  MEMORY_READ_HYPEREDGE: { id: 'action:memory:read', capability: 'memory_read_hyperedge' },
+  MEMORY_READ_EDGES: { id: 'action:memory:read_edges', capability: 'memory_read_edges' },
+  MEMORY_READ_HYPEREDGES: { id: 'action:memory:read_hyperedges', capability: 'memory_read_hyperedges' },
+  MEMORY_SEARCH: { id: 'action:memory:search', capability: 'memory_search' },
+  MEMORY_CREATE_NODE: { id: 'action:memory:create', capability: 'memory_create_node' },
+  MEMORY_CREATE_EDGE: { id: 'action:memory:create_edge', capability: 'memory_create_edge' },
+  MEMORY_CREATE_HYPEREDGE: { id: 'action:memory:create_hyperedge', capability: 'memory_create_hyperedge' },
+  MEMORY_UPDATE_NODE: { id: 'action:memory:update', capability: 'memory_update_node' },
 
   // OI actions
-  OI_INTERPRET: 'action:oi:interpret',
+  OI_INTERPRET: { id: 'action:oi:interpret', capability: 'oi_interpret' },
 
   // Knowledge actions
-  KNOWLEDGE_INGEST: 'action:knowledge:ingest',
-} as const;
+  KNOWLEDGE_INGEST: { id: 'action:knowledge:ingest', capability: 'knowledge_ingest' },
+};
+
+const LEGACY_ACTION_ID_MAP = new Map(
+  Object.values(HTTP_ACTIONS).map(mapping => [mapping.capability, mapping.id])
+);
+
+function resolveActionMapping(action: string): ActionMapping | null {
+  const mappedId = LEGACY_ACTION_ID_MAP.get(action);
+  if (mappedId) {
+    return { id: mappedId, capability: action };
+  }
+
+  if (actionRegistry.isRegistered(action)) {
+    return { id: action, capability: action };
+  }
+
+  return null;
+}
 
 export interface MathisonServerConfig {
   port?: number;
@@ -465,32 +486,32 @@ export class MathisonServer {
     // All routes MUST declare an action unless in allowlist
     this.app.addHook('preHandler', async (request, reply) => {
       // P0.4: Route-to-action mapping using canonical action IDs from registry
-      const ROUTE_ACTIONS: Record<string, Record<string, string>> = {
+      const ROUTE_ACTIONS: Record<string, Record<string, ActionMapping>> = {
         'GET': {
-          '/genome': HTTP_ACTION_IDS.GENOME_READ,
-          '/jobs/status': HTTP_ACTION_IDS.JOB_STATUS,
-          '/jobs/logs': HTTP_ACTION_IDS.RECEIPTS_READ,
-          '/memory/search': HTTP_ACTION_IDS.MEMORY_SEARCH,
+          '/genome': HTTP_ACTIONS.GENOME_READ,
+          '/jobs/status': HTTP_ACTIONS.JOB_STATUS,
+          '/jobs/logs': HTTP_ACTIONS.RECEIPTS_READ,
+          '/memory/search': HTTP_ACTIONS.MEMORY_SEARCH,
         },
         'POST': {
-          '/jobs/run': HTTP_ACTION_IDS.JOB_RUN,
-          '/jobs/resume': HTTP_ACTION_IDS.JOB_RESUME,
-          '/memory/nodes': HTTP_ACTION_IDS.MEMORY_CREATE_NODE,
-          '/memory/edges': HTTP_ACTION_IDS.MEMORY_CREATE_EDGE,
-          '/memory/hyperedges': HTTP_ACTION_IDS.MEMORY_CREATE_HYPEREDGE,
-          '/oi/interpret': HTTP_ACTION_IDS.OI_INTERPRET,
-          '/v1/knowledge/ingest': HTTP_ACTION_IDS.KNOWLEDGE_INGEST,
+          '/jobs/run': HTTP_ACTIONS.JOB_RUN,
+          '/jobs/resume': HTTP_ACTIONS.JOB_RESUME,
+          '/memory/nodes': HTTP_ACTIONS.MEMORY_CREATE_NODE,
+          '/memory/edges': HTTP_ACTIONS.MEMORY_CREATE_EDGE,
+          '/memory/hyperedges': HTTP_ACTIONS.MEMORY_CREATE_HYPEREDGE,
+          '/oi/interpret': HTTP_ACTIONS.OI_INTERPRET,
+          '/v1/knowledge/ingest': HTTP_ACTIONS.KNOWLEDGE_INGEST,
         },
       };
 
       // P0.4: Pattern-based route-to-action mapping using canonical action IDs
-      const PATTERN_ACTIONS: Array<{ method: string; pattern: RegExp; action: string }> = [
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: HTTP_ACTION_IDS.MEMORY_READ_EDGES },
-        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: HTTP_ACTION_IDS.MEMORY_READ_HYPEREDGES },
-        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },  // Edge read uses same action
-        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_READ_NODE },  // Hyperedge read uses same action
-        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTION_IDS.MEMORY_UPDATE_NODE },
+      const PATTERN_ACTIONS: Array<{ method: string; pattern: RegExp; action: ActionMapping }> = [
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTIONS.MEMORY_READ_NODE },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/edges$/, action: HTTP_ACTIONS.MEMORY_READ_EDGES },
+        { method: 'GET', pattern: /^\/memory\/nodes\/[^/]+\/hyperedges$/, action: HTTP_ACTIONS.MEMORY_READ_HYPEREDGES },
+        { method: 'GET', pattern: /^\/memory\/edges\/[^/]+$/, action: HTTP_ACTIONS.MEMORY_READ_EDGE },
+        { method: 'GET', pattern: /^\/memory\/hyperedges\/[^/]+$/, action: HTTP_ACTIONS.MEMORY_READ_HYPEREDGE },
+        { method: 'POST', pattern: /^\/memory\/nodes\/[^/]+$/, action: HTTP_ACTIONS.MEMORY_UPDATE_NODE },
       ];
 
       // Allowlist: endpoints that bypass action requirement entirely
@@ -499,14 +520,14 @@ export class MathisonServer {
       const isAllowlisted = ALLOWLIST.includes(urlPath);
 
       // Look up action from static mapping
-      let action = ROUTE_ACTIONS[request.method]?.[urlPath];
-      let isKnownRoute = action !== undefined;
+      let actionMapping = ROUTE_ACTIONS[request.method]?.[urlPath];
+      let isKnownRoute = actionMapping !== undefined;
 
       // If not found, try pattern matching
-      if (!action) {
+      if (!actionMapping) {
         for (const { method, pattern, action: patternAction } of PATTERN_ACTIONS) {
           if (request.method === method && pattern.test(urlPath)) {
-            action = patternAction;
+            actionMapping = patternAction;
             isKnownRoute = true;
             break;
           }
@@ -514,20 +535,26 @@ export class MathisonServer {
       }
 
       // Also check if action was set by route handler (for backwards compatibility)
-      if (!action) {
-        action = (request as any).action;
-        if (action) isKnownRoute = true;
+      if (!actionMapping) {
+        const handlerAction = (request as any).action as string | undefined;
+        if (handlerAction) {
+          actionMapping = resolveActionMapping(handlerAction) ?? {
+            id: handlerAction,
+            capability: handlerAction
+          };
+          isKnownRoute = true;
+        }
       }
 
       // Unknown routes (no mapping) should pass through to 404 handler
       // Only deny known routes that are missing action declarations
-      if (!action && !isAllowlisted && !isKnownRoute) {
+      if (!actionMapping && !isAllowlisted && !isKnownRoute) {
         // Let unknown routes fall through to 404 handler
         return;
       }
 
       // FAIL-CLOSED: Known routes MUST have an action
-      if (!action && isKnownRoute && !isAllowlisted) {
+      if (!actionMapping && isKnownRoute && !isAllowlisted) {
         reply.code(403).send({
           reason_code: 'GOV_ACTION_REQUIRED',
           message: 'Route does not declare an action - denied by fail-closed governance policy',
@@ -540,19 +567,22 @@ export class MathisonServer {
       }
 
       // Skip CDI check for allowlisted routes (they have no action)
-      if (!action) {
+      if (!actionMapping) {
         return;
       }
 
+      const actionId = actionMapping.id;
+      const capabilityAction = actionMapping.capability;
+
       // P0.4: Validate action ID is registered (fail-closed on unknown actions)
-      if (!actionRegistry.isRegistered(action)) {
+      if (!actionRegistry.isRegistered(actionId)) {
         reply.code(403).send({
           reason_code: 'UNREGISTERED_ACTION',
-          message: `Action ID "${action}" not found in registry`,
+          message: `Action ID "${actionId}" not found in registry`,
           details: {
             url: request.url,
             method: request.method,
-            action_id: action
+            action_id: actionId
           }
         });
         return reply;
@@ -563,8 +593,8 @@ export class MathisonServer {
       // P0.4: Include action_id in context for consistent auditing
       const actionInput = {
         actor: clientId,
-        action,
-        action_id: action,  // P0.4: Canonical action ID
+        action: capabilityAction,
+        action_id: actionId,  // P0.4: Canonical action ID
         payload: (request as any).sanitizedBody
       };
 
@@ -589,7 +619,7 @@ export class MathisonServer {
       }
 
       // Attach action to request for downstream use
-      (request as any).governedAction = action;
+      (request as any).governedAction = actionId;
     });
 
     // Pre-serialization: JSON contract enforcement + CDI output check + CIF egress

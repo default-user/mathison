@@ -6,6 +6,60 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveRepoRoot(): Promise<string> {
+  if (process.env.MATHISON_REPO_ROOT) {
+    const envRoot = path.resolve(process.env.MATHISON_REPO_ROOT);
+    if (await pathExists(envRoot)) {
+      return envRoot;
+    }
+    throw new Error(`MATHISON_REPO_ROOT set but path does not exist: ${envRoot}`);
+  }
+
+  let currentDir = process.cwd();
+  const root = path.parse(currentDir).root;
+
+  while (currentDir !== root) {
+    const pnpmWorkspace = path.join(currentDir, 'pnpm-workspace.yaml');
+    if (await pathExists(pnpmWorkspace)) {
+      return currentDir;
+    }
+
+    const gitDir = path.join(currentDir, '.git');
+    if (await pathExists(gitDir)) {
+      return currentDir;
+    }
+
+    const pkgPath = path.join(currentDir, 'package.json');
+    if (await pathExists(pkgPath)) {
+      try {
+        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
+        if (pkg.workspaces) {
+          return currentDir;
+        }
+      } catch {
+        // Ignore malformed package.json
+      }
+    }
+
+    currentDir = path.dirname(currentDir);
+  }
+
+  throw new Error(
+    'Could not resolve repository root. ' +
+      'Set MATHISON_REPO_ROOT env var or run from within a git/pnpm workspace. ' +
+      `Searched from: ${process.cwd()}`
+  );
+}
+
 export interface Treaty {
   path: string;
   version: string;
@@ -108,12 +162,14 @@ export type { BootSession, BootKeyRegistry } from './boot-key-registry';
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();
+  private repoRoot?: string;
 
   async initialize(): Promise<void> {
     console.log('⚖️  Initializing Governance Engine...');
 
     // Load governance config
-    const configPath = path.join(process.cwd(), 'config', 'governance.json');
+    this.repoRoot = await resolveRepoRoot();
+    const configPath = path.join(this.repoRoot, 'config', 'governance.json');
     const configData = await fs.readFile(configPath, 'utf-8');
     const config = JSON.parse(configData);
 
@@ -128,7 +184,9 @@ export class GovernanceEngine {
   async loadTreaty(treatyPath: string): Promise<void> {
     console.log(`📜 Loading treaty from: ${treatyPath}`);
 
-    const fullPath = path.join(process.cwd(), treatyPath);
+    const repoRoot = this.repoRoot ?? (await resolveRepoRoot());
+    this.repoRoot = repoRoot;
+    const fullPath = path.isAbsolute(treatyPath) ? treatyPath : path.join(repoRoot, treatyPath);
     const content = await fs.readFile(fullPath, 'utf-8');
 
     // Parse treaty metadata from frontmatter
@@ -136,7 +194,7 @@ export class GovernanceEngine {
     const version = versionMatch ? versionMatch[1] : '1.0';
 
     // Read authority from config file (no hard-coding)
-    const configPath = path.join(process.cwd(), 'config', 'governance.json');
+    const configPath = path.join(repoRoot, 'config', 'governance.json');
     let authorityValue = 'unknown';
     try {
       const configData = await fs.readFile(configPath, 'utf-8');

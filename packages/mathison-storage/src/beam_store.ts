@@ -757,7 +757,7 @@ export class SQLiteBeamStore implements BeamStore {
         FROM beams b
         JOIN tombstones t ON b.beam_id = t.beam_id
         WHERE b.status = 'TOMBSTONED'
-          AND t.tombstoned_at_ms < ?
+          AND t.tombstoned_at_ms <= ?
           AND length(b.body) > 50
       `);
 
@@ -1221,7 +1221,7 @@ export class IndexedDBBeamStore implements BeamStore {
 
       for (const key of tombstoneKeys) {
         const tombstone = await reqToPromise<any>(tombstonesStore.get(key));
-        if (tombstone && tombstone.tombstoned_at_ms < markerCutoffMs) {
+        if (tombstone && tombstone.tombstoned_at_ms <= markerCutoffMs) {
           const beam = await reqToPromise<BeamRow | undefined>(beamsStore.get(tombstone.beam_id));
           if (beam && beam.status === "TOMBSTONED" && beam.body.length > 50) {
             beam.body = "[TOMBSTONED_MARKER]";

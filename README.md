@@ -67,8 +67,8 @@ pnpm install && pnpm demo
 
 **What this is NOT:**
 - Not a chat interface (it's a governance-first OI substrate)
-- Not production-ready (test genome keys in repo, no rate limiting, single-process only)
-- Not feature-complete (see README for roadmap)
+- Not production-ready (test genome keys in repo, production hardening pending: clustering, key rotation, audit retention)
+- Not feature-complete (see roadmap for pending items: mesh discovery/E2EE integration, mobile deployment, SDK finalization)
 
 **For full evaluation:** See `docs/00-start-here/demo.md` for step-by-step walkthrough.
 
@@ -481,11 +481,11 @@ Following the treaty:
 ### Upcoming
 
 - [ ] **P7-B:** React Native app implementation with native modules (Gemini Nano, llama.cpp)
-- [ ] **P7-C:** Google Play Store deployment ($365/year subscription)
-- [ ] **P8:** Mesh discovery protocols (proximity-based, broadcast, manual)
-- [ ] **P9:** End-to-end encryption for mesh communication
-- [ ] **P10:** SDK generation for TypeScript/Python/Rust
-- [ ] **P11:** gRPC APIs and streaming support
+- [ ] **P7-C:** Google Play Store deployment (requires credentials + $365/year subscription)
+- [ ] **P8:** Mesh discovery protocols integration (proximity-based, broadcast, manual)
+- [ ] **P9:** Mesh E2EE transport integration (crypto primitives exist; discovery + transport wiring pending)
+- [ ] **P10:** SDK generation finalization (TypeScript + Python scaffolds exist; Rust stub; verification pending)
+- [ ] **P11:** Production hardening (rate limiting tuning, clustering, key rotation, audit retention)
 
 ## License
 

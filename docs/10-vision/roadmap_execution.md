@@ -67,19 +67,19 @@ This document tracks the execution of the Mathison roadmap from manifest 4 to ro
 | 1 Memory API | DONE | Full read/write governed endpoints | server memory routes | Receipt + governance tests | Complete + ATTACK 6 fix |
 | 2 OI Interpretation | DONE | POST /oi/interpret with governance | oi package, server | Deny + receipt tests | Complete |
 | 3 Job API parity | DONE | Complete job endpoints + streaming | server job routes | Resume + idempotency tests | Complete |
-| 4 OpenAPI + SDK | IN_PROGRESS | OpenAPI spec + TS/PY/RUST sdks | sdk-generator | Snapshot tests | Partial (TS done) |
+| 4 OpenAPI + SDK | IN_PROGRESS | OpenAPI spec + TS/PY/RUST sdks + verification | sdk-generator | Snapshot tests + SDK smoke tests | Partial (OpenAPI done, TS/PY scaffolds exist, verification pending) |
 | 5 gRPC | DONE | gRPC server + governance parity + streaming | proto/, server grpc | Stream + deny + conformance tests | ✅ Complete (ATTACK 7, 10, 11, 12 fixes) |
-| 6 Mesh discovery | PENDING | Discovery with consent gates | mesh package | Deterministic discovery tests | - |
-| 7 Mesh E2EE | PENDING | End-to-end encryption | mesh crypto | Roundtrip + tamper tests | - |
+| 6 Mesh discovery | PENDING | Discovery with consent gates | mesh package | Deterministic discovery tests | Crypto primitives exist (SecureSession, X25519, AES-256-GCM) |
+| 7 Mesh E2EE | PENDING | E2EE + discovery + transport integration | mesh crypto + transport | E2E golden-path test | Crypto primitives exist; integration pending |
 | 8.1 Mobile app | PENDING | RN skeleton with adapters | mobile app | Adapter + storage tests | - |
 | 8.2 Play Store prep | PENDING | READY_FOR_HUMAN artifacts | docs/60-mobile/play_store.md | - | Requires credentials |
 | Finalization | PENDING | Single commit with versions applied | All | All pass | - |
 
 ## Current Focus
-Phase 4: OpenAPI + SDK (TS complete, PY/RUST in progress)
+Phase 4: OpenAPI + SDK (OpenAPI spec complete, TS/PY scaffolds exist, working on: SDK verification, Rust implementation, conformance harness)
 
 ## Blockers
-- Phase 6-7 (Mesh): Network-dependent, requires environment setup
+- Phase 6-7 (Mesh): Crypto primitives exist; integration with transport and discovery pending
 - Phase 8.2 (Play Store): Requires Google Play credentials (external)
 
 ## Recent Completions

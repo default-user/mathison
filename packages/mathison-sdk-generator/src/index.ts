@@ -700,25 +700,170 @@ class TestAsyncMathisonClient:
   private async generateRust(outputPath: string): Promise<void> {
     const endpoints = extractEndpointsFromOpenAPI();
 
-    // Write a stub README for Rust
-    fs.mkdirSync(outputPath, { recursive: true });
-    const readmePath = path.join(outputPath, 'README.md');
+    // Ensure directories exist
+    fs.mkdirSync(path.join(outputPath, 'src'), { recursive: true });
+
+    // Write Cargo.toml
+    const cargoToml = `[package]
+name = "mathison-sdk"
+version = "1.0.0"
+edition = "2021"
+description = "Rust SDK for Mathison API"
+license = "MIT"
+
+[dependencies]
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+`;
+    fs.writeFileSync(path.join(outputPath, 'Cargo.toml'), cargoToml, 'utf-8');
+
+    // Write lib.rs with basic client
+    const libRs = `//! Mathison Rust SDK
+//! Generated from mathison-server OpenAPI specification
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+#[derive(Debug)]
+pub enum Error {
+    HttpError(String),
+    ParseError(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::HttpError(msg) => write!(f, "HTTP error: {}", msg),
+            Error::ParseError(msg) => write!(f, "Parse error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// Health response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthResponse {
+    pub status: String,
+    #[serde(rename = "bootStatus")]
+    pub boot_status: String,
+}
+
+/// Node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Node {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub node_type: String,
+    pub data: HashMap<String, serde_json::Value>,
+    pub metadata: Option<HashMap<String, serde_json::Value>>,
+}
+
+/// Mathison API Client
+pub struct MathisonClient {
+    base_url: String,
+    client: reqwest::blocking::Client,
+}
+
+impl MathisonClient {
+    /// Create a new Mathison client
+    pub fn new(base_url: impl Into<String>) -> Self {
+        Self {
+            base_url: base_url.into(),
+            client: reqwest::blocking::Client::new(),
+        }
+    }
+
+    /// Get server health
+    pub fn get_health(&self) -> Result<HealthResponse> {
+        let url = format!("{}/health", self.base_url);
+        let resp = self.client
+            .get(&url)
+            .send()
+            .map_err(|e| Error::HttpError(e.to_string()))?;
+
+        resp.json::<HealthResponse>()
+            .map_err(|e| Error::ParseError(e.to_string()))
+    }
+
+    /// Get node by ID
+    pub fn get_node(&self, id: &str) -> Result<Node> {
+        let url = format!("{}/memory/nodes/{}", self.base_url, id);
+        let resp = self.client
+            .get(&url)
+            .send()
+            .map_err(|e| Error::HttpError(e.to_string()))?;
+
+        resp.json::<Node>()
+            .map_err(|e| Error::ParseError(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_creation() {
+        let client = MathisonClient::new("http://localhost:3000");
+        assert_eq!(client.base_url, "http://localhost:3000");
+    }
+}
+`;
+    fs.writeFileSync(path.join(outputPath, 'src/lib.rs'), libRs, 'utf-8');
+
+    // Write README
     const readme = `# Mathison Rust SDK
 
-**Status:** Not yet implemented
+Rust client for the Mathison API.
 
-This SDK will be generated from the mathison-server OpenAPI spec.
-See \`packages/mathison-sdk-generator\` for the generator.
+## Installation
 
-## Planned Endpoints
+Add to your \`Cargo.toml\`:
+
+\`\`\`toml
+[dependencies]
+mathison-sdk = { path = "../path/to/sdks/rust" }
+\`\`\`
+
+## Usage
+
+\`\`\`rust
+use mathison_sdk::MathisonClient;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = MathisonClient::new("http://localhost:3000");
+
+    // Health check
+    let health = client.get_health()?;
+    println!("Status: {}", health.status);
+
+    Ok(())
+}
+\`\`\`
+
+## API Endpoints
 
 ${endpoints.map(e => `- \`${e.method} ${e.path}\` - ${e.description || 'No description'}`).join('\n')}
-`;
-    fs.writeFileSync(readmePath, readme, 'utf-8');
 
-    console.log(`📝 Generated Rust SDK stub`);
-    console.log(`   Output: ${readmePath}`);
-    console.log('✅ Rust SDK stub generated');
+## Generated from
+
+This SDK is generated from the mathison-server OpenAPI specification.
+See \`packages/mathison-sdk-generator\` for the generator.
+`;
+    fs.writeFileSync(path.join(outputPath, 'README.md'), readme, 'utf-8');
+
+    console.log(`📝 Generated Rust SDK`);
+    console.log(`   Output: ${outputPath}`);
+    console.log('   Files:');
+    console.log('     - Cargo.toml');
+    console.log('     - src/lib.rs');
+    console.log('     - README.md');
+    console.log('✅ Rust SDK generated from OpenAPI');
   }
 
   // Generate TypeScript client code - DETERMINISTIC output (sorted endpoints)

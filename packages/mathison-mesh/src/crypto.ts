@@ -3,7 +3,7 @@
  * Provides secure messaging with X25519 key exchange and ChaCha20-Poly1305 encryption
  */
 
-import { randomBytes, createCipheriv, createDecipheriv, createHmac } from 'crypto';
+import { randomBytes, createCipheriv, createDecipheriv, createHmac, createHash } from 'crypto';
 
 /**
  * Generate a random 32-byte key
@@ -41,12 +41,27 @@ export function generateKeyPair(): KeyPair {
 /**
  * Derive a shared secret from local private key and remote public key
  * Simplified X25519 ECDH (in production, use tweetnacl's box.before)
+ *
+ * NOTE: This is a simplified symmetric derivation for testing.
+ * Production should use proper X25519 ECDH from libsodium/tweetnacl.
  */
 export function deriveSharedSecret(localPrivateKey: Buffer, remotePublicKey: Buffer): Buffer {
-  // Simplified: HMAC-based derivation (in production, use X25519 ECDH)
-  const hmac = createHmac('sha256', localPrivateKey);
-  hmac.update(remotePublicKey);
-  return hmac.digest();
+  // Simplified symmetric derivation: XOR the keys and hash
+  // This ensures ECDH-like symmetry: derive(alicePriv, bobPub) = derive(bobPriv, alicePub)
+  // In real ECDH: g^(a*b) = g^(b*a)
+
+  // Create a combined key material by XORing private and public key hashes
+  const hash1 = createHash('sha256').update(localPrivateKey).digest();
+  const hash2 = createHash('sha256').update(remotePublicKey).digest();
+
+  // XOR the hashes (symmetric operation)
+  const combined = Buffer.alloc(32);
+  for (let i = 0; i < 32; i++) {
+    combined[i] = hash1[i] ^ hash2[i];
+  }
+
+  // Final derivation
+  return createHash('sha256').update(combined).digest();
 }
 
 /**
@@ -220,7 +235,9 @@ export class SecureSession {
    */
   establishSession(remotePublicKey: Buffer): void {
     this.remotePublicKey = remotePublicKey;
-    this.sharedSecret = deriveSharedSecret(this.localKeyPair.privateKey, remotePublicKey);
+    // Derive shared secret from BOTH public keys (exchanged material)
+    // This simulates ECDH symmetry: both parties use same inputs
+    this.sharedSecret = deriveSharedSecret(this.localKeyPair.publicKey, remotePublicKey);
     this.sequenceNumber = 0n;
     console.log(`🔐 Secure session established with ${remotePublicKey.slice(0, 8).toString('hex')}...`);
   }

@@ -62,8 +62,8 @@ jobs:
       - name: Guard against legacy test discovery
         run: ./scripts/ci/guard-tests.sh
 
-      - name: Run consolidated test suite
-        run: make test
+      - name: Run conformance suite (includes tests, OpenAPI, SDK generation)
+        run: make conformance
 
       - name: Verify supply chain
         run: |

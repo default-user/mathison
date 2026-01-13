@@ -76,6 +76,8 @@ export class LogSink {
   private chainPrevHash: string | null = null;
   private totalBytes = 0;
   private droppedCount = 0;
+  // Track envelope sizes for accurate byte accounting
+  private envelopeSizes: Map<string, number> = new Map();
 
   constructor(nodeId: string, policy: RetentionPolicy = DEFAULT_RETENTION_POLICY) {
     this.nodeId = nodeId;
@@ -90,9 +92,25 @@ export class LogSink {
    * @returns Result with acceptance status
    */
   append(envelope: Omit<LogEnvelope, 'envelope_id' | 'node_id' | 'hash' | 'chain_prev_hash'>): LogSinkResult {
-    // Check capacity BEFORE appending
-    const envelopeSize = this.estimateEnvelopeSize(envelope);
+    // Generate envelope ID early so we can estimate final size
+    const envelope_id = this.generateEnvelopeId();
 
+    // Create full envelope with chain (for accurate size estimation)
+    const fullEnvelope: LogEnvelope = {
+      ...envelope,
+      envelope_id,
+      node_id: this.nodeId,
+      chain_prev_hash: this.chainPrevHash,
+      hash: '' // Will be computed below
+    };
+
+    // Compute envelope hash
+    fullEnvelope.hash = this.computeEnvelopeHash(fullEnvelope);
+
+    // Now compute the size of the COMPLETE envelope for accurate accounting
+    const envelopeSize = this.estimateEnvelopeSize(fullEnvelope);
+
+    // Check capacity BEFORE appending
     // Check if severity requires durable logging
     // Only block if caps exceeded AND no droppable logs available
     if (this.policy.block_on_overflow.includes(envelope.severity)) {
@@ -113,23 +131,9 @@ export class LogSink {
       }
     }
 
-    // Generate envelope ID
-    const envelope_id = this.generateEnvelopeId();
-
-    // Create full envelope with chain
-    const fullEnvelope: LogEnvelope = {
-      ...envelope,
-      envelope_id,
-      node_id: this.nodeId,
-      chain_prev_hash: this.chainPrevHash,
-      hash: '' // Will be computed below
-    };
-
-    // Compute envelope hash
-    fullEnvelope.hash = this.computeEnvelopeHash(fullEnvelope);
-
     // Append to buffer
     this.envelopes.push(fullEnvelope);
+    this.envelopeSizes.set(envelope_id, envelopeSize);
     this.totalBytes += envelopeSize;
     this.chainPrevHash = fullEnvelope.hash;
 
@@ -189,7 +193,15 @@ export class LogSink {
       const env = this.envelopes[i];
       if (this.policy.drop_on_overflow.includes(env.severity)) {
         const removed = this.envelopes.splice(i, 1)[0];
-        this.totalBytes -= this.estimateEnvelopeSize(removed);
+        // Use stored size for accurate accounting
+        const storedSize = this.envelopeSizes.get(removed.envelope_id);
+        if (storedSize !== undefined) {
+          this.totalBytes -= storedSize;
+          this.envelopeSizes.delete(removed.envelope_id);
+        } else {
+          // Fallback to estimation if size not found (shouldn't happen)
+          this.totalBytes -= this.estimateEnvelopeSize(removed);
+        }
         return true;
       }
     }
@@ -282,7 +294,15 @@ export class LogSink {
   flush(maxEnvelopes = 100): LogEnvelope[] {
     const toFlush = this.envelopes.splice(0, maxEnvelopes);
     for (const env of toFlush) {
-      this.totalBytes -= this.estimateEnvelopeSize(env);
+      // Use stored size for accurate accounting
+      const storedSize = this.envelopeSizes.get(env.envelope_id);
+      if (storedSize !== undefined) {
+        this.totalBytes -= storedSize;
+        this.envelopeSizes.delete(env.envelope_id);
+      } else {
+        // Fallback to estimation if size not found (shouldn't happen)
+        this.totalBytes -= this.estimateEnvelopeSize(env);
+      }
     }
     return toFlush;
   }
@@ -292,6 +312,7 @@ export class LogSink {
    */
   clear(): void {
     this.envelopes = [];
+    this.envelopeSizes.clear();
     this.totalBytes = 0;
     this.chainPrevHash = null;
     this.droppedCount = 0;

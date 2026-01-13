@@ -159,6 +159,39 @@ export {
 } from './boot-key-registry';
 export type { BootSession, BootKeyRegistry } from './boot-key-registry';
 
+// Re-export Thin Waist v0.1 (governance spine)
+export {
+  ToolGateway,
+  initializeToolGateway,
+  getToolGateway,
+  isToolGatewayInitialized,
+  ArtifactVerifier,
+  initializeArtifactVerifier,
+  getArtifactVerifier,
+  isArtifactVerifierInitialized,
+  LogSink,
+  LogSeverity,
+  DEFAULT_RETENTION_POLICY,
+  initializeLogSink,
+  getLogSink,
+  isLogSinkInitialized
+} from './thin-waist';
+export type {
+  ResourceScope,
+  ToolHandler,
+  ToolDefinition,
+  ToolInvocationContext,
+  ToolInvocationResult,
+  ArtifactType,
+  SignatureAlgorithm,
+  ArtifactManifest,
+  TrustedSigner,
+  VerificationResult,
+  LogEnvelope,
+  RetentionPolicy,
+  LogSinkResult
+} from './thin-waist';
+
 export class GovernanceEngine {
   private treaty: Treaty | null = null;
   private rules: Map<string, GovernanceRule> = new Map();

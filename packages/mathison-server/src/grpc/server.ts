@@ -906,6 +906,7 @@ export class MathisonGRPCServer {
    * Stream memory search results (server streaming)
    * Searches memory graph and streams results with governance
    * Full governance parity: heartbeat, CIF ingress/egress, CDI action/output, proofs, receipts
+   * Thin-Waist v0.1: Routes through ToolGateway (no bypass)
    */
   private async handleSearchMemory(
     call: grpc.ServerWritableStream<any, any>
@@ -1002,11 +1003,13 @@ export class MathisonGRPCServer {
         return;
       }
 
-      if (!this.config.memoryGraph) {
+      // Thin-Waist v0.1: Require capability token from CDI
+      const capabilityToken = actionResult.capability_token;
+      if (!capabilityToken) {
         proof.setVerdict('deny');
         call.emit('error', {
-          code: grpc.status.UNAVAILABLE,
-          message: 'Memory graph not initialized'
+          code: grpc.status.PERMISSION_DENIED,
+          message: 'No capability token provided by CDI (governance denied)'
         });
         call.end();
         return;
@@ -1039,8 +1042,31 @@ export class MathisonGRPCServer {
       const limit = (call.request as any).limit || 10;
       const boundedLimit = Math.min(limit, 100); // Max 100 results
 
-      // Perform search
-      const results = this.config.memoryGraph.search(query, boundedLimit);
+      // Thin-Waist v0.1: Route through ToolGateway (no bypass)
+      const gateway = getToolGateway();
+      const toolResult = await gateway.invoke<{ query: string; limit?: number }, { results: any[]; count: number }>(
+        'memory-query',
+        { query, limit: boundedLimit },
+        capabilityToken,
+        {
+          actor: clientId,
+          metadata: { source: 'grpc:SearchMemory' },
+          genome_id: this.config.genomeId ?? undefined,
+          genome_version: this.config.genome?.version
+        }
+      );
+
+      if (!toolResult.success) {
+        proof.setVerdict('deny');
+        call.emit('error', {
+          code: grpc.status.PERMISSION_DENIED,
+          message: toolResult.denied_reason || toolResult.error || 'Tool invocation denied'
+        });
+        call.end();
+        return;
+      }
+
+      const results = toolResult.data?.results || [];
 
       // Stream results one by one with full governance checks
       for (const node of results) {

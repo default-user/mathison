@@ -9,6 +9,8 @@ import { unsealStorageForTesting, isStorageSealed } from 'mathison-storage';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { mkdirSync } from 'fs';
+// Thin-Waist: Reset global singletons for testing
+import { resetToolGatewayForTesting, resetLogSinkForTesting } from 'mathison-governance';
 
 // Determine repo root dynamically based on this file's location
 // This file is at packages/mathison-server/src/__tests__/setup.ts
@@ -61,6 +63,10 @@ beforeEach(() => {
   if (isStorageSealed()) {
     unsealStorageForTesting();
   }
+
+  // Thin-Waist: Reset global singletons to allow multiple server instances in tests
+  resetToolGatewayForTesting();
+  resetLogSinkForTesting();
 });
 
 /**
@@ -71,6 +77,10 @@ afterEach(() => {
   if (isStorageSealed()) {
     unsealStorageForTesting();
   }
+
+  // Thin-Waist: Reset global singletons
+  resetToolGatewayForTesting();
+  resetLogSinkForTesting();
 });
 
 // Suppress console output during tests (optional)

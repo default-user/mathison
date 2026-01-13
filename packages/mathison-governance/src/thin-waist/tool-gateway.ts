@@ -255,3 +255,11 @@ export function getToolGateway(): ToolGateway {
 export function isToolGatewayInitialized(): boolean {
   return globalToolGateway !== null;
 }
+
+/**
+ * Reset global tool gateway (for testing only)
+ * @internal
+ */
+export function resetToolGatewayForTesting(): void {
+  globalToolGateway = null;
+}

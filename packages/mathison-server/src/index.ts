@@ -5,7 +5,7 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry, initializeToolGateway, getToolGateway, initializeLogSink, getLogSink } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry, initializeToolGateway, getToolGateway, initializeLogSink, getLogSink, initializeArtifactVerifier, getArtifactVerifier } from 'mathison-governance';
 import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
@@ -247,6 +247,9 @@ export class MathisonServer {
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
+      // Thin-Waist v0.1: Initialize ArtifactVerifier with genome signers (fail-closed)
+      await this.initializeArtifactVerifier();
+
       // P1.1: Verify integrity of critical governance modules
       await this.verifyGovernanceIntegrity();
 
@@ -347,6 +350,46 @@ export class MathisonServer {
       console.error('❌ Governance integrity check error:', error);
       throw new Error(`GOVERNANCE_INTEGRITY_ERROR: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  /**
+   * Thin-Waist v0.1: Initialize ArtifactVerifier with genome signers (fail-closed)
+   * Loads genome authority signers into ArtifactVerifier trust store
+   */
+  private async initializeArtifactVerifier(): Promise<void> {
+    if (!this.genome) {
+      throw new Error('ARTIFACT_VERIFIER_INIT_FAILED: Genome must be loaded first');
+    }
+
+    console.log('🔐 Initializing ArtifactVerifier with genome signers...');
+
+    // Initialize verifier (test mode in development)
+    const isProduction = process.env.MATHISON_ENV === 'production';
+    await initializeArtifactVerifier({ testMode: !isProduction });
+
+    const verifier = getArtifactVerifier();
+
+    // Add each genome signer to the trust store
+    for (const signer of this.genome.authority.signers) {
+      try {
+        verifier.addTrustedSigner({
+          key_id: signer.key_id,
+          alg: signer.alg as 'ed25519', // Genome signers use ed25519
+          public_key: signer.public_key,
+          description: `Genome authority signer: ${signer.key_id}`,
+          added_at: new Date().toISOString()
+        });
+      } catch (error) {
+        // Ignore if signer already exists (idempotent)
+        if (error instanceof Error && error.message.includes('SIGNER_ALREADY_TRUSTED')) {
+          console.log(`  ✓ Signer ${signer.key_id} already trusted`);
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    console.log(`✓ ArtifactVerifier initialized with ${this.genome.authority.signers.length} trusted signer(s)`);
   }
 
   private async initializeHeartbeat(): Promise<void> {

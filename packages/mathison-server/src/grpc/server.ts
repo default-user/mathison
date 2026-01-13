@@ -7,7 +7,7 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import * as path from 'path';
 import * as fs from 'fs';
-import { CIF, CDI, GovernanceProofBuilder, GovernanceProof, actionRegistry } from 'mathison-governance';
+import { CIF, CDI, GovernanceProofBuilder, GovernanceProof, actionRegistry, getToolGateway, CapabilityToken } from 'mathison-governance';
 import { ActionGate } from '../action-gate';
 import { MemoryGraph } from 'mathison-memory';
 import { Interpreter } from 'mathison-oi';
@@ -206,7 +206,7 @@ export class MathisonGRPCServer {
     call: grpc.ServerUnaryCall<TRequest, TResponse> | grpc.ServerWritableStream<TRequest, TResponse>,
     action: string,
     actionId: string,  // P0.4: Canonical action ID (now required)
-    handler: (sanitizedRequest: TRequest, proof: GovernanceProofBuilder) => Promise<TResponse>
+    handler: (sanitizedRequest: TRequest, proof: GovernanceProofBuilder, capabilityToken?: CapabilityToken) => Promise<TResponse>
   ): Promise<TResponse> {
     // P0.4: Validate action ID against registry (fail-closed if unregistered)
     if (!actionRegistry.isRegistered(actionId)) {
@@ -291,9 +291,10 @@ export class MathisonGRPCServer {
       throw error;
     }
 
-    // 4. Execute handler
+    // 4. Execute handler (pass capability token for ToolGateway integration)
     const handlerInput = ingressResult.sanitizedPayload as TRequest;
-    const response = await handler(handlerInput, proof);
+    const capabilityToken = actionResult.capability_token;
+    const response = await handler(handlerInput, proof, capabilityToken);
 
     // P0.1: Record handler stage
     proof.addHandler(handlerInput, response);
@@ -747,15 +748,37 @@ export class MathisonGRPCServer {
     callback: grpc.sendUnaryData<any>
   ): Promise<void> {
     try {
-      const response = await this.withGovernance(call, 'oi_interpret', GRPC_ACTION_IDS.INTERPRET_TEXT, async (req, proof) => {
+      const response = await this.withGovernance(call, 'oi_interpret', GRPC_ACTION_IDS.INTERPRET_TEXT, async (req, proof, capabilityToken) => {
         if (!this.config.interpreter) {
           throw new Error('OI interpreter not initialized');
         }
 
-        const result = await this.config.interpreter.interpret({
-          text: (req as any).text,
-          limit: (req as any).limit
-        });
+        // Thin-Waist v0.1: Route through ToolGateway (no bypass)
+        if (!capabilityToken) {
+          throw new Error('No capability token provided by CDI (governance denied)');
+        }
+
+        const gateway = getToolGateway();
+        const clientId = call.getPeer();
+
+        const toolResult = await gateway.invoke<{ text: string; limit?: number }, any>(
+          'oi-interpret',
+          {
+            text: (req as any).text,
+            limit: (req as any).limit
+          },
+          capabilityToken,
+          {
+            actor: clientId,
+            metadata: { source: 'grpc:InterpretText' },
+            genome_id: this.config.genomeId ?? undefined,
+            genome_version: this.config.genome?.version
+          }
+        );
+
+        if (!toolResult.success) {
+          throw new Error(toolResult.denied_reason || toolResult.error || 'Tool invocation denied');
+        }
 
         return {
           tokens: [],  // InterpretResponse doesn't have tokens field

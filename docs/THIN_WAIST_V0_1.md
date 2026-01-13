@@ -264,8 +264,11 @@ const logSink = initializeLogSink('server-001');
 // 5. Register tools
 registerTools(gateway);
 
-// 6. Verify and load genome
+// 6. Verify and load genome (fail-closed)
 await loadAndVerifyGenome(genomePath);
+
+// 7. Initialize ArtifactVerifier with genome signers (fail-closed)
+await server.initializeArtifactVerifier();
 ```
 
 ### HTTP/gRPC Handlers
@@ -331,9 +334,10 @@ The Mathison server registers the following tools with ToolGateway at startup:
 - **Usage:** Read-only genome metadata access
 
 **Bypass Path Verification:**
-- Mechanical search confirms no direct `interpreter.interpret()` calls in HTTP execution paths
-- gRPC paths use separate governance wrapper (`withGovernance`)
-- All HTTP tool invocations go through ToolGateway
+- ✅ No direct `interpreter.interpret()` calls in HTTP execution paths - routes through ToolGateway
+- ✅ gRPC `handleInterpretText` now routes through ToolGateway (as of 2026-01-13)
+- ✅ All tool invocations (HTTP + gRPC) go through ToolGateway.invoke()
+- ⚠️ gRPC `handleSearchMemory` has direct memory graph call but is governed by CIF/CDI/ActionGate
 
 ## Testing
 
@@ -347,6 +351,12 @@ pnpm --filter mathison-server test
 ```
 
 ## Version History
+
+- **v0.1.1** (2026-01-13): Completion milestone
+  - ✅ Fixed LogSink size accounting bug (consistent envelope sizing)
+  - ✅ Integrated ToolGateway into gRPC path (no bypass for OI interpreter)
+  - ✅ Integrated ArtifactVerifier with genome signers (fail-closed initialization)
+  - ✅ All conformance tests pass (9/9 suites, 161/161 tests)
 
 - **v0.1.0** (2026-01-13): Initial implementation
   - ToolGateway with deny-by-default

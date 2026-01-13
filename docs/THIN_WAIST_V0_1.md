@@ -305,13 +305,45 @@ async function handleToolRequest(req, res) {
 }
 ```
 
+## Registered Tools (Mathison Server)
+
+The Mathison server registers the following tools with ToolGateway at startup:
+
+### 1. `oi-interpret`
+- **Description:** Interpret text using memory graph context
+- **Action ID:** `action:oi:interpret`
+- **Required Scopes:** `memory:read`
+- **Handler:** Wraps `Interpreter.interpret()` from `mathison-oi` package
+- **HTTP Route:** `POST /oi/interpret` routes through this tool (no direct interpreter call)
+
+### 2. `memory-query`
+- **Description:** Search memory graph for nodes
+- **Action ID:** `action:memory:search`
+- **Required Scopes:** `memory:read`
+- **Handler:** Wraps `MemoryGraph.search()` from `mathison-memory` package
+- **Usage:** Read-only memory queries
+
+### 3. `genome-info`
+- **Description:** Get genome metadata and runtime status
+- **Action ID:** `action:read:genome`
+- **Required Scopes:** `governance:validate`
+- **Handler:** Returns safe runtime info (genome ID, version, invariant/capability counts)
+- **Usage:** Read-only genome metadata access
+
+**Bypass Path Verification:**
+- Mechanical search confirms no direct `interpreter.interpret()` calls in HTTP execution paths
+- gRPC paths use separate governance wrapper (`withGovernance`)
+- All HTTP tool invocations go through ToolGateway
+
 ## Testing
 
-See `tests/conformance/thin-waist-conformance.test.ts` for comprehensive tests.
+See `tests/conformance/thin-waist-conformance.test.ts` and `packages/mathison-server/src/__tests__/oi-conformance.test.ts` for comprehensive tests.
 
 Run conformance tests:
 ```bash
 pnpm test -- conformance
+pnpm --filter mathison-governance test
+pnpm --filter mathison-server test
 ```
 
 ## Version History

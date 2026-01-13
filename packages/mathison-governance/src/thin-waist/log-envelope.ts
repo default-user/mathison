@@ -94,13 +94,22 @@ export class LogSink {
     const envelopeSize = this.estimateEnvelopeSize(envelope);
 
     // Check if severity requires durable logging
+    // Only block if caps exceeded AND no droppable logs available
     if (this.policy.block_on_overflow.includes(envelope.severity)) {
       if (this.envelopes.length >= this.policy.max_envelopes ||
           this.totalBytes + envelopeSize > this.policy.max_pending_bytes) {
-        return {
-          accepted: false,
-          denied_reason: `DURABLE_LOGGING_REQUIRED: ${envelope.severity} event requires durable logging but caps exceeded (envelopes=${this.envelopes.length}/${this.policy.max_envelopes}, bytes=${this.totalBytes}/${this.policy.max_pending_bytes})`
-        };
+        // Check if there are droppable logs that can be removed to make room
+        const hasDroppableLogs = this.envelopes.some(env =>
+          this.policy.drop_on_overflow.includes(env.severity)
+        );
+
+        // Only block if no droppable logs available
+        if (!hasDroppableLogs) {
+          return {
+            accepted: false,
+            denied_reason: `DURABLE_LOGGING_REQUIRED: ${envelope.severity} event requires durable logging but caps exceeded and no droppable logs available (envelopes=${this.envelopes.length}/${this.policy.max_envelopes}, bytes=${this.totalBytes}/${this.policy.max_pending_bytes})`
+          };
+        }
       }
     }
 
@@ -321,4 +330,12 @@ export function getLogSink(): LogSink {
  */
 export function isLogSinkInitialized(): boolean {
   return globalLogSink !== null;
+}
+
+/**
+ * Reset global log sink (for testing only)
+ * @internal
+ */
+export function resetLogSinkForTesting(): void {
+  globalLogSink = null;
 }

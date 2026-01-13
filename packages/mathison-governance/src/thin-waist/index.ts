@@ -12,3 +12,7 @@
 export * from './tool-gateway';
 export * from './artifact-verifier';
 export * from './log-envelope';
+
+// Test utilities (for internal testing only)
+export { resetToolGatewayForTesting } from './tool-gateway';
+export { resetLogSinkForTesting } from './log-envelope';

@@ -5,7 +5,7 @@
 
 import Fastify, { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import cors from '@fastify/cors';
-import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry } from 'mathison-governance';
+import { GovernanceEngine, CDI, CIF, initializeBootKey, getBootKeyForChaining, initializeTokenKey, initializeTokenLedger, initializeBootKeyRegistry, getBootKeyRegistryManager, GovernanceProofBuilder, GovernanceProof, verifyGovernanceIntegrity, actionRegistry, initializeToolGateway, getToolGateway, initializeLogSink, getLogSink } from 'mathison-governance';
 import { loadStoreConfigFromEnv, StorageAdapter, makeStorageAdapterFromEnv, sealStorage, initializeChainKey } from 'mathison-storage';
 import { MemoryGraph, Node, Edge } from 'mathison-memory';
 import { loadAndVerifyGenome, Genome, GenomeMetadata } from 'mathison-genome';
@@ -237,6 +237,13 @@ export class MathisonServer {
       initializeBootKeyRegistry();
       getBootKeyRegistryManager().registerSession(id);
 
+      // Thin-Waist v0.1: Initialize ToolGateway and LogSink
+      console.log('🔧 Initializing Thin-Waist governance spine...');
+      initializeToolGateway();
+      const nodeId = process.env.MATHISON_NODE_ID || `server-${Date.now()}`;
+      initializeLogSink(nodeId);
+      console.log('✓ Thin-Waist initialized');
+
       // FIRST: Load and verify Memetic Genome (fail-closed)
       await this.loadGenome();
 
@@ -408,10 +415,73 @@ export class MathisonServer {
         chunkRetriever,
       });
       console.log('✓ Knowledge Ingestion Gate initialized');
+
+      // Thin-Waist v0.1: Register tools with ToolGateway
+      this.registerTools();
     } catch (error) {
       console.error('❌ Storage initialization failed');
       throw error; // Re-throw to fail boot
     }
+  }
+
+  /**
+   * Thin-Waist v0.1: Register tools with ToolGateway
+   * All tool invocations must go through the gateway
+   */
+  private registerTools(): void {
+    console.log('🔧 Registering tools with ToolGateway...');
+    const gateway = getToolGateway();
+
+    // Tool 1: oi-interpret - OI interpretation via memory graph
+    gateway.registerTool({
+      name: 'oi-interpret',
+      description: 'Interpret text using memory graph context',
+      action_id: HTTP_ACTIONS.OI_INTERPRET.id,
+      required_scopes: [{ type: 'memory:read' }],
+      handler: async (args: { text: string; limit?: number }, context) => {
+        if (!this.interpreter) {
+          throw new Error('OI Interpreter not initialized');
+        }
+        return await this.interpreter.interpret(args);
+      }
+    });
+
+    // Tool 2: memory-query - Read-only memory graph search
+    gateway.registerTool({
+      name: 'memory-query',
+      description: 'Search memory graph for nodes',
+      action_id: HTTP_ACTIONS.MEMORY_SEARCH.id,
+      required_scopes: [{ type: 'memory:read' }],
+      handler: async (args: { query: string; limit?: number }, context) => {
+        if (!this.memoryGraph) {
+          throw new Error('MemoryGraph not initialized');
+        }
+        const results = this.memoryGraph.search(args.query, args.limit || 10);
+        return { results, count: results.length };
+      }
+    });
+
+    // Tool 3: genome-info - Safe runtime info (read-only)
+    gateway.registerTool({
+      name: 'genome-info',
+      description: 'Get genome metadata and runtime status',
+      action_id: HTTP_ACTIONS.GENOME_READ.id,
+      required_scopes: [{ type: 'governance:validate' }],
+      handler: async (args: {}, context) => {
+        if (!this.genome || !this.genomeId) {
+          throw new Error('Genome not loaded');
+        }
+        return {
+          genome_id: this.genomeId,
+          name: this.genome.name,
+          version: this.genome.version,
+          invariant_count: this.genome.invariants.length,
+          capability_count: this.genome.capabilities.length
+        };
+      }
+    });
+
+    console.log(`✓ Registered ${gateway.listTools().length} tools with ToolGateway`);
   }
 
   private registerGovernancePipeline(): void {
@@ -620,6 +690,12 @@ export class MathisonServer {
 
       // Attach action to request for downstream use
       (request as any).governedAction = actionId;
+
+      // Thin-Waist v0.1: Attach capability token to request
+      // Token grants permission to invoke tools via ToolGateway
+      if (actionResult.capability_token) {
+        (request as any).capabilityToken = actionResult.capability_token;
+      }
     });
 
     // Pre-serialization: JSON contract enforcement + CDI output check + CIF egress
@@ -1590,31 +1666,18 @@ export class MathisonServer {
     });
 
     // Phase 2: POST /oi/interpret - OI interpretation endpoint
+    // Thin-Waist v0.1: Routes through ToolGateway (no direct interpreter call)
     this.app.post('/oi/interpret', async (request, reply) => {
       (request as any).action = 'oi_interpret';
       const body = (request as any).sanitizedBody as any;
+      const actor = request.ip;
 
-      // Fail-closed: require interpreter
-      if (!this.interpreter) {
-        return reply.code(503).send({
-          reason_code: 'GOVERNANCE_INIT_FAILED',
-          message: 'OI Interpreter not initialized'
-        });
-      }
-
-      // Fail-closed: require memory graph
-      if (!this.memoryGraph) {
-        return reply.code(503).send({
-          reason_code: 'GOVERNANCE_INIT_FAILED',
-          message: 'Memory backend unavailable'
-        });
-      }
-
-      // Fail-closed: require genome metadata
-      if (!this.genome || !this.genomeId) {
-        return reply.code(503).send({
-          reason_code: 'GENOME_MISSING',
-          message: 'Genome metadata missing'
+      // Fail-closed: require capability token from CDI middleware
+      const capabilityToken = (request as any).capabilityToken;
+      if (!capabilityToken) {
+        return reply.code(403).send({
+          reason_code: 'CAPABILITY_MISSING',
+          message: 'No capability token attached to request (governance denied)'
         });
       }
 
@@ -1639,18 +1702,34 @@ export class MathisonServer {
       }
 
       try {
-        // Execute interpretation
-        const result = await this.interpreter.interpret({
-          text: body.text,
-          limit
-        });
+        // Thin-Waist v0.1: Invoke via ToolGateway (enforces capability-based access)
+        const gateway = getToolGateway();
+        const result = await gateway.invoke<{ text: string; limit?: number }, any>(
+          'oi-interpret',
+          { text: body.text, limit },
+          capabilityToken,
+          {
+            actor,
+            metadata: { source: 'http:/oi/interpret' },
+            genome_id: this.genomeId ?? undefined,
+            genome_version: this.genome?.version
+          }
+        );
 
-        return result;
+        // Check if tool invocation succeeded
+        if (!result.success) {
+          return reply.code(403).send({
+            reason_code: result.denied_reason || 'TOOL_INVOCATION_DENIED',
+            message: result.error || result.denied_reason || 'Tool invocation failed'
+          });
+        }
+
+        return result.data;
       } catch (error) {
-        // Handle interpreter errors (fail-closed)
+        // Handle gateway errors (fail-closed)
         return reply.code(500).send({
-          reason_code: 'GOVERNANCE_INIT_FAILED',
-          message: error instanceof Error ? error.message : 'Interpretation failed'
+          reason_code: 'TOOL_GATEWAY_ERROR',
+          message: error instanceof Error ? error.message : 'Tool gateway invocation failed'
         });
       }
     });

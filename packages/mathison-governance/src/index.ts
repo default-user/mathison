@@ -174,7 +174,10 @@ export {
   DEFAULT_RETENTION_POLICY,
   initializeLogSink,
   getLogSink,
-  isLogSinkInitialized
+  isLogSinkInitialized,
+  // Test utilities
+  resetToolGatewayForTesting,
+  resetLogSinkForTesting
 } from './thin-waist';
 export type {
   ResourceScope,

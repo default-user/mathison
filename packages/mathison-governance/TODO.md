@@ -2,14 +2,14 @@
 
 ## Critical
 
-- [ ] Implement loadAuthorityConfig with strict validation
-- [ ] Implement getCurrentPrincipal
-- [ ] Implement CIF validation with schema support
-- [ ] Implement CDI pre-action checks (currently allow-all stub)
+- [x] Implement loadAuthorityConfig with strict validation
+- [x] Implement getCurrentPrincipal
+- [x] Implement CIF validation with schema support (validateCIF + zod schemas)
+- [x] Implement CDI pre-action checks (checkCDI with cross-namespace denial)
 - [ ] Implement CDI post-action checks
-- [ ] Add unit tests for authority config loading
-- [ ] Add unit tests for CIF validation
-- [ ] Add unit tests for CDI decision logic
+- [x] Add unit tests for authority config loading
+- [x] Add unit tests for CIF validation
+- [x] Add unit tests for CDI decision logic
 
 ## High Priority
 

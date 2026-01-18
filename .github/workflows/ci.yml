@@ -1,3 +1,6 @@
+# WHY: Separate jobs ensure distinct GitHub check names for branch protection rules.
+# Each job reports independently, avoiding "expected checks missing" yellow status.
+
 name: CI
 
 on:
@@ -7,7 +10,58 @@ on:
     branches: [ main, master ]
 
 jobs:
-  test:
+  # WHY: Job name "Type check" becomes the GitHub check name for branch protection
+  typecheck:
+    name: Type check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run type check
+        run: pnpm typecheck
+
+  # WHY: Job name "Lint" becomes the GitHub check name for branch protection
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run lint
+        run: pnpm lint
+
+  # WHY: Job name "Tests" becomes the GitHub check name for branch protection.
+  # Postgres service required for database tests.
+  tests:
+    name: Tests
     runs-on: ubuntu-latest
 
     services:
@@ -40,12 +94,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install
-
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
 
       - name: Run tests
         run: pnpm test

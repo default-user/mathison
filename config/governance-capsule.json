@@ -1,0 +1,33 @@
+{
+  "version": "2.1",
+  "capsule_id": "capsule-default-dev",
+  "issued_at": "2025-01-01T00:00:00Z",
+  "expires_at": "2030-01-01T00:00:00Z",
+  "issuer": "mathison-dev",
+  "treaty": {
+    "id": "treaty-default",
+    "name": "Default Development Treaty",
+    "constraints": {
+      "max_token_budget": 1000000,
+      "allowed_model_families": ["*"],
+      "allowed_tool_categories": ["*"],
+      "data_retention_days": 365
+    }
+  },
+  "genome": {
+    "id": "genome-default",
+    "capabilities": {
+      "memory_read": true,
+      "memory_write": true,
+      "model_invocation": true,
+      "tool_invocation": true,
+      "cross_namespace_envelope": false
+    }
+  },
+  "posture": {
+    "mode": "development",
+    "strict_validation": true,
+    "audit_all_actions": true
+  },
+  "signature": "DEV_SIGNATURE_NOT_FOR_PRODUCTION"
+}

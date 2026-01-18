@@ -1,210 +1,328 @@
-# Mathison v2 Architecture
+# Mathison v2.1 Architecture
 
-## System Overview
+## Overview
 
-Mathison is composed of specialized organs, each with clear responsibilities and interfaces.
+Mathison v2.1 implements a governed Organized Intelligence (OI) system with strict invariants:
 
-```
-┌─────────────────────────────────────────────────┐
-│              HTTP/gRPC Server                   │
-│         (CIF Ingress / CDI Gates)              │
-└─────────────────────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        │             │             │
-┌───────▼──────┐ ┌───▼────────┐ ┌──▼──────────┐
-│ Governance   │ │  Memory    │ │  Mesh       │
-│              │ │            │ │             │
-│ - Authority  │ │ - Threads  │ │ - Scheduler │
-│ - CIF/CDI    │ │ - Events   │ │             │
-│ - Policies   │ │ - Recall   │ │             │
-└──────────────┘ └────────────┘ └─────────────┘
-                      │
-                ┌─────▼──────┐
-                │ Artifacts  │
-                │            │
-                │ - Blobs    │
-                │ - Metadata │
-                └────────────┘
-                      │
-              ┌───────▼────────┐
-              │   PostgreSQL   │
-              │  + pgvector    │
-              └────────────────┘
-```
+1. **Single Pipeline**: All requests flow through one governed pipeline
+2. **Fail-Closed**: Missing/invalid governance material = deny
+3. **Namespace Isolation**: Per-OI boundaries with no hive mind
+4. **Capability-Gated Adapters**: Model/tool calls require tokens
 
-## Organs
-
-### Governance (packages/mathison-governance)
-
-WHY: Explicit authority prevents privilege escalation and ensures all actions are traceable to principals.
-
-Responsibilities:
-- Load and validate authority configuration
-- Enforce CIF (input validation)
-- Enforce CDI (decision gating)
-- Track capability tokens
-
-Interfaces:
-- `loadAuthorityConfig(path: string): AuthorityConfig`
-- `getCurrentPrincipal(): Principal`
-- `checkCDI(action: string, context: any): CDIDecision`
-- `validateCIF(input: any, schema: Schema): ValidatedInput`
-
-Invariants:
-- Config must be valid at boot or system fails
-- All governed actions pass through CDI
-- CIF validates all external input
-
-### Memory (packages/mathison-memory)
-
-WHY: Partitioned, append-only event log provides auditability and enables reconstruction without risking cross-namespace leakage.
-
-Responsibilities:
-- Manage threads and commitments
-- Store append-only event log
-- Provide semantic recall via embeddings
-- Enforce namespace isolation
-
-Interfaces:
-- `createThread(namespace_id, scope, priority): Thread`
-- `getThreads(namespace_id, filters): Thread[]`
-- `addCommitment(thread_id, commitment): Commitment`
-- `logEvent(event): void`
-- `queryByEmbedding(namespace_id, vector, limit): SearchResult[]`
-
-Invariants:
-- All queries require namespace_id
-- Events are append-only
-- Cross-namespace queries are denied
-
-### Artifacts (packages/mathison-artifacts)
-
-WHY: Separating large blobs from structured data keeps the database fast and allows flexible storage backends.
-
-Responsibilities:
-- Store large binary objects
-- Track artifact metadata in Postgres
-- Content-address artifacts by hash
-
-Interfaces:
-- `putArtifact(namespace_id, thread_id?, data): ArtifactMetadata`
-- `getArtifactMetadata(artifact_id): ArtifactMetadata`
-- `listArtifactsByThread(thread_id): ArtifactMetadata[]`
-
-Storage:
-- Default: filesystem
-- Production: S3-compatible (TODO)
-
-Invariants:
-- Artifacts are tagged with namespace_id
-- Metadata stored in Postgres, blobs stored externally
-- Content hash verified on retrieval
-
-### Mesh (packages/mathison-mesh)
-
-WHY: Explicit scheduler with logged decisions makes thread selection auditable and debuggable.
-
-Responsibilities:
-- Select next runnable thread
-- Log scheduler decisions
-
-Interfaces:
-- `selectNextThread(namespace_id?): Thread | null`
-
-Algorithm:
-1. Filter to runnable (state = open, not blocked)
-2. Sort by priority descending, then updated_at ascending
-3. Return top or null
-
-Invariants:
-- Decisions logged to event log
-- No direct state modification
-- Respects namespace boundaries if provided
-
-### Server (packages/mathison-server)
-
-WHY: Centralized API layer with CIF/CDI middleware ensures all requests are validated and governed.
-
-Responsibilities:
-- Expose HTTP API
-- Apply CIF ingress validation
-- Apply CDI decision gates
-- Structured logging with request_id
-
-Endpoints:
-- `GET /health` - Health check
-- `POST /threads` - Create thread
-- `GET /threads` - List threads
-- `POST /threads/:id/commitments` - Add commitment
-- `GET /threads/:id/commitments` - List commitments
-- `POST /threads/:id/messages` - Store message as event
-- `POST /threads/:id/reflect` - Trigger reflection job
-
-Middleware stack (per request):
-1. Request ID generation
-2. CIF validation
-3. CDI pre-action check
-4. Handler
-5. CDI post-action check
-6. CIF egress redaction
-7. Structured logging
-
-Invariants:
-- All endpoints pass through CIF/CDI
-- All requests logged with request_id
-- Errors logged with full context
-
-## Data Flow
-
-### Inbound Message
+## Request Flow
 
 ```
-Client
-  → HTTP POST /threads/:id/messages
-  → CIF validation (schema, sanitize)
-  → CDI pre-check (allow/deny/confirm)
-  → Store event in event log
-  → CDI post-check (verify no leakage)
-  → Response
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ENTRYPOINTS                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐                    │
+│  │   HTTP   │  │   gRPC   │  │   CLI    │  │  Worker  │                    │
+│  │ /api/v2.1│  │ service  │  │ commands │  │   jobs   │                    │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘                    │
+│       │             │             │             │                           │
+│       └─────────────┴─────────────┴─────────────┘                           │
+│                              │                                               │
+│                              ▼                                               │
+└──────────────────────────────┼──────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    UNIFIED GOVERNED PIPELINE                                │
+│                                                                             │
+│  ┌─────────────────┐                                                       │
+│  │ 1. Context      │  Extract: principal_id, oi_id, intent, capabilities   │
+│  │    Normalization│  Validate: trace_id, origin labels, metadata          │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────┐                                                       │
+│  │ 2. CIF Ingress  │  Validate: schema, size limits, taint rules           │
+│  │    Validation   │  Check: payload structure, string lengths             │
+│  └────────┬────────┘  Detect: XSS, SQL injection patterns                  │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────┐                                                       │
+│  │ 3. CDI Action   │  Check: capsule status, degradation level             │
+│  │    Check        │  Verify: permissions, cross-namespace rules           │
+│  └────────┬────────┘  Issue: capability tokens for allowed ops             │
+│           │                                                                 │
+│           ▼  (only if allowed)                                             │
+│  ┌─────────────────┐                                                       │
+│  │ 4. Handler      │  Execute: registered handler with capability tokens   │
+│  │    Execution    │  Access: memory store, adapters (via gateway)         │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────┐                                                       │
+│  │ 5. CDI Output   │  Validate: token expiry, cross-namespace leakage      │
+│  │    Check        │  Apply: redaction rules, content filtering            │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────┐                                                       │
+│  │ 6. CIF Egress   │  Package: response with audit metadata                │
+│  │    Validation   │  Validate: output size, format                        │
+│  └────────┬────────┘                                                       │
+│           │                                                                 │
+└───────────┼─────────────────────────────────────────────────────────────────┘
+            │
+            ▼
+     Response to Client
+
 ```
 
-### Thread Scheduling
+## Package Structure
+
+### @mathison/pipeline
+
+The core pipeline package provides:
+
+- `PipelineExecutor`: Executes requests through the governed stages
+- `HandlerRegistry`: Registers handlers for intents (no direct calls)
+- `PipelineRouter`: HTTP integration that enforces pipeline
+- `CliPipelineExecutor`: CLI integration
+- `WorkerPipelineExecutor`: Worker/job integration
+
+### @mathison/governance
+
+Governance management:
+
+- `GovernanceCapsuleLoader`: Loads and verifies signed capsules
+- `GovernanceProviderImpl`: Implements CIF/CDI for pipeline
+- `CdiActionChecker`: Checks action permissions
+- `CdiOutputChecker`: Validates output, applies redactions
+- Degrade ladder: full → partial → none
+
+### @mathison/memory
+
+Memory store interface:
+
+- `MemoryStore`: Unified interface for all operations
+- `PostgresMemoryStore`: PostgreSQL + pgvector implementation
+- `SqliteMemoryStore`: SQLite implementation for local/offline
+- All operations require `GovernanceTags`
+
+### @mathison/adapters
+
+Adapter conformance:
+
+- `AdapterGateway`: Capability-gated adapter access
+- `ModelAdapter`: Interface for model providers
+- `ToolAdapter`: Interface for tool providers
+- Conformance tests to enforce contract
+
+## Data Model
+
+### Threads
+
+Unit of work with state machine:
 
 ```
-Scheduler.selectNextThread()
-  → Query runnable threads in namespace
-  → Sort by priority, updated_at
-  → Log scheduler decision as event
-  → Return thread or null
+open → waiting → blocked → done
+       ↑______|__________|
 ```
 
-### Semantic Recall
+### Commitments
 
+Tracked obligations within threads:
+
+- `next_action`: What needs to happen
+- `status`: Current state
+- `due_at`: Optional deadline
+- `blockers`: Dependencies
+
+### Events
+
+Append-only log for auditability:
+
+- `event_type`: Classification
+- `payload`: Event data (JSON)
+- `namespace_id`: Partition key
+
+### Embeddings
+
+Vector storage for semantic recall:
+
+- 1536-dimensional vectors (OpenAI ada-002 compatible)
+- Namespace-scoped queries
+- Cosine similarity search
+
+## Security Model
+
+### Capability Tokens
+
+Short-lived tokens issued by CDI:
+
+```typescript
+interface CapabilityToken {
+  token_id: string;
+  capability: string;       // What this token authorizes
+  oi_id: string;           // Namespace scope
+  principal_id: string;    // Who this was issued to
+  expires_at: Date;        // Expiration (typically 5 min)
+  constraints: object;     // Usage constraints
+}
 ```
-Client
-  → Query with text
-  → Convert to embedding (external call)
-  → Query embeddings table with namespace_id
-  → Filter results by namespace
-  → Return matches
+
+### Namespace Isolation
+
+All queries enforce namespace boundaries:
+
+```typescript
+// Every operation requires tags
+interface GovernanceTags {
+  principal_id: string;    // Who is making the request
+  oi_id: string;          // OI namespace (must match query namespace)
+  purpose: string;        // Why this operation is happening
+  origin_labels: string[]; // Taint labels
+}
 ```
 
-## Storage Schema
+### Degrade Ladder
 
-### Tables
+When capsule is unavailable/stale:
 
-- **namespaces**: namespace registry
-- **threads**: thread state and metadata
-- **commitments**: commitment ledger
-- **events**: append-only event log
-- **thread_summaries_current**: current working briefs
-- **thread_summaries_snapshots**: historical snapshots
-- **embeddings**: vector store for semantic recall
-- **artifacts_metadata**: artifact registry
+| Degradation | Read-only | Low-risk | Medium-risk | High-risk |
+|-------------|-----------|----------|-------------|-----------|
+| None        | ✓         | ✓        | ✓           | ✓         |
+| Partial     | ✓         | ✓        | ✗           | ✗         |
+| Full        | ✓         | ✗        | ✗           | ✗         |
 
-See `packages/mathison-server/src/migrations/` for schema definitions.
+## Database Schema
 
-## WHY
+### PostgreSQL (Server)
 
-See [WHY.md](./WHY.md) for design rationale.
+```sql
+-- Core tables
+namespaces (namespace_id, name, created_at)
+threads (thread_id, namespace_id, scope, priority, state, created_at, updated_at)
+commitments (commitment_id, thread_id, status, due_at, next_action, blockers)
+events (event_id, namespace_id, thread_id, event_type, payload, created_at)
+thread_summaries (thread_id, summary, updated_at)
+embeddings (embedding_id, namespace_id, thread_id, content, vector)
+documents (document_id, namespace_id, thread_id, content, metadata)
+messages (message_id, namespace_id, thread_id, content, role, metadata)
+
+-- Indexes
+idx_threads_namespace ON threads(namespace_id)
+idx_threads_state ON threads(state)
+idx_events_namespace ON events(namespace_id)
+idx_embeddings_namespace ON embeddings(namespace_id)
+```
+
+### SQLite (Local)
+
+Same schema as PostgreSQL, with:
+- JSON serialization for arrays/objects
+- JavaScript-based cosine similarity for embeddings
+- WAL mode for concurrent access
+
+## Configuration
+
+### Authority Configuration
+
+```json
+{
+  "version": "1.0",
+  "principal": {
+    "id": "principal-default",
+    "name": "Default Principal",
+    "type": "personal"
+  },
+  "default_permissions": {
+    "allow_thread_creation": true,
+    "allow_namespace_creation": true,
+    "allow_cross_namespace_transfer": false,
+    "allow_model_invocation": true,
+    "allow_tool_invocation": true
+  }
+}
+```
+
+### Governance Capsule
+
+```json
+{
+  "version": "1.0",
+  "capsule_id": "...",
+  "issued_at": "...",
+  "expires_at": "...",
+  "treaty": {
+    "constraints": {
+      "max_token_budget": 100000,
+      "allowed_model_families": ["openai", "anthropic"],
+      "allowed_tool_categories": ["file", "web"]
+    }
+  },
+  "genome": {
+    "capabilities": {
+      "memory_read": true,
+      "memory_write": true,
+      "model_invocation": true,
+      "cross_namespace_envelope": false
+    }
+  },
+  "posture": {
+    "mode": "development",
+    "strict_validation": true
+  },
+  "signature": "..."
+}
+```
+
+## Extending the System
+
+### Adding a New Handler
+
+```typescript
+registry.register({
+  id: 'my_custom_handler',
+  intent: 'my.custom.action',
+  risk_class: 'low_risk',
+  required_capabilities: ['memory_write'],
+  handler: async (ctx, payload, capabilities) => {
+    // Handler receives capability tokens
+    // Use memory store with governance tags
+    const tags = buildGovernanceTags(ctx);
+    return await store.createThread(payload, tags);
+  },
+});
+```
+
+### Adding a New Adapter
+
+```typescript
+class MyModelAdapter implements ModelAdapter {
+  id = 'my-adapter';
+  supported_families = ['my-family'];
+
+  supports(model_id: string): boolean {
+    return model_id.startsWith('my-');
+  }
+
+  async invoke(request: ModelInvocationRequest) {
+    // Validate capability token (defense in depth)
+    if (!request.capability_token) {
+      throw new Error('Token required');
+    }
+    // ... invoke model
+  }
+}
+
+gateway.registerModelAdapter(new MyModelAdapter());
+```
+
+### Adding a New Store Backend
+
+Implement the `MemoryStore` interface:
+
+```typescript
+class MyCustomStore implements MemoryStore {
+  async initialize(): Promise<void> { /* ... */ }
+  async createThread(input, tags): Promise<Thread> {
+    this.validateTags(tags);
+    this.validateNamespaceAccess(input.namespace_id, tags);
+    // ... implement
+  }
+  // ... all other methods
+}
+```

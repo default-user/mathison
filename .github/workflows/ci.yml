@@ -1,105 +1,118 @@
-# WHY: Separate jobs ensure distinct GitHub check names for branch protection rules.
-# Each job reports independently, avoiding "expected checks missing" yellow status.
-
 name: CI
 
 on:
   push:
-    branches: [ main, master, claude/** ]
+    branches: [main, master, 'claude/**']
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
 
 jobs:
-  # WHY: Job name "Type check" becomes the GitHub check name for branch protection
   typecheck:
-    name: Type check
+    name: Type Check
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run type check
-        run: pnpm typecheck
-
-  # WHY: Job name "Lint" becomes the GitHub check name for branch protection
   lint:
     name: Lint
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run lint
-        run: pnpm lint
-
-  # WHY: Job name "Tests" becomes the GitHub check name for branch protection.
-  # Postgres service required for database tests.
-  tests:
-    name: Tests
+  test:
+    name: Test
     runs-on: ubuntu-latest
-
     services:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_DB: mathison_test
           POSTGRES_USER: mathison
-          POSTGRES_PASSWORD: mathison_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          POSTGRES_PASSWORD: mathison_test_password
+          POSTGRES_DB: mathison_test
         ports:
           - 5432:5432
-
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mathison_test
+      POSTGRES_USER: mathison
+      POSTGRES_PASSWORD: mathison_test_password
+      NODE_ENV: test
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v2
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
         with:
           version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
 
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run tests
-        run: pnpm test
+  invariant-tests:
+    name: Invariant Tests (v2.1 Requirements)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: mathison_test
           POSTGRES_USER: mathison
-          POSTGRES_PASSWORD: mathison_test
+          POSTGRES_PASSWORD: mathison_test_password
+          POSTGRES_DB: mathison_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: mathison_test
+      POSTGRES_USER: mathison
+      POSTGRES_PASSWORD: mathison_test_password
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Run Pipeline Enforcement Tests
+        run: pnpm --filter @mathison/pipeline test -- --testPathPattern=pipeline-enforcement
+      - name: Run Fail-Closed Tests
+        run: pnpm --filter @mathison/governance test -- --testPathPattern=fail-closed
+      - name: Run No-Hive-Mind Tests
+        run: pnpm --filter @mathison/memory test -- --testPathPattern=no-hive-mind
+      - name: Run Adapter Bypass Tests
+        run: pnpm --filter @mathison/adapters test -- --testPathPattern=adapter-bypass

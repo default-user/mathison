@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+  - sdks/*
+
+ignoredBuiltDependencies:
+  - libxmljs2

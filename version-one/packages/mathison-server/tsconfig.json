@@ -3,8 +3,14 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "resolveJsonModule": true
+    "composite": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "tests"],
+  "references": [
+    { "path": "../mathison-governance" },
+    { "path": "../mathison-memory" },
+    { "path": "../mathison-mesh" },
+    { "path": "../mathison-artifacts" }
+  ]
 }

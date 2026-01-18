@@ -1,0 +1,101 @@
+name: CI - Build & Test
+
+# Run on pull requests and pushes to main branches
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches:
+      - main
+      - master
+      - 'claude/**'
+
+# Cancel in-progress runs when new commits are pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history for supply chain verification
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+
+      - name: Verify toolchain versions
+        run: node -v && pnpm -v
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 make g++
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild native modules
+        run: pnpm rebuild esbuild better-sqlite3
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      - name: Guard against legacy test discovery
+        run: ./scripts/ci/guard-tests.sh
+
+      - name: Run conformance suite (includes tests, OpenAPI, SDK generation)
+        run: make conformance
+
+      - name: Verify supply chain
+        run: |
+          # Verify pnpm lockfile exists
+          if [ ! -f pnpm-lock.yaml ]; then
+            echo "❌ pnpm-lock.yaml missing"
+            exit 1
+          fi
+          echo "✅ pnpm-lock.yaml exists"
+
+          # Verify SBOM exists (if generated)
+          # Note: This is a placeholder for future SBOM verification
+          # Actual implementation should verify SBOM hash against genome manifest
+          echo "ℹ️  SBOM verification: TODO (see docs/READY_FOR_HUMAN/HANDOFF_REPORT.md)"
+
+      - name: Upload test coverage (optional)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/coverage/
+            **/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Report status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Build and tests passed"
+          else
+            echo "❌ Build or tests failed"
+            exit 1
+          fi

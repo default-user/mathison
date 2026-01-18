@@ -1,5 +1,5 @@
 {
-  "version": "1.0",
+  "version": "2.1",
   "principal": {
     "id": "principal-default",
     "name": "Default Principal",
@@ -10,6 +10,30 @@
   "default_permissions": {
     "allow_thread_creation": true,
     "allow_namespace_creation": true,
-    "allow_cross_namespace_transfer": false
+    "allow_cross_namespace_transfer": false,
+    "allow_model_invocation": true,
+    "allow_tool_invocation": true
+  },
+  "risk_classes": {
+    "read_only": {
+      "level": 0,
+      "requires_capsule": false,
+      "allowed_on_degraded": true
+    },
+    "low_risk": {
+      "level": 1,
+      "requires_capsule": true,
+      "allowed_on_degraded": true
+    },
+    "medium_risk": {
+      "level": 2,
+      "requires_capsule": true,
+      "allowed_on_degraded": false
+    },
+    "high_risk": {
+      "level": 3,
+      "requires_capsule": true,
+      "allowed_on_degraded": false
+    }
   }
 }

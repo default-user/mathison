@@ -1,12 +1,7 @@
 module.exports = {
-  testEnvironment: 'node',
-  passWithNoTests: true,
   preset: 'ts-jest',
-  roots: ['<rootDir>/src'],
-  moduleFileExtensions: ['ts', 'js'],
-  testMatch: ['**/__tests__/**/*.test.ts'],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/legacy/', '/test-archive/', '/old_pr/'],
-  transform: {
-    '^.+\\.ts$': 'ts-jest'
-  }
+  testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  testMatch: ['**/*.test.ts'],
+  collectCoverageFrom: ['src/**/*.ts'],
 };

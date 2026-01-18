@@ -1,39 +1,40 @@
-# Mathison Makefile
-# Single source of truth for common development tasks
+.PHONY: help dev-up dev-down migrate server test lint typecheck clean
 
-.PHONY: help test build clean install openapi sdk conformance
-
-help: ## Show this help message
-	@echo "Mathison Development Commands"
+help:
+	@echo "Mathison v2 Development Commands"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@echo "  make dev-up      - Start dev services (Postgres)"
+	@echo "  make dev-down    - Stop dev services"
+	@echo "  make migrate     - Run database migrations"
+	@echo "  make server      - Start Mathison server"
+	@echo "  make test        - Run all tests"
+	@echo "  make lint        - Lint code"
+	@echo "  make typecheck   - Type check TypeScript"
+	@echo "  make clean       - Clean build artifacts"
 
-test: ## Run consolidated test suite (CI and local use this)
-	@./scripts/test.sh
+dev-up:
+	docker-compose up -d postgres
+	@echo "Waiting for Postgres..."
+	@sleep 3
 
-build: ## Build all packages
-	@pnpm -r build
+dev-down:
+	docker-compose down
 
-install: ## Install dependencies
-	@pnpm install --frozen-lockfile
+migrate:
+	pnpm --filter @mathison/server migrate
 
-clean: ## Clean build artifacts
-	@pnpm -r clean || true
-	@rm -rf node_modules packages/*/node_modules packages/*/dist
+server:
+	pnpm --filter @mathison/server start
 
-openapi: build ## Generate and validate OpenAPI spec
-	@echo "📋 Generating OpenAPI spec..."
-	@node -e "const { generateOpenAPISpec } = require('./packages/mathison-server/dist/openapi.js'); const spec = generateOpenAPISpec(); console.log(JSON.stringify(spec, null, 2));" > /tmp/openapi-spec.json
-	@echo "✅ OpenAPI spec generated and validated"
+test:
+	pnpm test
 
-sdk: build ## Generate SDKs from OpenAPI spec
-	@echo "🔧 Generating SDKs..."
-	@pnpm generate-sdks
-	@echo "✅ SDKs generated"
+lint:
+	pnpm lint
 
-conformance: test openapi sdk ## Run full conformance suite (tests + OpenAPI + SDK verification)
-	@echo ""
-	@echo "🎉 Conformance suite complete"
-	@echo "  ✅ All tests passed"
-	@echo "  ✅ OpenAPI spec validated"
-	@echo "  ✅ SDKs generated successfully"
+typecheck:
+	pnpm typecheck
+
+clean:
+	rm -rf node_modules packages/*/node_modules packages/*/dist
+	rm -rf data

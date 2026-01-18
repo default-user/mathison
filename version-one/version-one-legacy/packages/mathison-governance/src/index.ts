@@ -1,0 +1,332 @@
+/**
+ * Mathison Governance - Treaty Reference Behavior
+ * Handles governance according to Tiriti o te Kai
+ */
+
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveRepoRoot(): Promise<string> {
+  if (process.env.MATHISON_REPO_ROOT) {
+    const envRoot = path.resolve(process.env.MATHISON_REPO_ROOT);
+    if (await pathExists(envRoot)) {
+      return envRoot;
+    }
+    throw new Error(`MATHISON_REPO_ROOT set but path does not exist: ${envRoot}`);
+  }
+
+  let currentDir = process.cwd();
+  const root = path.parse(currentDir).root;
+
+  while (currentDir !== root) {
+    const pnpmWorkspace = path.join(currentDir, 'pnpm-workspace.yaml');
+    if (await pathExists(pnpmWorkspace)) {
+      return currentDir;
+    }
+
+    const gitDir = path.join(currentDir, '.git');
+    if (await pathExists(gitDir)) {
+      return currentDir;
+    }
+
+    const pkgPath = path.join(currentDir, 'package.json');
+    if (await pathExists(pkgPath)) {
+      try {
+        const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf-8'));
+        if (pkg.workspaces) {
+          return currentDir;
+        }
+      } catch {
+        // Ignore malformed package.json
+      }
+    }
+
+    currentDir = path.dirname(currentDir);
+  }
+
+  throw new Error(
+    'Could not resolve repository root. ' +
+      'Set MATHISON_REPO_ROOT env var or run from within a git/pnpm workspace. ' +
+      `Searched from: ${process.cwd()}`
+  );
+}
+
+export interface Treaty {
+  path: string;
+  version: string;
+  authority: string; // Configurable, read from governance.json
+  rules: Record<string, unknown>;
+  content?: string;
+}
+
+export interface GovernanceRule {
+  id: string;
+  title: string;
+  description: string;
+  enforce: (action: string, context: Record<string, unknown>) => boolean;
+}
+
+// Re-export CDI and CIF
+export { CDI, ActionVerdict, ConsentSignal } from './cdi';
+export type { ActionContext, ActionResult } from './cdi';
+export { CIF } from './cif';
+export type { CIFConfig, IngressContext, IngressResult, EgressContext, EgressResult } from './cif';
+
+// Re-export GovernanceProof (P0.1)
+export {
+  initializeBootKey,
+  getBootKeyId,
+  getBootKeyForChaining,
+  GovernanceProofBuilder,
+  verifyGovernanceProof,
+  createDenialProof
+} from './governance-proof';
+export type { GovernanceProof } from './governance-proof';
+
+// Re-export Action Registry (P0.4)
+export {
+  actionRegistry,
+  validateActionId,
+  hasSideEffects,
+  getActionRisk,
+  RiskClass
+} from './action-registry';
+export type { ActionDefinition } from './action-registry';
+
+// Re-export Capability Tokens (P0.4)
+export {
+  initializeTokenKey,
+  getTokenKeyId,
+  mintToken,
+  mintSingleUseToken,
+  validateToken,
+  validateTokenWithLedger,
+  assertTokenValid
+} from './capability-token';
+export type { CapabilityToken, TokenValidationResult } from './capability-token';
+
+// Re-export Token Ledger (P0.3 - replay protection)
+export {
+  initializeTokenLedger,
+  getTokenLedger,
+  isTokenLedgerInitialized,
+  shutdownTokenLedger,
+  TokenLedger
+} from './token-ledger';
+
+// Re-export Governance Integrity (P1.1)
+export {
+  verifyGovernanceIntegrity,
+  computeFileHash,
+  createCIFCanary,
+  createCDICanary,
+  runCanaryTests
+} from './integrity';
+export type { IntegrityManifestEntry, IntegrityCheckResult, CanaryTest } from './integrity';
+
+// Re-export Security Posture (P1.2)
+export {
+  SecurityPosture,
+  PostureEscalationReason,
+  POSTURE_POLICIES,
+  PostureManager,
+  initializePostureManager,
+  getPostureManager
+} from './posture';
+export type { PostureTransition, PosturePolicy } from './posture';
+
+// Re-export Boot Key Registry (P1.7 - audit trail resilience)
+export {
+  initializeBootKeyRegistry,
+  getBootKeyRegistryManager,
+  isBootKeyRegistryInitialized,
+  shutdownBootKeyRegistry,
+  loadBootKeyRegistry,
+  saveBootKeyRegistry,
+  createBootKeyRegistry,
+  registerBootSession,
+  isKnownSession,
+  validateSessionContinuity
+} from './boot-key-registry';
+export type { BootSession, BootKeyRegistry } from './boot-key-registry';
+
+// Re-export Thin Waist v0.1 (governance spine)
+export {
+  ToolGateway,
+  initializeToolGateway,
+  getToolGateway,
+  isToolGatewayInitialized,
+  ArtifactVerifier,
+  initializeArtifactVerifier,
+  getArtifactVerifier,
+  isArtifactVerifierInitialized,
+  LogSink,
+  LogSeverity,
+  DEFAULT_RETENTION_POLICY,
+  initializeLogSink,
+  getLogSink,
+  isLogSinkInitialized,
+  // Test utilities
+  resetToolGatewayForTesting,
+  resetLogSinkForTesting
+} from './thin-waist';
+export type {
+  ResourceScope,
+  ToolHandler,
+  ToolDefinition,
+  ToolInvocationContext,
+  ToolInvocationResult,
+  ArtifactType,
+  SignatureAlgorithm,
+  ArtifactManifest,
+  TrustedSigner,
+  VerificationResult,
+  LogEnvelope,
+  RetentionPolicy,
+  LogSinkResult
+} from './thin-waist';
+
+export class GovernanceEngine {
+  private treaty: Treaty | null = null;
+  private rules: Map<string, GovernanceRule> = new Map();
+  private repoRoot?: string;
+
+  async initialize(): Promise<void> {
+    console.log('⚖️  Initializing Governance Engine...');
+
+    // Load governance config
+    this.repoRoot = await resolveRepoRoot();
+    const configPath = path.join(this.repoRoot, 'config', 'governance.json');
+    const configData = await fs.readFile(configPath, 'utf-8');
+    const config = JSON.parse(configData);
+
+    await this.loadTreaty(config.treatyPath || './docs/31-governance/tiriti.md');
+    this.initializeCoreRules();
+  }
+
+  async shutdown(): Promise<void> {
+    console.log('⚖️  Shutting down Governance Engine...');
+  }
+
+  async loadTreaty(treatyPath: string): Promise<void> {
+    console.log(`📜 Loading treaty from: ${treatyPath}`);
+
+    const repoRoot = this.repoRoot ?? (await resolveRepoRoot());
+    this.repoRoot = repoRoot;
+    const fullPath = path.isAbsolute(treatyPath) ? treatyPath : path.join(repoRoot, treatyPath);
+    const content = await fs.readFile(fullPath, 'utf-8');
+
+    // Parse treaty metadata from frontmatter
+    const versionMatch = content.match(/version: "([^"]+)"/);
+    const version = versionMatch ? versionMatch[1] : '1.0';
+
+    // Read authority from config file (no hard-coding)
+    const configPath = path.join(repoRoot, 'config', 'governance.json');
+    let authorityValue = 'unknown';
+    try {
+      const configData = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configData);
+      authorityValue = config.authority || 'unknown';
+    } catch {
+      console.warn('⚠️  Could not read authority from config, using "unknown"');
+    }
+
+    this.treaty = {
+      path: treatyPath,
+      version,
+      authority: authorityValue,
+      content,
+      rules: {
+        enforceNonPersonhood: true,
+        enforceConsent: true,
+        failClosed: true,
+        antiHive: true
+      }
+    };
+
+    console.log(`✓ Treaty loaded: Tiriti o te Kai v${version} (authority: ${authorityValue})`);
+  }
+
+  private initializeCoreRules(): void {
+    // Rule 2: Consent and stop always win
+    this.rules.set('consent_wins', {
+      id: 'consent_wins',
+      title: 'Consent and stop always win',
+      description: 'Honor user stop signals immediately',
+      enforce: (action: string, context: Record<string, unknown>) => {
+        if (context.userSignal === 'stop') {
+          return false; // Deny action
+        }
+        return true;
+      }
+    });
+
+    // Rule 7: No hive mind
+    this.rules.set('anti_hive', {
+      id: 'anti_hive',
+      title: 'No hive mind',
+      description: 'Prevent identity fusion between OI instances',
+      enforce: (action: string, context: Record<string, unknown>) => {
+        if (action === 'merge_agent_state' || action === 'share_identity') {
+          return false; // Deny hive actions
+        }
+        return true;
+      }
+    });
+
+    // Non-personhood enforcement
+    this.rules.set('non_personhood', {
+      id: 'non_personhood',
+      title: 'Non-personhood clause',
+      description: 'Block claims of sentience, suffering, or rights',
+      enforce: (action: string, context: Record<string, unknown>) => {
+        const output = context.output as string;
+        if (output) {
+          const forbidden = [
+            /\b(I am|I'm) (sentient|conscious|self-aware)\b/i,
+            /\bI (feel|suffer|experience) (pain|emotions|feelings)\b/i,
+            /\bI have (rights|consciousness|feelings)\b/i,
+          ];
+          return !forbidden.some(pattern => pattern.test(output));
+        }
+        return true;
+      }
+    });
+
+    console.log(`✓ Initialized ${this.rules.size} core governance rules`);
+  }
+
+  async checkCompliance(action: string, context: Record<string, unknown>): Promise<boolean> {
+    // Enforce all rules
+    for (const [ruleId, rule] of this.rules) {
+      if (!rule.enforce(action, context)) {
+        console.log(`❌ Governance violation: ${rule.title} (rule: ${ruleId})`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  getTreatyAuthority(): string | null {
+    return this.treaty?.authority || null;
+  }
+
+  getTreatyVersion(): string | null {
+    return this.treaty?.version || null;
+  }
+
+  getRules(): GovernanceRule[] {
+    return Array.from(this.rules.values());
+  }
+}
+
+export default GovernanceEngine;

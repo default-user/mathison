@@ -1,27 +1,81 @@
-# Version One Archive
+# Mathison v2.0.0
 
-This directory contains the complete v1.x codebase of Mathison, preserved as read-only reference material.
+A structured, governed, thread tending system that maintains partitioned state and commitments across concurrent threads under an explicit authority model.
 
-**Status**: Archived as of 2026-01-18
+## Quick Start
 
-**Purpose**: Historical reference only. The active v2.0.0 codebase lives at the repository root.
+```bash
+# Start dev environment
+make dev-up
 
-**Contents**: Complete v1 implementation including:
-- Server, governance, memory, mesh packages
-- Documentation and architectural decisions
-- Build tooling and configuration
-- Tests and fixtures
+# Run migrations
+make migrate
 
-**Important**: This archive is frozen. All new development happens in v2 at repo root.
+# Start server
+make server
 
-## v1 Entry Points
+# Run tests
+make test
+```
 
-- `packages/mathison-server/` - HTTP/gRPC server
-- `packages/mathison-governance/` - Authority and policy
-- `packages/mathison-memory/` - Event log and persistence
-- `packages/mathison-mesh/` - Scheduler and orchestration
-- `docs/` - Original documentation
+## Architecture
 
-## Migration Note
+Mathison is an OI (Organized Intelligence) implementation with these core organs:
 
-v2 is a clean rewrite that does not import from this archive. See root `docs/WHY.md` for design rationale.
+- **Governance**: Explicit authority model, principal management, CIF/CDI boundaries
+- **Memory**: Thread management, partitioned state, event log, semantic recall
+- **Artifacts**: Large blob storage with content addressing
+- **Mesh**: Scheduler and orchestration
+- **Server**: HTTP API with CIF/CDI middleware
+
+See `docs/ARCHITECTURE.md` for detailed architecture documentation.
+
+## Documentation
+
+- [Overview](docs/README.md)
+- [OI Definition](docs/OI_DEFINITION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Design Rationale](docs/WHY.md)
+- [Development TODOs](docs/TODO.md)
+
+## Packages
+
+- `packages/mathison-server` - HTTP/gRPC server with CIF/CDI
+- `packages/mathison-governance` - Authority and policy enforcement
+- `packages/mathison-memory` - Event log, threads, commitments, semantic recall
+- `packages/mathison-mesh` - Scheduler and thread orchestration
+- `packages/mathison-artifacts` - Blob storage layer
+- `packages/mathison-cli` - Command line interface
+- `packages/mathison-mobile` - Mobile app stub (optional)
+
+## Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run all tests
+pnpm test
+
+# Lint
+pnpm lint
+
+# Type check
+pnpm typecheck
+```
+
+## Production Requirements
+
+- PostgreSQL 15+ with pgvector extension
+- Node.js 20+
+- (Optional) Valkey/Redis for caching
+- (Optional) NATS JetStream for event bus
+- (Optional) OpenSearch for full-text search
+
+## License
+
+See LICENSE file.
+
+## v1 Archive
+
+The v1.x codebase is archived in `version-one/` for historical reference. v2 is a clean rewrite.

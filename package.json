@@ -1,8 +1,8 @@
 {
   "name": "mathison",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "Mathison v2 - Structured OI implementation",
+  "description": "Mathison v2.1 - Governed OI implementation with enforced pipeline",
   "scripts": {
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",

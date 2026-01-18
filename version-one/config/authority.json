@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "principal": {
+    "id": "principal-default",
+    "name": "Default Principal",
+    "type": "personal"
+  },
+  "admins": [],
+  "delegations": [],
+  "default_permissions": {
+    "allow_thread_creation": true,
+    "allow_namespace_creation": true,
+    "allow_cross_namespace_transfer": false
+  }
+}

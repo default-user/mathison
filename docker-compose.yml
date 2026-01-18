@@ -12,49 +12,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mathison"]
+      test: ["CMD-SHELL", "pg_isready -U mathison -d mathison"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Optional services (disabled by default, enable via profiles)
-  
+  # Optional services (use --profile optional)
   valkey:
-    image: valkey/valkey:7
+    image: valkey/valkey:7-alpine
     profiles: ["optional"]
     ports:
       - "6379:6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 5
-
-  nats:
-    image: nats:2-alpine
-    profiles: ["optional"]
-    command: "-js"
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  opensearch:
-    image: opensearchproject/opensearch:2
-    profiles: ["optional"]
-    environment:
-      - discovery.type=single-node
-      - DISABLE_SECURITY_PLUGIN=true
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
 
 volumes:
   postgres_data:
-  opensearch_data:

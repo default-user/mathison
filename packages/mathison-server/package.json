@@ -11,7 +11,7 @@
     "migrate": "node dist/migrations/run.js",
     "test": "jest",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -b --dry"
   },
   "dependencies": {
     "@mathison/governance": "workspace:*",

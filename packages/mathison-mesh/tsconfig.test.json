@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@mathison/memory": ["../mathison-memory/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}

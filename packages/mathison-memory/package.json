@@ -1,0 +1,24 @@
+{
+  "name": "@mathison/memory",
+  "version": "2.0.0",
+  "description": "Thread management, event log, and semantic recall",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pg": "^8.11.3",
+    "pgvector": "^0.1.8"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.11",
+    "@types/pg": "^8.10.9",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.3.3"
+  }
+}

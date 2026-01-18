@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp
+tmp/
+temp/
+*.tmp

@@ -1,95 +1,40 @@
 # Dependencies
 node_modules/
-package-lock.json
+pnpm-lock.yaml
 
 # Build outputs
 dist/
 build/
-*.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.pytest_cache/
-*.egg
-
-# Rust
-target/
-Cargo.lock
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+*.tsbuildinfo
 
 # Environment
 .env
 .env.local
 
 # Logs
-*.log
 logs/
-
-# Demo/test data
-data/
-
-# Mathison runtime
-.mathison-store/
-.mathison/
+*.log
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Backup files
-*.bak
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data
+data/
+*.db
+*.sqlite
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Temp
+tmp/
+temp/
+*.tmp

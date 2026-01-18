@@ -21,6 +21,12 @@ server:
 test:
 	pnpm test
 
+test-invariants:
+	pnpm --filter @mathison/pipeline test -- --testPathPattern=pipeline-enforcement
+	pnpm --filter @mathison/governance test -- --testPathPattern=fail-closed
+	pnpm --filter @mathison/memory test -- --testPathPattern=no-hive-mind
+	pnpm --filter @mathison/adapters test -- --testPathPattern=adapter-bypass
+
 lint:
 	pnpm lint
 

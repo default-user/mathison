@@ -1,11 +1,10 @@
 /**
- * Mathison v2.1 Adapter Gateway
- *
- * Enforces capability-gated access to model and tool adapters.
- *
- * INVARIANT: All model/tool calls MUST go through this gateway.
- * INVARIANT: No call is allowed without a valid capability token.
- * INVARIANT: Bypass attempts are detected and denied.
+ * WHY: gateway.ts - Capability-gated adapter access control
+ * -----------------------------------------------------------------------------
+ * - Routes all model/tool invocations through a single enforcement point
+ * - Needed to prevent direct adapter calls that bypass governance checks
+ * - Enforces: valid capability tokens, allowed model families, tool categories, token limits
+ * - Tradeoff: Centralized control vs slight latency overhead per invocation
  */
 
 import { v4 as uuidv4 } from 'uuid';

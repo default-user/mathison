@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Adapter Conformance Checker
- *
- * Verifies that adapters conform to the required contract.
- * CI MUST FAIL if adapters violate the contract.
+ * WHY: conformance.ts - Adapter contract verification
+ * -----------------------------------------------------------------------------
+ * - Validates model and tool adapters against required interface contracts
+ * - Needed to ensure adapters are well-formed before registration; CI fails on violations
+ * - Enforces: capability token presence/validity, required methods, tool definitions
+ * - Tradeoff: Synchronous checks at registration time vs runtime validation overhead
  */
 
 import {

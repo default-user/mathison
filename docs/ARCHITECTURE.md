@@ -1,13 +1,14 @@
-# Mathison v2.1 Architecture
+# Mathison v2.2 Architecture
 
 ## Overview
 
-Mathison v2.1 implements a governed Organized Intelligence (OI) system with strict invariants:
+Mathison v2.2 implements a governed Organized Intelligence (OI) system with strict invariants:
 
 1. **Single Pipeline**: All requests flow through one governed pipeline
 2. **Fail-Closed**: Missing/invalid governance material = deny
 3. **Namespace Isolation**: Per-OI boundaries with no hive mind
 4. **Capability-Gated Adapters**: Model/tool calls require tokens
+5. **Model Bus (v2.2)**: Governed handler is the ONLY path to vendor AI APIs
 
 ## Request Flow
 
@@ -109,6 +110,19 @@ Adapter conformance:
 - `ModelAdapter`: Interface for model providers
 - `ToolAdapter`: Interface for tool providers
 - Conformance tests to enforce contract
+
+### @mathison/model-bus (v2.2)
+
+Governed model invocation:
+
+- `ModelRouter`: Routes requests to adapters with capability enforcement
+- `OpenAIAdapter`: OpenAI Chat Completions API
+- `AnthropicAdapter`: Anthropic Messages API
+- `LocalAdapter`: Mock adapter for testing
+- Single HTTP client for all vendor calls (no SDK imports)
+- Provenance logging for every invocation
+
+**INVARIANT**: No vendor SDK imports or API calls outside this package. See [No-Bypass Enforcement](specs/v2.2-no-bypass-enforcement.md).
 
 ## Data Model
 

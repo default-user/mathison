@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Governance Provider
- *
- * Implements the GovernanceProvider interface for integration with the pipeline.
- * This is the bridge between the pipeline executor and the governance modules.
+ * WHY: provider.ts - Pipeline-governance integration bridge
+ * -----------------------------------------------------------------------------
+ * - Implements GovernanceProvider interface for pipeline executor integration
+ * - Needed to connect pipeline stages to CIF validation, CDI checks, and capsule status
+ * - Enforces: all governance checks flow through single provider; consistent interface
+ * - Tradeoff: Abstraction layer adds indirection vs clean separation of concerns
  */
 
 import { v4 as uuidv4 } from 'uuid';

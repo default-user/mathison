@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Pipeline Types
- *
- * Core types for the unified governed request pipeline.
- * Every request/action flows through: CIF ingress → CDI action check → handler → CDI output check → CIF egress
+ * WHY: types.ts - Pipeline type contracts and schemas
+ * -----------------------------------------------------------------------------
+ * - Defines PipelineContext, Request/Response, Handler, GovernanceProvider, and stage types
+ * - Needed to ensure type safety across pipeline stages; Zod schemas for runtime validation
+ * - Enforces: structured context with trace_id, principal, OI; capability tokens in responses
+ * - Tradeoff: Comprehensive typing enables IDE support but requires sync with governance types
  */
 
 import { z } from 'zod';

@@ -1,12 +1,10 @@
 /**
- * Mathison v2.1 Governance Capsule Loader
- *
- * Implements:
- * - Signed capsule loading and verification
- * - Cache with TTL
- * - Degrade ladder for fail-closed behavior
- *
- * INVARIANT: If capsule is missing/invalid/stale/unverifiable, deny high-risk actions.
+ * WHY: capsule.ts - Signed governance capsule loader with fail-closed behavior
+ * -----------------------------------------------------------------------------
+ * - Loads, verifies, and caches governance capsules with signature validation
+ * - Needed to provide root-of-trust for all governance decisions; capsule defines OI permissions
+ * - Enforces: fail-closed on missing/invalid/expired/unverifiable capsules; TTL-based staleness
+ * - Tradeoff: Degrade ladder allows partial operation vs full lockout on capsule issues
  */
 
 import * as fs from 'fs';

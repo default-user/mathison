@@ -1,7 +1,10 @@
 /**
- * Mathison v2.1 Adapter Types
- *
- * Types for adapter conformance and gateway interface.
+ * WHY: types.ts - Adapter interface contracts
+ * -----------------------------------------------------------------------------
+ * - Defines ModelAdapter, ToolAdapter, and Gateway type contracts
+ * - Needed to ensure type safety and consistent adapter implementation
+ * - Enforces: required capability tokens on all invocations; structured responses
+ * - Tradeoff: Strict typing requires more boilerplate vs runtime safety guarantees
  */
 
 import { z } from 'zod';

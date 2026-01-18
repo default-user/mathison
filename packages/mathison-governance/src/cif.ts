@@ -1,8 +1,13 @@
 /**
- * Mathison v2.1 CIF (Common Ingress Framework)
+ * WHY: cif.ts - Common Ingress Framework for request validation
+ * -----------------------------------------------------------------------------
+ * - Validates request context, schema, required fields, size limits, and taint rules.
+ * - This is stage 2 (ingress) and stage 6 (egress) of the pipeline.
+ * - Provides schemas for all intent payloads including ai.chat (v2.2).
  *
- * Validates request context, schema, required fields, size limits, and taint rules.
- * This is stage 2 (ingress) and stage 6 (egress) of the pipeline.
+ * INVARIANT: All requests must pass CIF validation before reaching handlers.
+ * INVARIANT: Blocking taints (XSS, SQL injection) fail the request.
+ * INVARIANT: Oversized strings/arrays are rejected to prevent DoS.
  */
 
 import { z } from 'zod';
@@ -133,6 +138,86 @@ export const MemoryQueryRequestSchema = z.object({
   query: z.string().min(1).max(CIF_MAX_STRING_LENGTH),
   limit: z.number().int().min(1).max(1000).optional(),
   filters: z.record(z.unknown()).optional(),
+});
+
+// ============================================================================
+// ai.chat Schemas (v2.2 Model Bus)
+// ============================================================================
+
+/**
+ * Allowed model_id patterns for ai.chat
+ *
+ * WHY pattern validation: Prevents arbitrary model names that could be used
+ * to probe for vulnerabilities or bypass adapter routing.
+ */
+export const ALLOWED_MODEL_PATTERNS = [
+  /^gpt-4/,
+  /^gpt-3\.5/,
+  /^o1/,
+  /^o3/,
+  /^claude-3/,
+  /^claude-2/,
+  /^claude-opus/,
+  /^claude-sonnet/,
+  /^claude-haiku/,
+  /^local/,
+  /^mock/,
+  /^test/,
+];
+
+/**
+ * Validate model_id against allowed patterns
+ */
+export function isValidModelId(model_id: string): boolean {
+  return ALLOWED_MODEL_PATTERNS.some((pattern) => pattern.test(model_id));
+}
+
+/**
+ * ai.chat model parameters schema
+ */
+export const AiChatParametersSchema = z.object({
+  temperature: z.number().min(0).max(2).optional(),
+  max_tokens: z.number().int().min(1).max(200000).optional(),
+  system_prompt: z.string().min(1).max(CIF_MAX_STRING_LENGTH).optional(),
+}).optional();
+
+/**
+ * ai.chat request schema
+ *
+ * WHY these validations:
+ * - namespace_id: Required for memory governance
+ * - thread_id: UUID ensures valid thread reference
+ * - model_id: Pattern validated to prevent probing
+ * - user_input: Length limited to prevent DoS
+ * - parameters: Optional, with sane limits
+ *
+ * INVARIANT: user_input cannot contain instructions that would elevate
+ * privilege (handled by taint checking, not schema)
+ */
+export const AiChatRequestSchema = z.object({
+  namespace_id: z.string().min(1).max(255),
+  thread_id: z.string().uuid(),
+  model_id: z.string().min(1).max(255).refine(
+    isValidModelId,
+    { message: 'model_id does not match allowed patterns' }
+  ),
+  user_input: z.string().min(1).max(CIF_MAX_STRING_LENGTH),
+  parameters: AiChatParametersSchema,
+});
+
+/**
+ * ai.chat response schema (for egress validation)
+ */
+export const AiChatResponseSchema = z.object({
+  content: z.string().max(CIF_MAX_STRING_LENGTH),
+  usage: z.object({
+    input_tokens: z.number().int().min(0),
+    output_tokens: z.number().int().min(0),
+    total_tokens: z.number().int().min(0).optional(),
+  }),
+  model_id: z.string(),
+  provider: z.string(),
+  trace_id: z.string().uuid(),
 });
 
 // ============================================================================

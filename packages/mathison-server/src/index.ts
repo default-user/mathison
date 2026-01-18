@@ -1,11 +1,14 @@
 /**
- * Mathison v2.1 Server
- *
- * HTTP server with unified governed request pipeline.
- * ALL requests flow through: CIF ingress → CDI action check → handler → CDI output check → CIF egress
+ * WHY: index.ts - Mathison v2.2 Server entry point
+ * -----------------------------------------------------------------------------
+ * - HTTP server with unified governed request pipeline.
+ * - ALL requests flow through: CIF ingress → CDI action check → handler → CDI output check → CIF egress
+ * - ai.chat handler demonstrates Model Bus: governed handler is the ONLY path to vendor APIs.
+ * - Provenance events are written for every model invocation.
  *
  * INVARIANT: No handler can be called directly - pipeline enforces governance.
  * INVARIANT: Fail-closed - missing governance material = deny.
+ * INVARIANT: All model calls go through Model Bus with capability tokens.
  */
 
 import express, { Express, Request, Response } from 'express';
@@ -21,6 +24,12 @@ import {
   MemoryStore,
   GovernanceTags,
 } from '@mathison/memory';
+import { createGateway, CapabilityToken } from '@mathison/adapters';
+import {
+  createModelRouter,
+  ModelRouter,
+  ChatMessage,
+} from '@mathison/model-bus';
 
 // ============================================================================
 // Server Configuration
@@ -47,7 +56,7 @@ export interface ServerConfig {
 }
 
 // ============================================================================
-// Handlers (business logic)
+// Handler Payload Types
 // ============================================================================
 
 interface CreateThreadPayload {
@@ -69,9 +78,60 @@ interface AddMessagePayload {
 }
 
 /**
- * Register all handlers with the pipeline registry
+ * WHY ai.chat payload structure:
+ * - namespace_id: Required for memory access governance
+ * - thread_id: Links to conversation thread for context retrieval
+ * - model_id: Determines which adapter to route to
+ * - user_input: The user's message to process
+ * - parameters: Optional model parameters (temp, max_tokens, etc.)
  */
-function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
+interface AiChatPayload {
+  namespace_id: string;
+  thread_id: string;
+  model_id: string;
+  user_input: string;
+  parameters?: {
+    temperature?: number;
+    max_tokens?: number;
+    system_prompt?: string;
+  };
+}
+
+/**
+ * WHY ai.chat response structure:
+ * - content: The model's response
+ * - usage: Token counts for billing/limits
+ * - model_id: Actual model used (may differ from requested)
+ * - provider: Which vendor served the request
+ * - trace_id: For correlation in logs/events
+ */
+interface AiChatResponse {
+  content: string;
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    total_tokens?: number;
+  };
+  model_id: string;
+  provider: string;
+  trace_id: string;
+}
+
+// ============================================================================
+// Handler Registration
+// ============================================================================
+
+/**
+ * Register all handlers with the pipeline registry
+ *
+ * WHY centralized registration: Ensures all handlers are discoverable
+ * and must declare their risk_class and required_capabilities upfront.
+ */
+function registerHandlers(
+  registry: HandlerRegistry,
+  store: MemoryStore,
+  modelRouter: ModelRouter
+): void {
   // Create thread handler
   registry.register<CreateThreadPayload, unknown>({
     id: 'create_thread',
@@ -140,8 +200,155 @@ function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
       const healthy = await store.healthCheck();
       return {
         status: healthy ? 'ok' : 'degraded',
-        version: '2.1.0',
+        version: '2.2.0',
         timestamp: new Date().toISOString(),
+      };
+    },
+  });
+
+  // =========================================================================
+  // ai.chat Handler - v2.2 Model Bus Integration
+  // =========================================================================
+  /**
+   * WHY ai.chat is the core v2.2 feature:
+   * - Demonstrates governed handler as the ONLY path to vendor APIs
+   * - Reads thread context from governed memory store
+   * - Uses CDI-minted capability token for model invocation
+   * - Writes provenance event for auditing
+   * - Writes assistant response back to thread
+   *
+   * INVARIANT: NO direct vendor calls - must go through modelRouter
+   * INVARIANT: Capability token MUST have 'model_invocation' capability
+   */
+  registry.register<AiChatPayload, AiChatResponse>({
+    id: 'ai_chat',
+    intent: 'ai.chat',
+    risk_class: 'medium_risk',
+    required_capabilities: ['model_invocation', 'memory_read', 'memory_write'],
+    handler: async (ctx, payload, capabilities) => {
+      const tags = buildGovernanceTags(ctx);
+      const startTime = Date.now();
+
+      // Step 1: Find the model_invocation capability token
+      // WHY capability search: CDI mints multiple tokens; we need the right one
+      const modelCapToken = capabilities.find(
+        (cap) => cap.capability === 'model_invocation'
+      );
+      if (!modelCapToken) {
+        // WHY fail-closed: No capability = no model access
+        throw new Error('Missing model_invocation capability token');
+      }
+
+      // Step 2: Read recent thread messages for context
+      // WHY context retrieval: Models need conversation history
+      const messages = await store.getMessages(payload.thread_id, tags);
+
+      // Step 3: Assemble messages for the model
+      const chatMessages: ChatMessage[] = [];
+
+      // Add system prompt if provided
+      if (payload.parameters?.system_prompt) {
+        chatMessages.push({
+          role: 'system',
+          content: payload.parameters.system_prompt,
+        });
+      }
+
+      // Add conversation history (limit to recent messages for context window)
+      // WHY limit: Prevents context overflow and controls costs
+      const recentMessages = messages.slice(-20);
+      for (const msg of recentMessages) {
+        chatMessages.push({
+          role: msg.role,
+          content: msg.content,
+        });
+      }
+
+      // Add the new user input
+      chatMessages.push({
+        role: 'user',
+        content: payload.user_input,
+      });
+
+      // Step 4: Save user message to thread BEFORE calling model
+      // WHY save first: Ensures message is recorded even if model call fails
+      await store.addMessage(
+        {
+          namespace_id: payload.namespace_id,
+          thread_id: payload.thread_id,
+          content: payload.user_input,
+          role: 'user',
+        },
+        tags
+      );
+
+      // Step 5: Call Model Bus via router (ONLY path to vendor APIs)
+      // WHY router: Enforces capability verification and adapter selection
+      const routerResult = await modelRouter.route({
+        model_id: payload.model_id,
+        messages: chatMessages,
+        parameters: {
+          temperature: payload.parameters?.temperature,
+          max_tokens: payload.parameters?.max_tokens,
+        },
+        capability_token: modelCapToken as CapabilityToken,
+        trace_id: ctx.trace_id,
+        namespace_id: payload.namespace_id,
+      });
+
+      if (!routerResult.success || !routerResult.response) {
+        // WHY propagate error: Caller needs to know why model call failed
+        throw new Error(`Model invocation failed: ${routerResult.error}`);
+      }
+
+      const modelResponse = routerResult.response;
+      const latencyMs = Date.now() - startTime;
+
+      // Step 6: Write assistant message back to thread
+      await store.addMessage(
+        {
+          namespace_id: payload.namespace_id,
+          thread_id: payload.thread_id,
+          content: modelResponse.content,
+          role: 'assistant',
+          metadata: {
+            model_id: modelResponse.provenance.model_id,
+            provider: modelResponse.provenance.provider,
+            trace_id: ctx.trace_id,
+          },
+        },
+        tags
+      );
+
+      // Step 7: Write provenance event for auditing
+      // WHY provenance: Enables cost tracking, debugging, compliance
+      await store.logEvent(
+        {
+          namespace_id: payload.namespace_id,
+          thread_id: payload.thread_id,
+          event_type: 'model_invocation',
+          payload: {
+            provider: modelResponse.provenance.provider,
+            model_id: modelResponse.provenance.model_id,
+            usage: modelResponse.provenance.usage,
+            latency_ms: latencyMs,
+            trace_id: ctx.trace_id,
+            capability_token_id: modelCapToken.token_id,
+            vendor_request_id: modelResponse.provenance.vendor_request_id,
+            // WHY no content in event: Avoids storing potentially sensitive data
+            finish_reason: modelResponse.finish_reason,
+          },
+        },
+        tags
+      );
+
+      // Step 8: Return structured response
+      return {
+        content: modelResponse.content,
+        usage: modelResponse.provenance.usage,
+        model_id: modelResponse.provenance.model_id,
+        provider: modelResponse.provenance.provider,
+        trace_id: ctx.trace_id,
       };
     },
   });
@@ -207,9 +414,32 @@ export async function createServer(config: ServerConfig): Promise<{
 
   await store.initialize();
 
+  // Initialize adapter gateway
+  // WHY gateway: Provides capability enforcement for all adapter calls
+  const gateway = createGateway({
+    allowed_model_families: ['openai', 'anthropic', 'local'],
+    allowed_tool_categories: ['file', 'web', 'code', 'data'],
+    max_tokens_per_request: 100000,
+    strict_mode: true,
+  });
+
+  // Initialize model router
+  // WHY router: Routes requests to appropriate adapters based on model_id
+  const modelRouter = createModelRouter(gateway, {
+    providers: {
+      openai: {
+        api_key: process.env.OPENAI_API_KEY,
+      },
+      anthropic: {
+        api_key: process.env.ANTHROPIC_API_KEY,
+      },
+      local: {},
+    },
+  });
+
   // Create handler registry and register handlers
   const registry = new HandlerRegistry();
-  registerHandlers(registry, store);
+  registerHandlers(registry, store, modelRouter);
 
   // Create pipeline executor
   const pipeline = createPipeline(governanceProvider as any, registry);
@@ -261,6 +491,35 @@ export async function createServer(config: ServerConfig): Promise<{
     }),
   });
 
+  // =========================================================================
+  // ai.chat HTTP Route - v2.2 Model Bus Endpoint
+  // =========================================================================
+  /**
+   * WHY this route exists:
+   * - Provides HTTP interface to the ai.chat handler
+   * - Requires model_invocation + memory_read + memory_write capabilities
+   * - All model calls MUST go through this governed path
+   *
+   * POST /threads/:thread_id/ai/chat
+   * Body: { namespace_id, model_id, user_input, parameters? }
+   */
+  pipelineRouter.addRoute({
+    method: 'post',
+    path: '/threads/:thread_id/ai/chat',
+    intent: 'ai.chat',
+    risk_class: 'medium_risk',
+    required_capabilities: ['model_invocation', 'memory_read', 'memory_write'],
+    extractOiId: (req) => req.body.namespace_id || 'default',
+    extractPrincipalId: (req) => req.headers['x-principal-id'] as string || 'anonymous',
+    extractPayload: (req) => ({
+      namespace_id: req.body.namespace_id || 'default',
+      thread_id: req.params.thread_id,
+      model_id: req.body.model_id,
+      user_input: req.body.user_input,
+      parameters: req.body.parameters,
+    }),
+  });
+
   pipelineRouter.addRoute({
     method: 'get',
     path: '/health',
@@ -273,11 +532,14 @@ export async function createServer(config: ServerConfig): Promise<{
   });
 
   // Mount pipeline router
+  app.use('/api/v2.2', pipelineRouter.getRouter());
+
+  // Legacy v2.1 mount point for backwards compatibility
   app.use('/api/v2.1', pipelineRouter.getRouter());
 
   // Legacy health endpoint (no pipeline for backwards compat)
   app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', version: '2.1.0' });
+    res.json({ status: 'ok', version: '2.2.0' });
   });
 
   // Start and stop functions
@@ -286,7 +548,7 @@ export async function createServer(config: ServerConfig): Promise<{
   const start = async () => {
     return new Promise<void>((resolve) => {
       server = app.listen(config.port, config.host, () => {
-        console.log(`Mathison v2.1 server listening on ${config.host}:${config.port}`);
+        console.log(`Mathison v2.2 server listening on ${config.host}:${config.port}`);
         resolve();
       });
     });

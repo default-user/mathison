@@ -1,6 +1,6 @@
 {
   "name": "@mathison/memory",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Memory store interface with PostgreSQL and SQLite backends for Mathison v2.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

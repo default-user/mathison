@@ -1,6 +1,6 @@
-# Mathison v2.1
+# Mathison v2.2
 
-Mathison v2.1 is a complete implementation of the Organized Intelligence (OI) system with enforced governance, fail-closed behavior, and strict namespace isolation.
+Mathison v2.2 is a complete implementation of the Organized Intelligence (OI) system with enforced governance, fail-closed behavior, strict namespace isolation, and **governed Model Bus for AI API access**.
 
 ## Architecture
 
@@ -19,39 +19,42 @@ Mathison v2.1 is a complete implementation of the Organized Intelligence (OI) sy
 │  └─────────┘  └─────────────┘  └─────────┘  └────────────┘  └──────────┘  │
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │
-          ┌────────────────────────┼────────────────────────┐
-          │                        │                        │
-          ▼                        ▼                        ▼
-┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│   Governance    │   │     Memory      │   │    Adapters     │
-│    Provider     │   │     Store       │   │    Gateway      │
-│  (Capsule/CDI)  │   │  (PG/SQLite)    │   │  (Model/Tool)   │
-└─────────────────┘   └─────────────────┘   └─────────────────┘
+          ┌────────────────────────┼─────────────────────────┐
+          │                        │                         │
+          ▼                        ▼                         ▼
+┌─────────────────┐   ┌─────────────────┐   ┌───────────────────────────┐
+│   Governance    │   │     Memory      │   │       Model Bus           │
+│    Provider     │   │     Store       │   │  (v2.2 - governed only)   │
+│  (Capsule/CDI)  │   │  (PG/SQLite)    │   │  OpenAI │ Anthropic │ ... │
+└─────────────────┘   └─────────────────┘   └───────────────────────────┘
 ```
 
-## Key Invariants (v2.1)
+## Key Invariants (v2.2)
 
 1. **Unified Pipeline**: Every request flows through the same governed pipeline
 2. **Fail-Closed**: Missing/invalid/stale governance = deny
 3. **No Hive Mind**: Strict per-OI namespace boundaries
 4. **Adapter Enforcement**: All model/tool calls require capability tokens
+5. **No-Bypass (v2.2)**: All vendor AI calls MUST go through `@mathison/model-bus`
 
 ## Directory Structure
 
 ```
 /
-├── packages/                    # v2.1 Runtime packages
+├── packages/                    # v2.2 Runtime packages
 │   ├── mathison-pipeline/      # Unified governed request pipeline
 │   ├── mathison-governance/    # CIF/CDI, capsule management
 │   ├── mathison-memory/        # MemoryStore interface + backends
 │   ├── mathison-adapters/      # Adapter conformance + gateway
-│   ├── mathison-server/        # HTTP server
-│   └── mathison-cli/           # CLI entrypoint
+│   ├── mathison-model-bus/     # v2.2: Governed model invocation (OpenAI, Anthropic)
+│   └── mathison-server/        # HTTP server with ai.chat endpoint
 ├── config/                     # Configuration files
 │   ├── authority.json          # Authority configuration
 │   ├── governance-capsule.json # Governance capsule
 │   └── keys/                   # Crypto keys
 ├── docs/                       # Documentation
+│   ├── specs/                  # v2.2 specifications
+│   └── ARCHITECTURE.md         # System architecture
 ├── version-one/                # ARCHIVE ONLY (v2 snapshot)
 └── .github/workflows/          # CI configuration
 ```
@@ -107,6 +110,10 @@ POSTGRES_PASSWORD=your_password
 # Governance
 AUTHORITY_CONFIG_PATH=./config/authority.json
 GOVERNANCE_CAPSULE_PATH=./config/governance-capsule.json
+
+# Model Bus (v2.2) - API keys for AI providers
+OPENAI_API_KEY=sk-...         # Required for OpenAI models (gpt-4, etc.)
+ANTHROPIC_API_KEY=sk-ant-...  # Required for Anthropic models (claude-3, etc.)
 ```
 
 ## Core Concepts

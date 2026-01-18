@@ -1,11 +1,10 @@
 /**
- * Mathison v2.1 CDI (Controlled Decision Interface)
- *
- * Implements action permission checks and output validation.
- * This is stage 3 (action check) and stage 5 (output check) of the pipeline.
- *
- * INVARIANT: Default-deny for cross-namespace operations.
- * INVARIANT: No hive mind - strict per-OI boundaries.
+ * WHY: cdi.ts - Controlled Decision Interface for action and output checks
+ * -----------------------------------------------------------------------------
+ * - Implements permission checks (stage 3) and output validation (stage 5) of pipeline
+ * - Needed to enforce governance decisions at runtime; gates all actions and responses
+ * - Enforces: default-deny for cross-namespace ops; strict per-OI boundaries; output redaction
+ * - Tradeoff: Per-request permission checks vs caching; security over performance
  */
 
 import { v4 as uuidv4 } from 'uuid';

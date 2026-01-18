@@ -1,11 +1,10 @@
 /**
- * Mathison v2.1 Pipeline Executor
- *
- * Implements the unified governed request pipeline:
- * CIF ingress → CDI action check → handler → CDI output check → CIF egress
- *
- * INVARIANT: Every request MUST flow through this pipeline.
- * INVARIANT: Fail-closed is mandatory - missing/invalid governance = deny.
+ * WHY: executor.ts - Unified governed request pipeline executor
+ * -----------------------------------------------------------------------------
+ * - Implements 6-stage pipeline: context -> CIF ingress -> CDI action -> handler -> CDI output -> CIF egress
+ * - Needed as THE single path for all request execution; HTTP/gRPC/CLI/worker all use this
+ * - Enforces: fail-closed on missing/invalid governance; every request through pipeline; no bypass
+ * - Tradeoff: All requests pay governance overhead vs security guarantee of consistent enforcement
  */
 
 import { v4 as uuidv4 } from 'uuid';

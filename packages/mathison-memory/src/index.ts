@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Memory
- *
- * Unified memory store interface with PostgreSQL and SQLite implementations.
- * All operations require governance tags and enforce namespace boundaries.
+ * WHY: index.ts - Memory module public API and factory
+ * -----------------------------------------------------------------------------
+ * - Barrel export for memory types and store implementations; factory for store creation
+ * - Needed to abstract storage backend selection; consistent interface for PostgreSQL/SQLite
+ * - Enforces: all memory access through MemoryStore interface; governance tags required
+ * - Tradeoff: Runtime store selection vs compile-time type safety for specific backends
  */
 
 // Types

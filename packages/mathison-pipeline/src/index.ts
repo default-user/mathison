@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Pipeline
- *
- * Unified governed request pipeline for all entrypoints.
- * Every request MUST flow through: CIF ingress → CDI action check → handler → CDI output check → CIF egress
+ * WHY: index.ts - Pipeline module public API
+ * -----------------------------------------------------------------------------
+ * - Barrel export for executor, types, and entrypoint integrations (HTTP/gRPC/CLI/worker)
+ * - Needed to provide single import point for governed pipeline functionality
+ * - Enforces: all entrypoints must use provided integrations; no direct handler calls
+ * - Tradeoff: Larger export surface vs convenience of single import
  */
 
 // Types

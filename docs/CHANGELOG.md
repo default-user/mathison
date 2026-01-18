@@ -2,6 +2,62 @@
 
 All notable changes to Mathison will be documented in this file.
 
+## [2.2.0] - 2026-01-18
+
+### Added
+
+#### Model Bus (`@mathison/model-bus`)
+- New package for governed model invocation through adapters
+- `ModelRouter`: Routes requests to adapters with capability enforcement
+- `OpenAIAdapter`: OpenAI Chat Completions API (gpt-4, gpt-3.5, o1, o3)
+- `AnthropicAdapter`: Anthropic Messages API (claude-3, claude-2)
+- `LocalAdapter`: Mock adapter for testing (no network calls)
+- Single internal HTTP client for all vendor API calls
+- Provenance data in every response (provider, model_id, usage, latency, trace_id)
+
+#### ai.chat Intent
+- New governed handler for AI model calls
+- HTTP route: `POST /threads/:thread_id/ai/chat`
+- Required capabilities: `model_invocation`, `memory_read`, `memory_write`
+- Reads thread context for conversation history (last 20 messages)
+- Uses CDI-minted capability token for model access
+- Writes assistant message back to thread with metadata
+- Logs provenance event with usage, latency, and correlation IDs
+
+#### CIF Schemas for ai.chat
+- `AiChatRequestSchema`: Validates request payload
+- `AiChatResponseSchema`: Validates response format
+- `AiChatParametersSchema`: Validates model parameters
+- `isValidModelId`: Validates model_id against allowed patterns
+- `ALLOWED_MODEL_PATTERNS`: Regex patterns for allowed model IDs
+
+#### No-Bypass Enforcement
+- CI invariant test: `no-vendor-bypass.test.ts`
+- Scans all packages for vendor SDK imports
+- Fails if `openai`, `@anthropic-ai/sdk`, or vendor endpoints found outside model-bus
+- Documents the no-bypass security rule
+
+#### Documentation
+- `docs/specs/v2.2-model-bus.md`: Model Bus architecture and usage
+- `docs/specs/v2.2-provenance-and-logging.md`: Provenance event structure
+- `docs/specs/v2.2-no-bypass-enforcement.md`: No-bypass rule and CI test
+- `docs/roadmap.md`: Version roadmap and delta
+
+### Changed
+- All package versions bumped to 2.2.0
+- Server version updated to 2.2.0
+- Server now initializes ModelRouter and AdapterGateway
+- API mount point added at `/api/v2.2` (v2.1 still available for backwards compat)
+- Updated `docs/ARCHITECTURE.md` with model-bus section
+
+### Security
+- All vendor API calls require CDI-issued `model_invocation` capability token
+- Model invocation provenance logged for auditing and cost tracking
+- No direct vendor SDK access possible outside governed handlers
+- Capability token namespace must match request namespace
+
+---
+
 ## [2.1.0] - 2026-01-18
 
 ### Added

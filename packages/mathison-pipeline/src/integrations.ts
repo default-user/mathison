@@ -1,8 +1,10 @@
 /**
- * Mathison v2.1 Pipeline Integrations
- *
- * Helpers for integrating the pipeline with HTTP, gRPC, CLI, and worker entrypoints.
- * These ensure that handlers CANNOT bypass the governed pipeline.
+ * WHY: integrations.ts - Entrypoint adapters for governed pipeline
+ * -----------------------------------------------------------------------------
+ * - Provides HTTP router, gRPC interceptor, CLI executor, and worker processor wrappers
+ * - Needed to make pipeline integration easy while preventing bypass of governance checks
+ * - Enforces: all entrypoints route through PipelineExecutor; context built from request metadata
+ * - Tradeoff: Framework-specific wrappers vs generic approach; Express/gRPC coupling
  */
 
 import { Request, Response, NextFunction, Router, RequestHandler } from 'express';

@@ -1,10 +1,10 @@
 /**
- * Mathison v2.1 SQLite Memory Store
- *
- * SQLite implementation of the MemoryStore interface for local/offline use.
- *
- * INVARIANT: All queries are parameterized (SQL injection safe).
- * INVARIANT: Namespace boundaries enforced at query layer.
+ * WHY: sqlite-store.ts - SQLite memory implementation for local/offline use
+ * -----------------------------------------------------------------------------
+ * - Lightweight MemoryStore for development, testing, and offline scenarios
+ * - Needed for zero-dependency local operation; no external database required
+ * - Enforces: parameterized queries (SQL injection safe); namespace boundaries at query layer
+ * - Tradeoff: No native vector indexing (cosine sim in JS) vs PostgreSQL pgvector performance
  */
 
 import Database from 'better-sqlite3';

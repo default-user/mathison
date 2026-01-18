@@ -1,7 +1,10 @@
 /**
- * Mathison v2.1 Governance Types
- *
- * Types for governance capsules, treaties, CIF validation, and CDI decisions.
+ * WHY: types.ts - Governance type definitions and schemas
+ * -----------------------------------------------------------------------------
+ * - Defines GovernanceCapsule, Treaty, Genome, CDI context, and decision types
+ * - Needed to ensure type safety across all governance modules; Zod schemas for validation
+ * - Enforces: structured capsule format; explicit capability tokens; degradation levels
+ * - Tradeoff: Comprehensive typing requires maintenance as governance model evolves
  */
 
 import { z } from 'zod';

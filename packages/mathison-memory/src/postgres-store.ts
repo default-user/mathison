@@ -1,10 +1,10 @@
 /**
- * Mathison v2.1 PostgreSQL Memory Store
- *
- * PostgreSQL + pgvector implementation of the MemoryStore interface.
- *
- * INVARIANT: All queries are parameterized (SQL injection safe).
- * INVARIANT: Namespace boundaries enforced at query layer.
+ * WHY: postgres-store.ts - PostgreSQL + pgvector memory implementation
+ * -----------------------------------------------------------------------------
+ * - Production-grade MemoryStore with vector similarity via pgvector extension
+ * - Needed for scalable, concurrent memory access with native vector indexing (HNSW)
+ * - Enforces: parameterized queries (SQL injection safe); namespace boundaries at query layer
+ * - Tradeoff: PostgreSQL dependency vs in-memory/SQLite; better performance for large datasets
  */
 
 import { Pool, PoolClient, QueryResult } from 'pg';

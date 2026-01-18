@@ -1,11 +1,10 @@
 /**
- * Mathison v2.1 Memory Types
- *
- * Types for the unified memory store interface.
- * All memory operations MUST be namespaced and carry governance tags.
- *
- * INVARIANT: No direct DB calls - all operations go through MemoryStore interface.
- * INVARIANT: Namespace boundaries enforced at query layer.
+ * WHY: types.ts - Memory store interface contracts and data types
+ * -----------------------------------------------------------------------------
+ * - Defines MemoryStore interface, Thread, Commitment, Event, Embedding, and config types
+ * - Needed to ensure all memory implementations share consistent contract; governance tags required
+ * - Enforces: no direct DB calls; all ops through MemoryStore; namespace boundaries at query layer
+ * - Tradeoff: Abstract interface requires implementations to handle governance validation
  */
 
 // ============================================================================

@@ -1,5 +1,8 @@
 -- WHY: Initial database schema for Mathison v2
 
+-- WHY: Enable pgcrypto for gen_random_uuid() on PostgreSQL < 13
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
 

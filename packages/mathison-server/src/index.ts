@@ -9,20 +9,13 @@
  */
 
 import express, { Express, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import {
-  PipelineExecutor,
   HandlerRegistry,
   createPipeline,
   PipelineRouter,
-  RegisteredHandler,
   PipelineContext,
-  CapabilityToken,
 } from '@mathison/pipeline';
-import {
-  createGovernanceProvider,
-  GovernanceProviderImpl,
-} from '@mathison/governance';
+import { createGovernanceProvider } from '@mathison/governance';
 import {
   createMemoryStore,
   MemoryStore,
@@ -80,12 +73,12 @@ interface AddMessagePayload {
  */
 function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
   // Create thread handler
-  registry.register<CreateThreadPayload, any>({
+  registry.register<CreateThreadPayload, unknown>({
     id: 'create_thread',
     intent: 'thread.create',
     risk_class: 'low_risk',
     required_capabilities: ['memory_write'],
-    handler: async (ctx, payload, capabilities) => {
+    handler: async (ctx, payload, _capabilities) => {
       const tags = buildGovernanceTags(ctx);
       const thread = await store.createThread(
         {
@@ -100,12 +93,12 @@ function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
   });
 
   // Get threads handler
-  registry.register<GetThreadsPayload, any>({
+  registry.register<GetThreadsPayload, unknown>({
     id: 'get_threads',
     intent: 'thread.list',
     risk_class: 'read_only',
     required_capabilities: ['memory_read'],
-    handler: async (ctx, payload, capabilities) => {
+    handler: async (ctx, payload, _capabilities) => {
       const tags = buildGovernanceTags(ctx);
       const threads = await store.getThreads(
         payload.namespace_id,
@@ -117,12 +110,12 @@ function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
   });
 
   // Add message handler
-  registry.register<AddMessagePayload, any>({
+  registry.register<AddMessagePayload, unknown>({
     id: 'add_message',
     intent: 'message.create',
     risk_class: 'low_risk',
     required_capabilities: ['memory_write'],
-    handler: async (ctx, payload, capabilities) => {
+    handler: async (ctx, payload, _capabilities) => {
       const tags = buildGovernanceTags(ctx);
       const message = await store.addMessage(
         {
@@ -138,12 +131,12 @@ function registerHandlers(registry: HandlerRegistry, store: MemoryStore): void {
   });
 
   // Health check handler
-  registry.register<{}, any>({
+  registry.register<Record<string, never>, unknown>({
     id: 'health',
     intent: 'system.health',
     risk_class: 'read_only',
     required_capabilities: [],
-    handler: async (ctx, payload, capabilities) => {
+    handler: async (_ctx, _payload, _capabilities) => {
       const healthy = await store.healthCheck();
       return {
         status: healthy ? 'ok' : 'degraded',

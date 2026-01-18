@@ -1,7 +1,12 @@
 /**
- * Mathison v2.1 Governance
+ * WHY: index.ts - Governance package entry point
+ * -----------------------------------------------------------------------------
+ * - Exports governance capsule management, CIF validation, and CDI enforcement.
+ * - All governance-related functionality must be imported from this module.
+ * - v2.2 adds ai.chat schemas for Model Bus integration.
  *
- * Governance capsule management, CIF validation, and CDI enforcement.
+ * INVARIANT: Fail-closed - invalid/missing governance = deny.
+ * INVARIANT: All intents require CIF validation and CDI capability check.
  */
 
 // Types
@@ -14,7 +19,7 @@ export {
   createCapsuleLoader,
 } from './capsule';
 
-// CIF validation
+// CIF validation (including v2.2 ai.chat schemas)
 export {
   validateCIF,
   checkStringLimits,
@@ -28,6 +33,12 @@ export {
   AddCommitmentRequestSchema,
   AddMessageRequestSchema,
   MemoryQueryRequestSchema,
+  // v2.2 ai.chat schemas
+  ALLOWED_MODEL_PATTERNS,
+  isValidModelId,
+  AiChatParametersSchema,
+  AiChatRequestSchema,
+  AiChatResponseSchema,
 } from './cif';
 
 // CDI enforcement

@@ -1,6 +1,6 @@
 {
   "name": "@mathison/pipeline",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Unified governed request pipeline for Mathison v2.1",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

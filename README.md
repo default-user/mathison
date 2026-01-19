@@ -37,6 +37,26 @@ Mathison v2.2 is a complete implementation of the Organized Intelligence (OI) sy
 4. **Adapter Enforcement**: All model/tool calls require capability tokens
 5. **No-Bypass (v2.2)**: All vendor AI calls MUST go through `@mathison/model-bus`
 
+## Governance Transport Layer for AI
+
+**Mathison is a Governance Transport Layer for AI.**
+
+Mathison treats models as powerful untrusted oracles and wraps all behavior in a single enforced governance channel:
+
+```
+CIF ingress → CDI decide → handler (capability minting + execution) → CDI decide → CIF egress
+```
+
+This acts like a **governance transport layer** between intent and action:
+
+- **One-path-only**: No side doors; all model/tool calls must flow through the governed handler
+- **Fail-closed**: Missing/invalid prerequisites ⇒ deny; no side effects
+- **Capability-gated effects**: Side effects require minted, scoped capability tokens (scope + TTL + bounds)
+- **STOP dominance**: Consent revocation preempts and revokes capabilities immediately
+- **Receipts + replay**: Decisions and actions are logged so outcomes are inspectable and reproducible
+
+**The goal is interoperability and assurance**: Different models and tools can be swapped underneath, but the governance channel remains stable, testable, and auditable.
+
 ## Directory Structure
 
 ```

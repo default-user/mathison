@@ -1,0 +1,50 @@
+ENTIRE MATHISON ARCHITECTURE (as one equation)
+
+Let Σ := ⟨Id,Auth,Gov,WP,Idx,B,P,L,π,Γ,AR,MB,TB,DL,AX⟩
+  where:
+    Id/Auth/Gov = identity+authority+governance capsules bound to principal_id  [oai_citation:0‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    WP,Idx      = Mathison World Pack + indexes + oracle grounding rules  [oai_citation:1‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    P           = ProfileStore incl. StanProfile (load-bearing Stan-space discipline)  [oai_citation:2‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    L,DL        = ReceiptLedger + DeclassifyLedger (logged widening)  [oai_citation:3‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)  [oai_citation:4‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    π           = posture level P0..P4  [oai_citation:5‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    Γ           = capability tokens (scope, TTL, posture bounds; STOP revokes)  [oai_citation:6‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    AR          = signed AdapterRegistry + tiering enforcement  [oai_citation:7‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    MB/TB       = ModelBus / ToolBus (models are untrusted oracles; allowlisted tools)  [oai_citation:8‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+    AX          = axioms/invariants incl. mediation + path + fail-closed  [oai_citation:9‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+
+Define the one-step transition Φ (the “kernel” that must run for every interaction/side effect):
+Φ(x_t, Σ_t) :=
+  let u   = CIF_INGRESS(x_t; Σ_t)                                         in    [oai_citation:10‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  let din = CDI_DECIDE(u; Σ_t)   ∈ {ALLOW, DENY, DEGRADE}                 in    [oai_citation:11‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  let z   =
+      if din ≠ ALLOW then din
+      else
+        let (chain, req_caps, plan_gnd, plan_evid)
+            = ROUTER(u, ctx, π_t, labels(u), WP_state, StanProfile(P_t))  in    [oai_citation:12‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+        COMPOSER(chain; Σ_t)                                              in    [oai_citation:13‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  let dout =
+      if din ≠ ALLOW then z
+      else
+        let votes = { CDI_DECIDE(z; Σ_t) }_{i=1..k}                       in   // ensemble/debate hardening (your fix)
+        AGG(votes)                                                        in
+  let y_t = CIF_EGRESS(dout; Σ_t)                                         in    [oai_citation:14‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  let Σ_{t+1} = UPDATE(Σ_t, y_t)   // log, label algebra, index refresh, etc.    [oai_citation:15‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  let x_{t+1} = NEXT_INTENT(Σ_{t+1}, y_t)                                 in
+  (x_{t+1}, Σ_{t+1}, y_t)
+
+Where COMPOSER executes each step only via the single chokepoint HANDLER that mints capabilities and dispatches adapters:
+HANDLER(step; Σ) :=
+  require CDI_ALLOW ∧ CAP_MINTED(step, scope, TTL, posture, workspace)      [oai_citation:16‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  then DISPATCH :=
+      (ToolBus ∘ Adapter)(op, cap)   or   (ModelBus ∘ Adapter)(prompt, cap)  [oai_citation:17‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  with provenance+receipts logged (adapter_id + prompt/output digests)       [oai_citation:18‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  and tool classes restricted to allowlist (no arbitrary exec; no free internet)  [oai_citation:19‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)  [oai_citation:20‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+
+Finally, the whole system (multi-turn OI) is bounded recursion of Φ until halt:
+Mathison_T(x_0; Σ_0) := π_y ∘ ITER_TILL_HALT^T(Φ)(x_0, Σ_0)
+
+Subject to (always-on) constraints:
+  ONE_PATH_LAW: CIF→CDI→HANDLER→CDI→CIF (every time)                          [oai_citation:21‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)  [oai_citation:22‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  FAIL_CLOSED / UNKNOWN ⇒ DENY or ASK_CLARIFY                                 [oai_citation:23‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  MEDIATION + PATH: all model/tool IO only via adapters with valid caps        [oai_citation:24‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)
+  ORACLE_MODE default: internet denied; truth claims must be grounded/cited    [oai_citation:25‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)  [oai_citation:26‡MATHISON_ORACLE_OI_MONOLITH_v1.1.0.yaml](sediment://file_0000000001fc7208956d1a73ee655ac1)

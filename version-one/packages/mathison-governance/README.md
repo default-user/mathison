@@ -8,8 +8,8 @@ WHY: Explicit authority prevents privilege escalation and ensures all actions ar
 
 Responsibilities:
 - Load and validate authority configuration
-- Enforce CIF (Common Ingress Framework) input validation
-- Enforce CDI (Controlled Decision Interface) decision gating
+- Enforce CIF (Context Integrity Firewall) input validation
+- Enforce CDI (Conscience Decision Interface) decision gating
 - Track capability tokens
 
 ## Installation

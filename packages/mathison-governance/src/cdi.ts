@@ -1,5 +1,5 @@
 /**
- * WHY: cdi.ts - Controlled Decision Interface for action and output checks
+ * WHY: cdi.ts - Conscience Decision Interface for action and output checks
  * -----------------------------------------------------------------------------
  * - Implements permission checks (stage 3) and output validation (stage 5) of pipeline
  * - Needed to enforce governance decisions at runtime; gates all actions and responses

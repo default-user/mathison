@@ -2,7 +2,7 @@
 
 ## Overview
 
-Mathison v2.2 implements a governed Organized Intelligence (OI) system with strict invariants:
+Mathison v2.2 implements a governed Ongoing Intelligence (OI) system with strict invariants:
 
 1. **Single Pipeline**: All requests flow through one governed pipeline
 2. **Fail-Closed**: Missing/invalid governance material = deny

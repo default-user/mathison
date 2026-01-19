@@ -1,6 +1,6 @@
 # Mathison v2 Documentation
 
-Welcome to Mathison v2, a structured OI (Organized Intelligence) implementation.
+Welcome to Mathison v2, a structured OI (Ongoing Intelligence) implementation.
 
 ## Getting Started
 

@@ -177,7 +177,7 @@ Each stage is a hardware state machine with fixed latency and fail-closed logic.
 
 #### 3.2.1 Stage 1: CIF Ingress Validation
 
-**Function**: Validate incoming request against CIF (Communal Interface Format) schema
+**Function**: Validate incoming request against CIF (Context Integrity Firewall) schema
 
 **Hardware Components:**
 
@@ -301,7 +301,7 @@ Command Injection: (\||;|&|\$\(|\`|<\(|>\()
 
 #### 3.2.5 Stage 5: CDI Output Validation
 
-**Function**: Validate output against CDI (Controlled Domain Interchange) rules
+**Function**: Validate output against CDI (Conscience Decision Interface) rules
 
 **Hardware Components:**
 
@@ -1264,8 +1264,8 @@ endmodule
 | Term | Definition |
 |------|------------|
 | **ASIC** | Application-Specific Integrated Circuit |
-| **CDI** | Controlled Domain Interchange (Mathison output governance) |
-| **CIF** | Communal Interface Format (Mathison input governance) |
+| **CDI** | Conscience Decision Interface (Mathison output governance) |
+| **CIF** | Context Integrity Firewall (Mathison input governance) |
 | **DMA** | Direct Memory Access |
 | **ECC** | Error Correction Code |
 | **FSM** | Finite State Machine |
@@ -1273,7 +1273,7 @@ endmodule
 | **MPU** | Memory Protection Unit |
 | **NFA** | Non-deterministic Finite Automaton |
 | **NRE** | Non-Recurring Engineering (one-time design costs) |
-| **OI** | Organized Intelligence (Mathison namespace) |
+| **OI** | Ongoing Intelligence (Mathison namespace) |
 | **PCIe** | Peripheral Component Interconnect Express |
 | **PTP** | Precision Time Protocol (IEEE 1588) |
 | **PUF** | Physical Unclonable Function |

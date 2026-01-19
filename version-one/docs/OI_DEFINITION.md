@@ -2,7 +2,7 @@
 
 ## Core Definition
 
-An **OI** (Organized Intelligence) is a structured, governed, thread tending system that maintains partitioned state and commitments across concurrent threads under an explicit authority model.
+An **OI** (Ongoing Intelligence) is a structured, governed, thread tending system that maintains partitioned state and commitments across concurrent threads under an explicit authority model.
 
 ## Key Properties
 
@@ -110,12 +110,12 @@ Algorithm:
 
 ### 8. CIF and CDI Boundaries
 
-**CIF** (Common Ingress Framework): Input validation and sanitization.
+**CIF** (Context Integrity Firewall): Input validation and sanitization.
 - Validates schema
 - Quarantines invalid input
 - Normalizes data
 
-**CDI** (Controlled Decision Interface): Governance checks before and after actions.
+**CDI** (Conscience Decision Interface): Governance checks before and after actions.
 - Pre-action: check policy, allow/deny/require confirmation
 - Post-action: verify output doesn't violate policy
 - Egress: redact cross-namespace leakage

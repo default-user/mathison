@@ -109,10 +109,10 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install
       - name: Run Pipeline Enforcement Tests
-        run: pnpm --filter @mathison/pipeline test -- --testPathPattern=pipeline-enforcement
+        run: pnpm --filter @mathison/pipeline test -- pipeline-enforcement
       - name: Run Fail-Closed Tests
-        run: pnpm --filter @mathison/governance test -- --testPathPattern=fail-closed
+        run: pnpm --filter @mathison/governance test -- fail-closed
       - name: Run No-Hive-Mind Tests
-        run: pnpm --filter @mathison/memory test -- --testPathPattern=no-hive-mind
+        run: pnpm --filter @mathison/memory test -- no-hive-mind
       - name: Run Adapter Bypass Tests
-        run: pnpm --filter @mathison/adapters test -- --testPathPattern=adapter-bypass
+        run: pnpm --filter @mathison/adapters test -- adapter-bypass

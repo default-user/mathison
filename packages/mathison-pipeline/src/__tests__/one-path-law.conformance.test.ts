@@ -24,6 +24,7 @@ import {
   DEGRADATION_LADDER,
   type PipelineState,
   type ReceiptChain,
+  type CapabilityToken,
 } from '../one-path-law';
 import {
   GovernedExecutor,
@@ -38,7 +39,6 @@ import {
   type EgressResult,
   type PipelineContext,
   type DecisionMeta,
-  type CapabilityToken,
 } from '../governed-executor';
 
 // =============================================================================

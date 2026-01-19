@@ -20,7 +20,7 @@ make test
 
 ## Architecture
 
-Mathison is an OI (Organized Intelligence) implementation with these core organs:
+Mathison is an OI (Ongoing Intelligence) implementation with these core organs:
 
 - **Governance**: Explicit authority model, principal management, CIF/CDI boundaries
 - **Memory**: Thread management, partitioned state, event log, semantic recall

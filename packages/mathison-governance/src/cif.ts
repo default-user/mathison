@@ -1,5 +1,5 @@
 /**
- * WHY: cif.ts - Common Ingress Framework for request validation
+ * WHY: cif.ts - Context Integrity Firewall for request validation
  * -----------------------------------------------------------------------------
  * - Validates request context, schema, required fields, size limits, and taint rules.
  * - This is stage 2 (ingress) and stage 6 (egress) of the pipeline.

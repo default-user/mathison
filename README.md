@@ -1,6 +1,6 @@
 # Mathison v2.2
 
-Mathison v2.2 is a complete implementation of the Organized Intelligence (OI) system with enforced governance, fail-closed behavior, strict namespace isolation, and **governed Model Bus for AI API access**.
+Mathison v2.2 is a complete implementation of the Ongoing Intelligence (OI) system with enforced governance, fail-closed behavior, strict namespace isolation, and **governed Model Bus for AI API access**.
 
 ## Architecture
 

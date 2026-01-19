@@ -439,9 +439,13 @@ export function transitionTo(
   receipt: StageReceipt
 ): PipelineState {
   if (!canTransitionTo(state.current_stage, nextStage)) {
+    const validTransitions = (state.current_stage === 'COMPLETE' || state.current_stage === 'FAILED')
+      ? 'none (terminal state)'
+      : VALID_TRANSITIONS[state.current_stage].join(', ');
+
     throw new Error(
       `Invalid stage transition: ${state.current_stage} → ${nextStage}. ` +
-      `Valid transitions: ${VALID_TRANSITIONS[state.current_stage].join(', ')}`
+      `Valid transitions: ${validTransitions}`
     );
   }
 

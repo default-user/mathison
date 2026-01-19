@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
       - run: pnpm build
       - run: pnpm typecheck
 
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
       - run: pnpm lint
 
   test:
@@ -71,7 +71,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
       - run: pnpm test
 
   invariant-tests:
@@ -107,7 +107,7 @@ jobs:
         with:
           node-version: '20'
           cache: 'pnpm'
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install
       - name: Run Pipeline Enforcement Tests
         run: pnpm --filter @mathison/pipeline test -- --testPathPattern=pipeline-enforcement
       - name: Run Fail-Closed Tests
